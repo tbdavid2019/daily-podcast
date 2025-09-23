@@ -1,0 +1,48 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "hacker-news-worker",
+  "main": "./index.ts",
+  "compatibility_date": "2025-04-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "minify": true,
+  "assets": {
+    "directory": "./static"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": [
+      "30 23 * * *"
+    ]
+  },
+  "keep_vars": true,
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "workflows": [
+    {
+      "name": "hacker-news-workflow",
+      "binding": "HACKER_NEWS_WORKFLOW",
+      "class_name": "HackerNewsWorkflow"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "HACKER_NEWS_KV",
+      "id": "4d458dadadea42f8b8198fe3e29f858d"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "HACKER_NEWS_R2",
+      "bucket_name": "hacker-news"
+    }
+  ]
+}
