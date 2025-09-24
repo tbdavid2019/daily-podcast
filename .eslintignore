@@ -1,0 +1,10 @@
+*.md
+CLOUDFLARE-DEPLOY.md
+README.md
+cloudflare-env.d.ts
+setup-env-vars.sh
+components/ui/**/*
+components/magicui/**/*
+components/animata/**/*
+components/cute/**/*
+components/eldora/**/*

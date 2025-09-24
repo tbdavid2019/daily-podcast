@@ -6,38 +6,18 @@ interface Env extends CloudflareEnv {
 }
 
 export default {
-  async runWorkflow(event: ScheduledEvent | Request, env: Env, ctx: ExecutionContext) {
+  async runWorkflow(event: ScheduledEvent | Request, env: Env, _ctx: ExecutionContext) {
     console.info('trigger event by:', event)
 
-    const createWorkflow = async () => {
-      const today = new Date().toISOString().split('T')[0]
-      const lockKey = `workflow-lock:${today}`
+    const instance = await env.HACKER_NEWS_WORKFLOW.create()
 
-      // Check if workflow is already running today
-      const existingLock = await env.HACKER_NEWS_KV.get(lockKey)
-      if (existingLock) {
-        console.info('Workflow already running today, skipping...', existingLock)
-        return { message: 'workflow already running', instanceId: existingLock }
-      }
-
-      const instance = await env.HACKER_NEWS_WORKFLOW.create()
-
-      // Set lock with instance ID, expires in 1 hour
-      await env.HACKER_NEWS_KV.put(lockKey, instance.id, { expirationTtl: 3600 })
-
-      const instanceDetails = {
-        id: instance.id,
-        details: await instance.status(),
-      }
-
-      console.info('instance detail:', instanceDetails)
-      return instanceDetails
+    const instanceDetails = {
+      id: instance.id,
+      details: await instance.status(),
     }
 
-    const result = await createWorkflow()
-    ctx.waitUntil(Promise.resolve())
-
-    return new Response(JSON.stringify(result))
+    console.info('instance detail:', instanceDetails)
+    return new Response(JSON.stringify(instanceDetails))
   },
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url)
