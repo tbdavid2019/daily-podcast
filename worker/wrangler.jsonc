@@ -4,7 +4,7 @@
  */
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "hacker-news-worker",
+  "name": "daily-podcast-worker",
   "main": "./index.ts",
   "compatibility_date": "2025-04-12",
   "compatibility_flags": [
@@ -28,7 +28,7 @@
   },
   "workflows": [
     {
-      "name": "hacker-news-workflow",
+      "name": "daily-podcast-workflow",
       "binding": "HACKER_NEWS_WORKFLOW",
       "class_name": "HackerNewsWorkflow"
     }
@@ -36,7 +36,7 @@
   "kv_namespaces": [
     {
       "binding": "HACKER_NEWS_KV",
-      "id": "4d458dadadea42f8b8198fe3e29f858d"
+      "id": "eb092f9e71ec4c09afa31ffacf9beb40"
     }
   ],
   "r2_buckets": [

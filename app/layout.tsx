@@ -6,9 +6,20 @@ import { podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: process.env.NEXT_PUBLIC_BASE_URL ? new URL(process.env.NEXT_PUBLIC_BASE_URL) : undefined,
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://daily-podcast.oobwei.workers.dev'),
   title: podcastTitle,
   description: podcastDescription,
+  openGraph: {
+    title: podcastTitle,
+    description: podcastDescription,
+    type: 'website',
+    locale: 'zh_TW',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: podcastTitle,
+    description: podcastDescription,
+  },
   alternates: {
     types: {
       'application/rss+xml': [
@@ -44,7 +55,7 @@ export default function RootLayout({
               <Rss className="w-6 h-6 font-bold" />
             </a>
             <a
-              href="https://github.com/ccbikai/hacker-news"
+              href="https://github.com/tbdavid2019/daily-podcast"
               className="text-zinc-700 hover:text-zinc-900 transition-colors ml-2"
               title="GitHub"
               target="_blank"

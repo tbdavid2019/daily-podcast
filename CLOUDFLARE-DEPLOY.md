@@ -37,13 +37,20 @@ KV 用於存儲播客元數據。
 
 ```bash
 # 使用 wrangler CLI 創建
-pnpx wrangler kv:namespace create "HACKER_NEWS_KV"
+pnpx wrangler kv namespace create HACKER_NEWS_KV
 
 # 記錄輸出的 ID，例如：
-# 🌀 Creating namespace with title "hacker-news-HACKER_NEWS_KV"
-# ✨ Success! Created KV namespace HACKER_NEWS_KV
-# 📋 Add the following to your configuration file in your kv_namespaces array:
-# { binding = "HACKER_NEWS_KV", id = "4d458dadadea42f8b8198fe3e29f858d" }
+# 🌀 Creating namespace with title "HACKER_NEWS_KV"
+# ✨ Success!
+# To access your new KV Namespace in your Worker, add the following snippet to your configuration file:
+# {
+#   "kv_namespaces": [
+#     {
+#       "binding": "HACKER_NEWS_KV",
+#       "id": "eb092f9e71ec4c09afa31ffacf9beb40"
+#     }
+#   ]
+# }
 ```
 
 ### 4. 獲取資源 ID

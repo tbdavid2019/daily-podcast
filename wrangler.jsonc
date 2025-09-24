@@ -4,7 +4,7 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hacker-news",
+  "name": "daily-podcast",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-04-12",
   "compatibility_flags": [
@@ -22,7 +22,7 @@
   "kv_namespaces": [
     {
       "binding": "HACKER_NEWS_KV",
-      "id": "4d458dadadea42f8b8198fe3e29f858d"
+      "id": "eb092f9e71ec4c09afa31ffacf9beb40"
     }
   ],
   "r2_buckets": [
@@ -35,12 +35,7 @@
       "bucket_name": "hacker-news"
     }
   ],
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "hacker-news"
-    }
-  ],
+  "services": [],
   "durable_objects": {
     "bindings": [
       {
@@ -60,11 +55,16 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["DOQueueHandler", "DOShardedTagCache"]
+      "new_sqlite_classes": [
+        "DOQueueHandler",
+        "DOShardedTagCache"
+      ]
     },
     {
       "tag": "v2",
-      "new_sqlite_classes": ["BucketCachePurge"]
+      "new_sqlite_classes": [
+        "BucketCachePurge"
+      ]
     }
   ]
 }

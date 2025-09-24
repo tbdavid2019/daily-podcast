@@ -1,11 +1,11 @@
-# 🚀 快速開始指南
+# 🚀 DAVID888 Daily Report 快速開始指南
 
-本指南幫助您快速設定和運行 Hacker News 每日播報專案。
+本指南幫助您快速設定和運行 DAVID888 Daily Report 多元科技新聞播客專案。
 
-## 📋 前置要求檢查清單
+## 📋 前置需求檢查清單
 
 - [ ] Node.js 18+ 已安裝
-- [ ] pnpm 包管理器已安裝  
+- [ ] pnpm 套件管理器已安裝
 - [ ] OpenAI API Key (必需)
 - [ ] Jina AI API Key (可選，提高成功率)
 - [ ] Cloudflare 帳號 (部署時需要)
@@ -14,10 +14,10 @@
 
 ```bash
 # 1. 克隆專案
-git clone https://github.com/ccbikai/hacker-news.git
-cd hacker-news
+git clone https://github.com/tbdavid2019/daily-podcast.git
+cd daily-podcast
 
-# 2. 安裝依賴
+# 2. 安裝相依套件
 pnpm install
 
 # 3. 快速設定環境變數
@@ -29,17 +29,44 @@ pnpm dev:worker  # 終端 1
 pnpm dev         # 終端 2
 ```
 
-## 🔧 手動設定環境變數
+## � Cloudflare Workers 重新部署
 
-如果快速設定腳本無法使用，請手動創建以下文件：
+### 快速重新部署指令
+
+```bash
+# 完整重新部署 (推薦)
+pnpm run opennext && WRANGLER_BUILD_PLATFORM=node pnpx wrangler deploy
+pnpx wrangler deploy --cwd worker
+
+# 或使用簡化指令
+pnpm deploy        # 部署 Web 應用
+pnpm deploy:worker # 部署 Worker API
+```
+
+### 部署後檢查
+
+```bash
+# 檢查應用狀態
+curl https://daily-podcast.oobwei.workers.dev
+curl https://daily-podcast-worker.oobwei.workers.dev
+
+# 手動觸發工作流程測試
+curl https://daily-podcast-worker.oobwei.workers.dev/workflow
+```
+
+## �🔧 手動設定環境變數
+
+如果快速設定腳本無法使用，請手動建立以下檔案：
 
 ### `.dev.vars` (根目錄)
+
 ```bash
 NEXTJS_ENV=development
 NEXT_STATIC_HOST=http://localhost:3000/static
 ```
 
 ### `worker/.dev.vars` (Worker 目錄)
+
 ```bash
 # 基本配置
 WORKER_ENV=development
@@ -86,6 +113,7 @@ A: 前往 [OpenAI Platform](https://platform.openai.com/)，註冊並創建新�
 ## 🆘 需要幫助？
 
 如果遇到問題，請：
+
 1. 檢查環境變數是否正確設定
 2. 確保所有依賴都已安裝
 3. 查看終端錯誤訊息

@@ -6,11 +6,24 @@ interface Env extends CloudflareEnv {
 }
 
 export default {
-  runWorkflow(event: ScheduledEvent | Request, env: Env, ctx: ExecutionContext) {
+  async runWorkflow(event: ScheduledEvent | Request, env: Env, ctx: ExecutionContext) {
     console.info('trigger event by:', event)
 
     const createWorkflow = async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const lockKey = `workflow-lock:${today}`
+
+      // Check if workflow is already running today
+      const existingLock = await env.HACKER_NEWS_KV.get(lockKey)
+      if (existingLock) {
+        console.info('Workflow already running today, skipping...', existingLock)
+        return { message: 'workflow already running', instanceId: existingLock }
+      }
+
       const instance = await env.HACKER_NEWS_WORKFLOW.create()
+
+      // Set lock with instance ID, expires in 1 hour
+      await env.HACKER_NEWS_KV.put(lockKey, instance.id, { expirationTtl: 3600 })
 
       const instanceDetails = {
         id: instance.id,
@@ -21,16 +34,21 @@ export default {
       return instanceDetails
     }
 
-    ctx.waitUntil(createWorkflow())
+    const result = await createWorkflow()
+    ctx.waitUntil(Promise.resolve())
 
-    return new Response('create workflow success')
+    return new Response(JSON.stringify(result))
   },
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    if (!env.BROWSER && request.method === 'POST') {
-      // curl -X POST http://localhost:8787
+    const url = new URL(request.url)
+
+    // Handle workflow trigger endpoint
+    if (url.pathname === '/workflow' || request.method === 'POST') {
       return this.runWorkflow(request, env, ctx)
     }
-    return Response.redirect('https://hacker-news.agi.li/')
+
+    // Redirect to our Web application instead of the original author's site
+    return Response.redirect('https://daily-podcast.oobwei.workers.dev/')
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     return this.runWorkflow(event, env, ctx)

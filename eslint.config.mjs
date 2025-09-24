@@ -11,6 +11,8 @@ export default antfu({
     'components/cute/**/*',
     'components/eldora/**/*',
     'cloudflare-env.d.ts',
+    '*.md',
+    'setup-env-vars.sh',
   ],
   rules: {
     'no-console': ['error', { allow: ['info', 'table', 'warn', 'error'] }],

@@ -1,5 +1,5 @@
 {
-  "name": "hacker-news",
+  "name": "daily-podcast",
   "version": "0.2.0",
   "private": true,
   "packageManager": "pnpm@10.14.0",
