@@ -3,9 +3,18 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle } from '@/config'
-import { introPrompt, summarizeBlogPrompt, summarizePodcastPrompt, summarizeStoryPrompt } from './prompt'
+import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import synthesize from './tts'
 import { concatAudioFiles, getAllStories, getHackerNewsStory } from './utils'
+
+interface PodcastDialogueLine {
+  speaker: '男' | '女'
+  text: string
+}
+
+interface PodcastScriptResponse {
+  dialogue: PodcastDialogueLine[]
+}
 
 interface Params {
   today?: string
@@ -105,7 +114,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     })
 
     // 一次性處理所有文章摘要
-    const allStories = await step.do('summarize all stories', retryConfig, async () => {
+    const storySummaries = await step.do('summarize all stories', retryConfig, async () => {
       const summaries: string[] = []
 
       const combinedContent = allStoryContents.map(story =>
@@ -150,21 +159,61 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       return summaries
     })
 
-    const podcastContent = await step.do('create podcast content', retryConfig, async () => {
+    const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
-        system: summarizePodcastPrompt,
-        prompt: allStories.join('\n\n---\n\n'),
-        maxTokens,
+        system: podcastScriptPrompt,
+        prompt: `日期: ${today}\n\n<story-metadata>${JSON.stringify(stories)}</story-metadata>\n\n<story-summaries>\n${storySummaries.join('\n\n---\n\n')}\n</story-summaries>`,
+        maxTokens: Math.min(maxTokens * 2, 8000),
         maxRetries: 3,
       })
 
-      console.info(`create hacker news podcast content success`, { text, usage, finishReason })
+      console.info('generate podcast script success', { usage, finishReason })
 
-      return text
+      let normalized = text.trim()
+      const lower = normalized.toLowerCase()
+      if (lower.startsWith('```json')) {
+        normalized = normalized.slice('```json'.length).trimStart()
+      }
+      else if (normalized.startsWith('```')) {
+        normalized = normalized.slice(3).trimStart()
+      }
+      if (normalized.endsWith('```')) {
+        normalized = normalized.slice(0, -3).trimEnd()
+      }
+
+      try {
+        const parsed = JSON.parse(normalized) as PodcastScriptResponse
+
+        if (!parsed || !Array.isArray(parsed.dialogue) || !parsed.dialogue.length) {
+          throw new Error('podcast script dialogue is empty')
+        }
+
+        const sanitizedDialogue = parsed.dialogue.map((line, index) => {
+          const speaker = line?.speaker?.trim() as PodcastDialogueLine['speaker'] | undefined
+          const text = (line?.text || '').trim()
+
+          if (!speaker || !['男', '女'].includes(speaker) || !text) {
+            throw new Error(`invalid dialogue line at index ${index}`)
+          }
+
+          return { speaker, text }
+        })
+
+        return { dialogue: sanitizedDialogue } as PodcastScriptResponse
+      }
+      catch (error) {
+        console.error('Failed to parse podcast script JSON', { text })
+        throw error
+      }
     })
 
-    console.info('podcast content:\n', isDev ? podcastContent : podcastContent.slice(0, 100))
+    console.info('podcast script line count', podcastScript.dialogue.length)
+
+    const podcastDialogueLines = podcastScript.dialogue.map(line => `${line.speaker}：${line.text}`)
+    const podcastContent = podcastDialogueLines.join('\n')
+
+    console.info('podcast content preview:\n', isDev ? podcastContent : podcastContent.slice(0, 200))
 
     await step.sleep('pause before blog content', breakTime)
 
@@ -172,7 +221,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
         system: summarizeBlogPrompt,
-        prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${allStories.join('\n\n---\n\n')}`,
+        prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
         maxTokens,
         maxRetries: 3,
       })
@@ -201,33 +250,48 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const podcastKey = `${today.replaceAll('-', '/')}/${runEnv}/hacker-news-${today}.mp3`
 
-    const conversations = podcastContent.split('\n').filter(Boolean)
+    const { audioUrls: audioFiles, tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
+      const audioUrls: string[] = []
+      const tempKeys: string[] = []
+      const timestamp = Date.now()
+      const batchSize = 4
 
-    const audioFiles: string[] = []
-    for (const [index, conversation] of conversations.entries()) {
-      await step.do(`create podcast audio #${index + 1}`, { ...retryConfig, timeout: '5 minutes' }, async () => {
-        if (
-          !(conversation.startsWith('男') || conversation.startsWith('女'))
-          || !conversation.substring(2).trim()
-        ) {
-          console.warn('conversation is not valid', { index, conversation })
-          return null
+      for (let start = 0; start < podcastScript.dialogue.length; start += batchSize) {
+        const chunk = podcastScript.dialogue.slice(start, start + batchSize)
+        const results = await Promise.all(chunk.map(async (line, offset) => {
+          const index = start + offset
+          const text = line.text.trim()
+
+          if (!text) {
+            console.warn('dialogue line text is empty', { index, line })
+            return null
+          }
+
+          console.info('create conversation audio', { index, speaker: line.speaker, preview: text.slice(0, 40) })
+          const audio = await synthesize(text, line.speaker, this.env)
+
+          if (!audio.size) {
+            throw new Error('podcast audio size is 0')
+          }
+
+          const tempKey = `tmp/${podcastKey}-${index}.mp3`
+          await this.env.HACKER_NEWS_R2.put(tempKey, audio)
+
+          const audioUrl = `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${tempKey}?t=${timestamp}`
+          return { audioUrl, tempKey }
+        }))
+
+        for (const result of results) {
+          if (!result) {
+            continue
+          }
+          tempKeys.push(result.tempKey)
+          audioUrls.push(result.audioUrl)
         }
+      }
 
-        console.info('create conversation audio', conversation)
-        const audio = await synthesize(conversation.substring(2), conversation[0], this.env)
-
-        if (!audio.size) {
-          throw new Error('podcast audio size is 0')
-        }
-
-        await this.env.HACKER_NEWS_R2.put(`tmp/${podcastKey}-${index}.mp3`, audio)
-
-        const audioFile = `${this.env.HACKER_NEWS_R2_BUCKET_URL}/tmp/${podcastKey}-${index}.mp3?t=${Date.now()}`
-        audioFiles.push(audioFile)
-        return audioFile
-      })
-    }
+      return { audioUrls, tempKeys }
+    })
 
     if (!audioFiles.length) {
       console.error('No valid audio files were generated from podcast content')
@@ -256,15 +320,15 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     console.info('save podcast to r2 success')
 
     await step.do('delete temp files', retryConfig, async () => {
-      const cleanupPromises = audioFiles.map(async (_, index) => {
+      const cleanupPromises = tempKeys.map(async (tempKey) => {
         try {
           await Promise.race([
-            this.env.HACKER_NEWS_R2.delete(`tmp/${podcastKey}-${index}.mp3`),
+            this.env.HACKER_NEWS_R2.delete(tempKey),
             new Promise(resolve => setTimeout(resolve, 1000)), // Timeout after 1 second
           ])
         }
         catch (error) {
-          console.warn(`delete temp file ${index} failed:`, error)
+          console.warn(`delete temp file ${tempKey} failed:`, error)
         }
       })
 
@@ -278,6 +342,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         title: `${podcastTitle} ${today}`,
         stories,
         podcastContent,
+        podcastScript,
         blogContent,
         introContent,
         audio: podcastKey,
