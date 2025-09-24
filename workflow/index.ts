@@ -78,8 +78,12 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     })
     const maxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '4096')
 
+    const storyLimits = isDev
+      ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2 }
+      : { 'hacker-news': 5, 'github-trending': 5, 'product-hunt': 5, 'dev-to': 5 }
+
     const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
-      const allStories = await getAllStories(today, this.env)
+      const allStories = await getAllStories(today, this.env, { limits: storyLimits })
 
       if (!allStories.length) {
         throw new Error('no stories found')
@@ -88,30 +92,77 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       return allStories
     })
 
-    stories.length = Math.min(stories.length, isDev ? 3 : 10)
-    console.info('top stories', isDev ? stories : JSON.stringify(stories))
+    const storiesPerSource = stories.reduce<Record<string, number>>((acc, story) => {
+      const source = story.source || 'unknown'
+      acc[source] = (acc[source] || 0) + 1
+      return acc
+    }, {})
+    console.info('stories per source', storiesPerSource)
 
-    // 一次性獲取所有文章內容
-    const allStoryContents = await step.do('get all story contents', retryConfig, async () => {
-      const contents: Array<{ id: string, title: string, content: string }> = []
-
-      for (const story of stories) {
-        try {
-          const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
-          contents.push({
-            id: story.id || '',
-            title: story.title || '',
-            content: storyContent,
-          })
-          console.info(`get story ${story.id} content success`)
-        }
-        catch (error) {
-          console.error(`get story ${story.id} content failed:`, error)
-        }
+    // 分來源獲取文章內容並緩存，避免單一步驟超時
+    const storyGroups = stories.reduce<Record<string, Story[]>>((groups, story) => {
+      const source = story.source || 'unknown'
+      if (!groups[source]) {
+        groups[source] = []
       }
+      groups[source].push(story)
+      return groups
+    }, {})
 
-      return contents
-    })
+    const allStoryContents: Array<{ id: string, title: string, content: string, source?: string }> = []
+
+    for (const [source, sourceStories] of Object.entries(storyGroups)) {
+      const stepName = `get ${source} story contents`
+      const cacheKey = `${contentKey}:story-contents:${source}`
+
+      const contentsForSource = await step.do(stepName, retryConfig, async () => {
+        const cached = await this.env.HACKER_NEWS_KV.get(cacheKey)
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached) as Array<{ id: string, title: string, content: string, source?: string }>
+            if (parsed.length === sourceStories.length) {
+              console.info(`use cached story contents for ${source}`)
+              return parsed
+            }
+          }
+          catch (error) {
+            console.warn(`failed to parse cached contents for ${source}`, error)
+          }
+        }
+
+        const contents: Array<{ id: string, title: string, content: string, source?: string }> = []
+
+        for (const story of sourceStories) {
+          try {
+            const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
+            contents.push({
+              id: story.id || '',
+              title: story.title || '',
+              content: storyContent,
+              source: story.source,
+            })
+            console.info(`get story ${story.id} content success`)
+          }
+          catch (error) {
+            console.error(`get story ${story.id} content failed:`, error)
+          }
+        }
+
+        if (contents.length === sourceStories.length && contents.length > 0) {
+          try {
+            await this.env.HACKER_NEWS_KV.put(cacheKey, JSON.stringify(contents), { expirationTtl: 60 * 60 * 24 })
+            console.info(`cached story contents for ${source}`, { count: contents.length })
+          }
+          catch (error) {
+            console.error(`cache story contents for ${source} failed:`, error)
+          }
+        }
+
+        return contents
+      })
+
+      allStoryContents.push(...contentsForSource)
+    }
 
     // 一次性處理所有文章摘要
     const storySummaries = await step.do('summarize all stories', retryConfig, async () => {

@@ -1,6 +1,11 @@
 import puppeteer from '@cloudflare/puppeteer'
 import * as cheerio from 'cheerio'
 
+type StorySource = NonNullable<Story['source']>
+interface StoryFetchOptions {
+  limits?: Partial<Record<StorySource, number>>
+}
+
 async function getContentFromJina(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, JINA_KEY?: string) {
   const jinaHeaders: HeadersInit = {
     'X-Retain-Images': 'none',
@@ -267,7 +272,9 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
   return stories.slice(0, 10) // 取前 10 個
 }
 
-export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: StoryFetchOptions = {}) {
+  const { limits = {} } = options
+
   const [hackerNewsStories, githubStories, productHuntStories, devToStories] = await Promise.all([
     getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY }),
     getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch(err => {
@@ -284,10 +291,15 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
     })
   ])
 
+  const applyLimit = (stories: Story[], source: StorySource) => {
+    const limit = limits[source]
+    return typeof limit === 'number' ? stories.slice(0, limit) : stories
+  }
+
   return [
-    ...hackerNewsStories.slice(0, 15), // 取前 15 個 HN 故事
-    ...githubStories,
-    ...productHuntStories,
-    ...devToStories
+    ...applyLimit(hackerNewsStories, 'hacker-news'),
+    ...applyLimit(githubStories, 'github-trending'),
+    ...applyLimit(productHuntStories, 'product-hunt'),
+    ...applyLimit(devToStories, 'dev-to'),
   ]
 }
