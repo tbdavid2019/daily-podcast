@@ -43,3 +43,11 @@ next-env.d.ts
 
 # dev.vars
 .dev.vars
+
+# production environment variables
+.env.production
+worker/.env.production
+
+# wrangler configs (if using plain vars - uncomment if needed)
+# wrangler.jsonc
+# worker/wrangler.jsonc

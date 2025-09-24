@@ -15,7 +15,7 @@
 ## 🌟 新聞來源
 
 - 🔥 **Hacker News** - 程式設計師最愛的科技新聞社群
-- 🚀 **GitHub Trending** - 最熱門的開源專案
+- 🚀 **GitHub Trending** - 最熱門的開源專案 (使用 DeepWiki 增強)
 - 🏆 **Product Hunt** - 創新產品發現平台
 - 💻 **Dev.to** - 開發者技術文章精選
 
@@ -36,397 +36,451 @@
 - 🔄 **自動化更新**：每日定時自動更新內容
 - ☁️ **雲端部署**：完全運行在 Cloudflare Workers 上
 - 📝 提供文章摘要和完整播报文本
-- 🌐 智能容错机制，确保服务稳定性
+- 🌐 智能容錯機制，确保服务稳定性
 
-## ✨ 最新更新
+## 🚀 快速開始
 
-### 🆕 v0.3.0 - 多平台內容聚合
+### 📋 前置需求檢查清單
 
+- [ ] Node.js 18+ 已安裝
+- [ ] pnpm 套件管理器已安裝
+- [ ] OpenAI API Key (必需)
+- [ ] Jina AI API Key (可選，提高成功率)
+- [ ] Cloudflare 帳號 (部署時需要)
+
+### ⚡ 30 秒快速設定
+
+```bash
+# 1. 克隆專案
+git clone https://github.com/tbdavid2019/daily-podcast.git
+cd daily-podcast
+
+# 2. 安裝相依套件
+pnpm install
+
+# 3. 設定生產環境變數 (明文版本，方便維護)
+./setup-env-vars.sh
+
+# 4. 部署應用
+pnpm deploy:worker  # 部署 Worker
+pnpm deploy         # 部署 Web 應用
+```
+
+### 🔧 詳細安裝步驟
+
+#### 1. 環境準備
+```bash
+# 安裝 Node.js 18+ (如果還沒安裝)
+# 前往 https://nodejs.org/ 下載並安裝
+
+# 安裝 pnpm (如果還沒安裝)
+npm install -g pnpm
+
+# 驗證安裝
+node --version  # 應為 18+
+pnpm --version  # 應有版本號
+```
+
+#### 2. 專案設置
+```bash
+# 克隆專案
+git clone https://github.com/tbdavid2019/daily-podcast.git
+cd daily-podcast
+
+# 安裝依賴
+pnpm install
+
+# 驗證安裝
+pnpm --version
+```
+
+#### 3. API Key 準備
+```bash
+# OpenAI API Key (必需)
+# 前往 https://platform.openai.com/api-keys 獲取
+
+# Jina AI API Key (可選，但推薦)
+# 前往 https://jina.ai/ 獲取
+
+# Firecrawl API Key (可選)
+# 前往 https://firecrawl.dev/ 獲取
+```
+
+#### 4. 環境變數設定
+```bash
+# 執行互動式設定腳本
+./setup-env-vars.sh
+
+# 腳本會提示輸入：
+# - OpenAI API Key
+# - OpenAI Base URL
+# - OpenAI Model
+# - Worker URL
+# - R2 Bucket URL
+# - 可選的 Jina/Firecrawl Keys
+```
+
+#### 5. 測試安裝
+```bash
+# 測試新聞來源可用性
+pnpm test:sources
+
+# 本地開發測試 (可選)
+pnpm dev:worker  # 終端 1
+pnpm dev         # 終端 2
+```
+
+### 🔧 環境變數設定
+
+使用改進版的設定腳本，環境變數會以明文儲存在本地檔案中，方便維護：
+
+```bash
+# 互動式設定所有環境變數
+./setup-env-vars.sh
+
+# 重新載入現有的環境變數檔案
+./setup-env-vars-reload.sh
+```
+
+環境變數會儲存在：
+- `.env.production` - Web 應用環境變數
+- `worker/.env.production` - Worker 應用環境變數
+
+這些檔案不會被提交到 Git，確保安全性。
+
+> ⚠️ **重要區別**：
+> - **Secrets (環境變數)**：通過 `./setup-env-vars.sh` 設定，立即生效
+> - **Binding (資源綁定)**：在 `wrangler.jsonc` 中配置，需要重新部署才生效
+>
+> 設定完環境變數後，**務必重新部署** Worker 和 Web 應用以讓 binding 生效！
+
+### 🧪 本地開發
+
+```bash
+# 啟動開發服務 (需要兩個終端)
+pnpm dev:worker  # 終端 1: 啟動 Worker
+pnpm dev         # 終端 2: 啟動 Web 應用
+```
+
+### 📱 測試功能
+
+測試新聞來源的可用性和應用功能：
+
+```bash
+# 測試所有新聞來源網站可用性
+pnpm test:sources
+
+# 或者直接運行測試腳本
+node tests/test-new-sources.mjs
+
+# 測試 Worker 應用 (本地開發時)
+pnpm dev:worker
+
+# 測試 Web 應用 (本地開發時)
+pnpm dev
+
+# 查看 Worker 日誌 (生產環境)
+pnpm logs:worker
+```
+```
+
+## ☁️ Cloudflare Workers 部署
+
+### 第一步：Cloudflare 資源準備
+
+#### 1. 登入 Cloudflare Dashboard
+前往 [Cloudflare Dashboard](https://dash.cloudflare.com/) 並登入您的帳號。
+
+#### 2. 創建 R2 存儲桶
+R2 用於存儲生成的音頻文件。
+
+```bash
+# 使用 wrangler CLI 創建 (推薦)
+pnpx wrangler r2 bucket create hacker-news
+
+# 或者在 Dashboard 中創建：
+# 1. 進入 R2 Object Storage
+# 2. 點擊 "Create bucket"
+# 3. 輸入名稱：hacker-news
+# 4. 選擇區域 (建議 APAC)
+```
+
+#### 3. 創建 KV 存儲空間
+KV 用於存儲播客元數據。
+
+```bash
+# 使用 wrangler CLI 創建
+pnpx wrangler kv namespace create HACKER_NEWS_KV
+
+# 記錄輸出的 ID，例如：
+# 🌀 Creating namespace with title "HACKER_NEWS_KV"
+# ✨ Success!
+# To access your new KV Namespace in your Worker, add the following snippet to your configuration file:
+# {
+#   "kv_namespaces": [
+#     {
+#       "binding": "HACKER_NEWS_KV",
+#       "id": "eb092f9e71ec4c09afa31ffacf9beb40"
+#     }
+#   ]
+# }
+```
+
+#### 4. 獲取資源 ID
+記錄以下信息，稍後配置時需要：
+- R2 存儲桶名稱：`hacker-news`
+- KV 命名空間 ID：`從上一步獲取`
+- 您的 Cloudflare 帳號 ID：在 Dashboard 右側邊欄可找到
+
+### 第二步：配置 Wrangler 文件
+
+#### 1. 更新根目錄 `wrangler.jsonc`
+
+```jsonc
+{
+  "name": "daily-podcast",
+  "kv_namespaces": [
+    {
+      "binding": "HACKER_NEWS_KV",
+      "id": "YOUR_KV_NAMESPACE_ID_HERE"  // 替換為實際 ID
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "HACKER_NEWS_R2",
+      "bucket_name": "hacker-news"
+    }
+  ]
+}
+```
+
+#### 2. 更新 Worker 目錄 `worker/wrangler.jsonc`
+
+```jsonc
+{
+  "name": "daily-podcast-worker",
+  "kv_namespaces": [
+    {
+      "binding": "HACKER_NEWS_KV",
+      "id": "YOUR_KV_NAMESPACE_ID_HERE"  // 使用相同的 KV ID
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "HACKER_NEWS_R2",
+      "bucket_name": "hacker-news"
+    }
+  ]
+}
+```
+
+### 第三步：環境變數設定
+
+#### 自動化設定 (推薦)
+
+使用提供的腳本快速設定：
+
+```bash
+# 給腳本執行權限
+chmod +x setup-env-vars.sh
+
+# 執行腳本並按提示輸入值
+./setup-env-vars.sh
+```
+
+#### 手動設定
+
+如果腳本無法使用，請手動執行以下命令：
+
+##### Worker 應用環境變數
+
+```bash
+# 基本配置
+pnpx wrangler secret put --cwd worker WORKER_ENV
+# 輸入: production
+
+pnpx wrangler secret put --cwd worker HACKER_NEWS_WORKER_URL
+# 輸入: https://your-worker-domain.com
+
+pnpx wrangler secret put --cwd worker HACKER_NEWS_R2_BUCKET_URL
+# 輸入: https://your-r2-domain.com (從 R2 設定中獲取)
+
+# OpenAI 配置 (必需)
+pnpx wrangler secret put --cwd worker OPENAI_API_KEY
+# 輸入: 你的 OpenAI API Key
+
+pnpx wrangler secret put --cwd worker OPENAI_BASE_URL
+# 輸入: https://api.openai.com/v1
+
+pnpx wrangler secret put --cwd worker OPENAI_MODEL
+# 輸入: gpt-4o-mini
+
+# 爬蟲服務 (可選)
+pnpx wrangler secret put --cwd worker JINA_KEY
+# 輸入: 你的 Jina AI API Key
+
+pnpx wrangler secret put --cwd worker FIRECRAWL_KEY
+# 輸入: 你的 Firecrawl API Key
+```
+
+##### Web 應用環境變數
+
+```bash
+pnpx wrangler secret put NEXTJS_ENV
+# 輸入: production
+
+pnpx wrangler secret put NEXT_PUBLIC_BASE_URL
+# 輸入: https://your-web-domain.com
+
+pnpx wrangler secret put NEXT_STATIC_HOST
+# 輸入: https://your-r2-domain.com
+```
+
+### 第四步：部署應用
+
+```bash
+# 部署 Worker 應用
+pnpm deploy:worker
+
+# 部署 Web 應用
+pnpm deploy
+```
+
+### 第五步：部署後檢查
+
+```bash
+# 檢查應用狀態
+curl https://your-worker-domain.com
+curl https://your-web-domain.com
+
+# 檢查 Worker 日誌
+pnpm logs:worker
+
+# 檢查 binding 是否正確設定 (重要！)
+pnpx wrangler deployments list --cwd worker
+pnpx wrangler deployments list
+
+# 手動觸發工作流程測試
+curl -X POST https://your-worker-domain.com/workflow
+```
+
+> 💡 **檢查 binding**：部署輸出中應顯示以下 binding：
+> - Worker: `HACKER_NEWS_KV`, `HACKER_NEWS_R2`, `HACKER_NEWS_WORKFLOW`
+> - Web: `HACKER_NEWS_KV`, `HACKER_NEWS_R2`, `ASSETS`
+
+## ✅ 部署檢查清單
+
+使用此檢查清單確保您的部署過程順利完成。
+
+### 部署前準備
+- [ ] Cloudflare 帳號已創建並登入
+- [ ] Node.js 18+ 已安裝
+- [ ] pnpm 套件管理器已安裝
+- [ ] OpenAI API Key 已獲取
+- [ ] 專案已克隆到本地
+
+### Cloudflare 資源設定
+- [ ] R2 存儲桶已創建 (名稱: `hacker-news`)
+- [ ] KV 存儲空間已創建
+- [ ] 記錄了 KV 命名空間 ID
+- [ ] 更新了 `wrangler.jsonc` 中的資源 ID
+- [ ] 更新了 `worker/wrangler.jsonc` 中的資源 ID
+
+### 環境變數設定
+- [ ] `OPENAI_API_KEY` - OpenAI API 金鑰
+- [ ] `OPENAI_BASE_URL` - https://api.openai.com/v1
+- [ ] `OPENAI_MODEL` - gpt-4o-mini
+- [ ] `WORKER_ENV` - production
+- [ ] `HACKER_NEWS_WORKER_URL` - Worker 域名
+- [ ] `HACKER_NEWS_R2_BUCKET_URL` - R2 公開 URL
+- [ ] `NEXTJS_ENV` - production
+- [ ] `NEXT_PUBLIC_BASE_URL` - Web 應用域名
+- [ ] `NEXT_STATIC_HOST` - R2 CDN 域名
+
+### 部署執行
+- [ ] 執行 `pnpm install` 安裝依賴
+- [ ] 執行 `pnpm deploy:worker` 部署 Worker ⚠️ **(重要：讓 KV/R2 binding 生效)**
+- [ ] 執行 `pnpm deploy` 部署 Web 應用 ⚠️ **(重要：讓 KV/R2 binding 生效)**
+- [ ] 記錄部署後的 URL
+- [ ] 更新環境變數中的 URL 配置
+- [ ] 測試應用功能正常
+
+## 📊 技術架構
+
+### 系統組件
+- **Web 應用**: Next.js + React + Tailwind CSS
+- **Worker 應用**: Cloudflare Workers + Hono
+- **Workflow**: Cloudflare Workflows (內容生成流程)
+- **存儲**: Cloudflare R2 (音頻文件) + KV (元數據)
+- **AI 服務**: OpenAI GPT (內容摘要) + Edge TTS (語音合成)
+
+### 工作流程
+1. **定時觸發** (每日 23:30 UTC)
+2. **內容抓取** - 多平台新聞來源
+3. **AI 摘要** - OpenAI GPT 生成摘要
+4. **語音合成** - Edge TTS 生成播客音頻
+5. **音頻合併** - FFmpeg 合併多段音頻
+6. **內容發布** - 更新 RSS 和網頁
+
+## 🔧 可用指令
+
+```bash
+# 開發
+pnpm dev              # 啟動 Web 開發服務
+pnpm dev:worker       # 啟動 Worker 開發服務
+
+# 部署
+pnpm deploy           # 部署 Web 應用
+pnpm deploy:worker    # 部署 Worker 應用
+
+# 監控
+pnpm logs:worker      # 查看 Worker 日誌
+
+# 測試
+node tests/test-new-sources.mjs  # 測試新聞來源
+```
+
+## 📝 更新日誌
+
+### 🆕 v0.3.0 - 多平台內容聚合 (2025-01-XX)
 - ✅ 新增 **GitHub Trending** 開源項目追蹤 (使用 DeepWiki 增強)
 - ✅ 新增 **Product Hunt** 新產品發現
 - ✅ 新增 **Dev.to** 技術文章精選
 - ✅ 智能容錯機制，確保單一來源失效不影響整體服務
 - ✅ 針對不同內容類型的專業化 AI 處理策略
 
-## 技术栈
-
-- **前端**: Next.js + Tailwind CSS + shadcn-ui 組件庫
-- **後端**: Cloudflare Workers + Workflows 編排
-- **AI 服務**: OpenAI API (GPT-4 系列模型)
-- **語音合成**: Edge TTS / Minimax Audio
-- **爬蟲服務**: Jina AI + Firecrawl (雙重備援)
-- **存儲**: Cloudflare R2 (音頻) + KV (元數據)
-- **部署**: Cloudflare 全球 CDN
-
-## 工作流程
-
-1. **📊 多源數據抓取**:
-
-   - Hacker News 熱門文章
-   - GitHub Trending 開源項目 (使用 DeepWiki 增強)
-   - Product Hunt 新產品發布
-   - Dev.to 技術文章精選
-
-2. **🤖 AI 智能處理**: 使用 OpenAI API 生成中文摘要和播報文稿
-
-3. **🎙️ 語音合成**: 通過 TTS 轉換為音頻 (感謝 [Minimax Audio](https://hailuoai.com/audio) 贊助)
-
-4. **💾 雲端存儲**: 存儲到 Cloudflare R2 和 KV
-
-5. **📡 內容分發**: 通過 RSS feed 和網頁提供訪問
-
-## 📖 文档索引
-
-### � 快速開始
-
-- [**快速開始指南**](./QUICK-START.md) - 30 秒快速設定和運行專案
-
-### �📋 更新日誌
-
-- [**新聞來源擴充實作說明**](./CHANGELOG-新聞來源擴充.md) - 新增 GitHub Trending、Product Hunt、Dev.to 三個新聞來源的詳細實作
-
-### 🛠️ 設定工具
-
-- [環境變數設定腳本](./setup-production-env.sh) - 一鍵設定生產環境變數
-- [開發環境快速設定](./setup-dev-vars.sh) - 統一管理本地開發環境變數
-
-## 🚀 快速開始
-
-- [**快速開始指南**](./QUICK-START.md) - 30 秒快速設定和運行專案
-- [**Cloudflare Workers 部署指南**](./CLOUDFLARE-DEPLOY.md) - 完整的生產環境部署教學
-
-## 📋 更新日誌
-
-- [**新聞來源擴充實作說明**](./CHANGELOG-新聞來源擴充.md) - 新增 GitHub Trending、Product Hunt、Dev.to 三個新聞來源的詳細實作
-
-## 🛠️ 設定工具
-
-- [環境變數設定腳本](./setup-production-env.sh) - 一鍵設定生產環境變數
-- [開發環境快速設定](./setup-dev-vars.sh) - 統一管理本地開發環境變數
-
-## 🧪 測試工具
-
-- [新聞來源測試腳本](./test-new-sources.js) - 測試新增的爬蟲功能
-
----
-
-## 🏗️ 專案架構
-
-> 專案由**兩個獨立的 Cloudflare Workers 應用**組成：
->
-> - **Web 應用** (根目錄): Next.js 前端，負責內容展示和 RSS 生成
-> - **Worker 應用** (worker/ 目錄): 後端處理，負責爬蟲、AI 處理、音頻生成等
-
-## ☁️ Cloudflare Workers 重新部署
-
-### 🔄 完整重新部署流程
-
-```bash
-# 1. 重新建構和部署 Web 應用
-pnpm run opennext
-WRANGLER_BUILD_PLATFORM=node pnpx wrangler deploy
-
-# 2. 重新部署 Worker API
-pnpx wrangler deploy --cwd worker
-
-# 3. 檢查部署狀態
-pnpx wrangler list
-```
-
-### 🎯 單獨部署指令
-
-```bash
-# 只部署 Web 應用 (前端)
-pnpm deploy
-
-# 只部署 Worker API (後端)
-pnpm deploy:worker
-
-# 檢視 Worker 即時日誌
-pnpm logs:worker
-```
-
-### 🔧 部署後確認
-
-1. **檢查應用狀態**：
-
-   - Web 應用：https://daily-podcast.oobwei.workers.dev
-   - Worker API：https://daily-podcast-worker.oobwei.workers.dev
-   - RSS 訂閱：https://daily-podcast.oobwei.workers.dev/rss.xml
-
-2. **手動觸發工作流程**：
-
-   ```bash
-   curl https://daily-podcast-worker.oobwei.workers.dev/workflow
-   ```
-
-3. **檢查環境變數**：
-   ```bash
-   # 列出所有 secrets
-   pnpx wrangler secret list
-   pnpx wrangler secret list --cwd worker
-   ```
-
----
-
-## 💻 本地開發
-
-### 📋 前置需求
-
-- Node.js 18+
-- pnpm 套件管理器
-- OpenAI API Key (必需)
-- Jina AI API Key (可選，提高爬蟲成功率)
-- Firecrawl API Key (可選，作為備用爬蟲)
-
-### 🛠️ 設定步驟
-
-1. **安裝相依套件**：
-
-```bash
-pnpm install
-```
-
-## �️ TTS 語音合成技術
-
-### 🔊 預設使用 Edge TTS (免費)
-
-本專案預設使用 **Microsoft Edge TTS**，具有以下優勢：
-
-- ✅ **完全免費** - 無需任何 API Key
-- ✅ **高品質** - 微軟專業級語音合成技術
-- ✅ **中文支援** - 優秀的繁體/簡體中文發音
-- ✅ **雲端運行** - 在 Cloudflare Workers 上原生執行
-- ✅ **多種聲音** - 支援男聲/女聲切換
-
-```typescript
-// 預設語音配置 (無需設定任何環境變數)
-男聲: zh-CN-YunyangNeural
-女聲: zh-CN-XiaoxiaoNeural
-語速: +10%
-```
-
-### 🚀 進階選項：Minimax TTS (付費)
-
-如果需要更專業的商業級語音品質，可選擇 Minimax TTS：
-
-```bash
-# 設定環境變數啟用 Minimax TTS
-pnpx wrangler secret put --cwd worker TTS_PROVIDER
-# 輸入: minimax
-
-pnpx wrangler secret put --cwd worker TTS_API_KEY
-# 輸入您的 Minimax API Key
-```
-
----
-
-## 💻 本地開發環境設定
-
-### 📋 系統需求
-
-- Node.js 18+
-- pnpm 套件管理器
-- OpenAI API Key (必需)
-- Jina AI API Key (可選，提高爬蟲成功率)
-
-### 📋 API Key 需求
-
-- OpenAI API Key (必需)
-- Jina AI API Key (可選，提高爬蟲成功率)
-- Firecrawl API Key (可選，作為備用爬蟲)
-
-### 🛠️ 環境設定步驟
-
-1. **安裝相依套件**：
-
-```bash
-pnpm install
-```
-
-2. **配置環境變數**：
-
-> ⚠️ **重要**：需要建立**兩個** `.dev.vars` 檔案，因為這是兩個獨立的 Cloudflare Workers 應用
-
-#### **根目錄 `.dev.vars` (Web 應用)**
-
-```bash
-# Next.js Web 應用環境變數
-NEXTJS_ENV=development
-NEXT_STATIC_HOST=http://localhost:3000/static
-```
-
-#### **worker/.dev.vars (Worker 應用)**
-
-```bash
-# Worker 基本配置
-WORKER_ENV=development
-HACKER_NEWS_WORKER_URL=http://localhost:8787
-HACKER_NEWS_R2_BUCKET_URL=https://your-bucket-url
-
-# OpenAI 配置 (必需)
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_THINKING_MODEL=gpt-4o
-OPENAI_MAX_TOKENS=4096
-
-# 爬蟲服務 API Keys (可選，提高成功率)
-JINA_KEY=your_jina_api_key_here
-FIRECRAWL_KEY=your_firecrawl_api_key_here
-```
-
-#### **環境變數說明**
-
-| 變數名稱         | 必需 | 說明               | 獲取方式                                        |
-| ---------------- | ---- | ------------------ | ----------------------------------------------- |
-| `OPENAI_API_KEY` | ✅   | OpenAI API 金鑰    | [OpenAI Platform](https://platform.openai.com/) |
-| `JINA_KEY`       | ⭕   | Jina AI 爬蟲服務   | [Jina AI](https://jina.ai/)                     |
-| `FIRECRAWL_KEY`  | ⭕   | Firecrawl 爬蟲備用 | [Firecrawl](https://firecrawl.dev/)             |
-
-3. **啟動開發伺服器**：
-
-```bash
-# 開發 Worker 工作流程
-pnpm dev:worker
-# curl -X POST http://localhost:8787 # 手動觸發工作流程
-
-# 開發 Web 應用
-pnpm dev
-```
-
-> 注意：
->
-> - 本地运行工作流时，Edge TTS 转换音频可能会卡住。建议直接注释该部分代码进行调试。
-> - 由于合并音频需要使用 CloudFlare 的浏览器端呈现，不支持本地开发，需要远程调试。 可以使用 `npm run test` 进行测试。
-
-### 📋 開發流程
-
-```bash
-# 同時啟動兩個服務 (需要兩個終端)
-pnpm dev:worker  # 終端 1: 啟動 Worker (後端)
-pnpm dev         # 終端 2: 啟動 Web (前端)
-
-# 手動觸發工作流測試
-curl -X POST http://localhost:8787
-```
-
-### ⚠️ 開發注意事項
-
-- 本地運行工作流時，Edge TTS 轉換音頻可能會卡住，建議注釋該部分代碼進行調試
-- 音頻合併需要 Cloudflare 瀏覽器渲染，不支援本地開發，可使用 `pnpm tests` 遠程測試
-- 確保兩個 `.dev.vars` 文件都正確配置
-
-## 🚀 部署
-
-### 準備工作
-
-1. **創建 Cloudflare 資源**:
-
-   - R2 存儲桶 (用於音頻文件存儲)
-   - KV 存儲空間 (用於元數據存儲)
-   - 綁定自定義域名 (可選但建議)
-
-2. **更新配置文件**:
-   - 修改 `wrangler.jsonc` 中的 KV 和 R2 ID
-   - 修改 `worker/wrangler.jsonc` 中的相應配置
-
-### 環境變數設定
-
-#### **Worker 應用環境變數**
-
-```bash
-# 基本配置
-pnpx wrangler secret put --cwd worker WORKER_ENV  # production
-pnpx wrangler secret put --cwd worker HACKER_NEWS_WORKER_URL  # 你的 Worker 域名
-pnpx wrangler secret put --cwd worker HACKER_NEWS_R2_BUCKET_URL  # 你的 R2 域名
-
-# OpenAI 配置
-pnpx wrangler secret put --cwd worker OPENAI_API_KEY
-pnpx wrangler secret put --cwd worker OPENAI_BASE_URL
-pnpx wrangler secret put --cwd worker OPENAI_MODEL
-pnpx wrangler secret put --cwd worker OPENAI_THINKING_MODEL
-pnpx wrangler secret put --cwd worker OPENAI_MAX_TOKENS
-
-# 爬蟲服務 (可選)
-pnpx wrangler secret put --cwd worker JINA_KEY
-pnpx wrangler secret put --cwd worker FIRECRAWL_KEY
-```
-
-#### **Web 應用環境變數**
-
-```bash
-pnpx wrangler secret put NEXTJS_ENV  # production
-pnpx wrangler secret put NEXT_PUBLIC_BASE_URL  # 您的 Web 網域名稱
-pnpx wrangler secret put NEXT_STATIC_HOST  # 您的 R2 CDN 網域名稱
-```
-
-### 📦 部署指令
-
-```bash
-# 部署 Worker 應用
-pnpm deploy:worker
-
-# 部署 Web 應用
-pnpm deploy
-```
-
-> 💡 **提示**：可以使用專案根目錄的 `setup-production-env.sh` 腳本來批次設定環境變數
-
----
-
-## 🤝 貢獻與支持
+### 🆕 v0.2.0 - 基礎功能完善 (2024-XX-XX)
+- ✅ 完整的 Hacker News 播客生成功能
+- ✅ Cloudflare Workers 完整部署
+- ✅ RSS 訂閱支援
+- ✅ 響應式網頁設計
+
+### 🆕 v0.1.0 - 初始版本 (2024-XX-XX)
+- ✅ 基於原始專案的基礎功能
+- ✅ 繁體中文支援
+- ✅ AI 摘要和語音合成
+
+## 🤝 貢獻指南
 
 歡迎提交 Issue 和 Pull Request！
 
-## 💖 贊助與致謝
+1. Fork 此專案
+2. 建立功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 開啟 Pull Request
 
-- **[Minimax Audio](https://hailuoai.com/audio)**：讓文字栩栩如「聲」
-- **原作者致謝**：感謝 [ccbikai](https://github.com/ccbikai) 開發的原始專案
+## 📄 授權
 
-## 📧 聯繫方式
+本專案採用 MIT 授權 - 查看 [LICENSE](LICENSE) 文件了解詳情。
 
-- **GitHub**：[tbdavid2019](https://github.com/tbdavid2019)
-- **專案倉庫**：[daily-podcast](https://github.com/tbdavid2019/daily-podcast)
+## 🙏 致謝
 
-## ⚖️ 免責聲明
+- 原始專案: [Hacker News 每日播報](https://github.com/ccbikai/hacker-news)
+- AI 服務: OpenAI GPT
+- 語音合成: Microsoft Edge TTS
+- 雲端平台: Cloudflare Workers
 
-本專案基於開源專案 [Hacker News 每日播報](https://github.com/ccbikai/hacker-news) 擴展開發，與 Hacker News、Y Combinator、GitHub、Product Hunt、Dev.to 等平台沒有官方關聯。所有商標均為其各自所有者的財產。
+---
 
-````
-
-#### **Web 應用環境變數**
-
-```bash
-pnpx wrangler secret put NEXTJS_ENV  # production
-pnpx wrangler secret put NEXT_PUBLIC_BASE_URL  # 你的 Web 域名
-pnpx wrangler secret put NEXT_STATIC_HOST  # 你的 R2 CDN 域名
-````
-
-### 部署命令
-
-```bash
-# 部署 Worker 應用
-pnpm deploy:worker
-
-# 部署 Web 應用
-pnpm deploy
-```
-
-> 💡 **提示**: 可以使用項目根目錄的 `setup-production-env.sh` 腳本來批量設定環境變數
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request!
-
-## 赞助
-
-- **[Minimax Audio](https://hailuoai.com/audio)**：让文字栩栩如“声”
-
-1. [在 Telegram 关注我](https://t.me/miantiao_me)
-2. [在 𝕏 上关注我](https://404.li/x)
-3. [在 GitHub 赞助我](https://github.com/sponsors/ccbikai)
-
-## 免责声明
-
-本项目与 Hacker News 和 Y Combinator 没有任何关联。"Hacker News" 是 Y Combinator 的注册商标。
+**⭐ 如果這個專案對您有幫助，請給我們一個 Star！**

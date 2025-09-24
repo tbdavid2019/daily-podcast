@@ -166,7 +166,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     console.info('podcast content:\n', isDev ? podcastContent : podcastContent.slice(0, 100))
 
-    await step.sleep('Give AI a break', breakTime)
+    await step.sleep('pause before blog content', breakTime)
 
     const blogContent = await step.do('create blog content', retryConfig, async () => {
       const { text, usage, finishReason } = await generateText({
@@ -184,7 +184,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     console.info('blog content:\n', isDev ? blogContent : blogContent.slice(0, 100))
 
-    await step.sleep('Give AI a break', breakTime)
+    await step.sleep('pause before intro content', breakTime)
 
     const introContent = await step.do('create intro content', retryConfig, async () => {
       const { text, usage, finishReason } = await generateText({
@@ -205,13 +205,13 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const audioFiles: string[] = []
     for (const [index, conversation] of conversations.entries()) {
-      await step.do('create podcast audio', { ...retryConfig, timeout: '5 minutes' }, async () => {
+      await step.do(`create podcast audio #${index + 1}`, { ...retryConfig, timeout: '5 minutes' }, async () => {
         if (
           !(conversation.startsWith('男') || conversation.startsWith('女'))
           || !conversation.substring(2).trim()
         ) {
-          console.warn('conversation is not valid', conversation)
-          return conversation
+          console.warn('conversation is not valid', { index, conversation })
+          return null
         }
 
         console.info('create conversation audio', conversation)
@@ -227,6 +227,11 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         audioFiles.push(audioFile)
         return audioFile
       })
+    }
+
+    if (!audioFiles.length) {
+      console.error('No valid audio files were generated from podcast content')
+      throw new Error('no audio files generated for podcast')
     }
 
     await step.do('concat audio files', retryConfig, async () => {

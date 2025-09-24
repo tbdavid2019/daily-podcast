@@ -3,6 +3,7 @@ export * from '../workflow'
 interface Env extends CloudflareEnv {
   HACKER_NEWS_WORKFLOW: Workflow
   BROWSER: Fetcher
+  ASSETS: Fetcher
 }
 
 export default {
@@ -25,6 +26,12 @@ export default {
     // Handle workflow trigger endpoint
     if (url.pathname === '/workflow' || request.method === 'POST') {
       return this.runWorkflow(request, env, ctx)
+    }
+
+    if (url.pathname === '/audio') {
+      const assetUrl = new URL('/audio.html', request.url)
+      const assetRequest = new Request(assetUrl, request)
+      return env.ASSETS.fetch(assetRequest)
     }
 
     // Redirect to our Web application instead of the original author's site
