@@ -182,7 +182,7 @@ pnpm dev
 # 查看 Worker 日誌 (生產環境)
 pnpm logs:worker
 ```
-```
+
 
 ## ☁️ Cloudflare Workers 部署
 
@@ -370,9 +370,18 @@ pnpx wrangler secret put --cwd worker AUDIO_SPEED
 #### 語音合成提供者設定
 #### R2 CORS 設定提醒
 - 若使用自訂網域（例如 https://podcast.david888.com）提供音檔，請在 Cloudflare R2 的 **Settings → CORS** 新增：
-  - Allowed origins: https://podcast.david888.com
-  - Allowed methods: GET
-  - Allowed headers: *
+```
+[
+  {
+    "AllowedOrigins": [
+      "https://podcast.david888.com"
+    ],
+    "AllowedMethods": [
+      "GET"
+    ]
+  }
+]
+```
 - 設定生效後，前端播放器才能直接讀取 R2 上的 mp3，避免出現 CORS 錯誤。
 
 #### 網域與環境變數對應
