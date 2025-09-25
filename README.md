@@ -8,9 +8,9 @@
 
 基於 AI 技術的多元科技新聞播客，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動生成繁體中文摘要並轉換為播客節目。
 
-**預覽地址**: https://daily-podcast.oobwei.workers.dev
+**預覽地址**: https://podcast.david888.com
 
-**RSS 訂閱**: https://daily-podcast.oobwei.workers.dev/rss.xml
+**RSS 訂閱**: https://podcast.david888.com/rss.xml
 
 ## 🌟 新聞來源
 
@@ -368,6 +368,18 @@ pnpx wrangler secret put --cwd worker AUDIO_SPEED
 ```
 
 #### 語音合成提供者設定
+#### R2 CORS 設定提醒
+- 若使用自訂網域（例如 https://podcast.david888.com）提供音檔，請在 Cloudflare R2 的 **Settings → CORS** 新增：
+  - Allowed origins: https://podcast.david888.com
+  - Allowed methods: GET
+  - Allowed headers: *
+- 設定生效後，前端播放器才能直接讀取 R2 上的 mp3，避免出現 CORS 錯誤。
+
+#### 網域與環境變數對應
+- `HACKER_NEWS_R2_BUCKET_URL`（Worker）與 `NEXT_STATIC_HOST`（前端）必須都指向 R2 公開網址，例如 https://podcast.david888.com；Workflow 寫入 KV 時只會存檔案鍵值，前端播放時會組合 `NEXT_STATIC_HOST + '/' + audio`。
+- `NEXT_PUBLIC_BASE_URL` 僅供前端使用，填網站本身的域名（例如 https://podcast.david888.com）。
+- `HACKER_NEWS_WORKER_URL` 應設定成後端 Worker 域名（例如 https://daily-podcast-worker.oobwei.workers.dev），供流程內部呼叫。
+
 - 預設使用 Microsoft Edge TTS，不需額外金鑰。
 - 設定 `TTS_PROVIDER=openai` 後，需提供 `OPENAI_TTS_API_KEY`、`OPENAI_TTS_BASE_URL` (預設 https://api.openai.com/v1)。
 - 若選擇 Minimax，請同時設定 `TTS_API_URL`、`TTS_API_ID`、`TTS_API_KEY`、`TTS_MODEL`。
