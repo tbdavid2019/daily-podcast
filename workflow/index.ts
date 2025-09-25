@@ -1,8 +1,8 @@
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateObject, generateText } from 'ai'
-import { z } from 'zod'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
+import { z } from 'zod'
 import { podcastTitle } from '@/config'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import synthesize from './tts'
@@ -85,7 +85,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const storyLimits = isDev
       ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2 }
-      : { 'hacker-news': 5, 'github-trending': 5, 'product-hunt': 5, 'dev-to': 5 }
+      : { 'hacker-news': 8, 'github-trending': 5, 'product-hunt': 5, 'dev-to': 5 }
 
     const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
       const allStories = await getAllStories(today, this.env, { limits: storyLimits })
