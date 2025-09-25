@@ -30,8 +30,8 @@
   - **GitHub Trending**: 開源專案 (使用 DeepWiki 增強)
   - **Product Hunt**: 新產品發表
   - **Dev.to**: 技術文章精選
-- 🎯 **AI 智慧摘要**：使用 OpenAI GPT 模型智慧總結文章內容和評論
-- 🎙️ **免費語音合成**：透過 Edge TTS 生成高品質中文播報 (無需 API Key)
+- 🎯 **AI 智慧摘要**：支援 OpenAI / Gemini 模型智慧總結文章內容和評論
+- 🎙️ **語音合成彈性**：預設 Edge TTS，亦可切換 OpenAI GPT-4o mini TTS 或 Minimax
 - 📱 **多端支援**：支援網頁和播客 App 收聽
 - 🔄 **自動化更新**：每日定時自動更新內容
 - ☁️ **雲端部署**：完全運行在 Cloudflare Workers 上
@@ -315,13 +315,70 @@ pnpx wrangler secret put --cwd worker OPENAI_BASE_URL
 pnpx wrangler secret put --cwd worker OPENAI_MODEL
 # 輸入: gpt-4o-mini
 
+# OpenAI Token 參數 (可選)
+pnpx wrangler secret put --cwd worker OPENAI_MAX_TOKENS
+# 輸入: 4096 (或符合模型規格)
+
+pnpx wrangler secret put --cwd worker OPENAI_MAX_COMPLETION_TOKENS
+# 輸入: 16384 (或符合模型規格)
+
 # 爬蟲服務 (可選)
 pnpx wrangler secret put --cwd worker JINA_KEY
 # 輸入: 你的 Jina AI API Key
 
 pnpx wrangler secret put --cwd worker FIRECRAWL_KEY
 # 輸入: 你的 Firecrawl API Key
+
+# 語音合成 (可選)
+pnpx wrangler secret put --cwd worker TTS_PROVIDER
+# 輸入: edge / minimax / openai
+
+pnpx wrangler secret put --cwd worker TTS_API_URL
+# 僅在 TTS_PROVIDER=minimax 時需要: Minimax API URL (預設 https://api.minimax.chat/v1/t2a_v2)
+
+pnpx wrangler secret put --cwd worker TTS_API_ID
+# 僅在 TTS_PROVIDER=minimax 時需要: Minimax GroupId
+
+pnpx wrangler secret put --cwd worker TTS_API_KEY
+# 僅在 TTS_PROVIDER=minimax 時需要: Minimax API Key
+
+pnpx wrangler secret put --cwd worker TTS_MODEL
+# 選填: Minimax 語音模型 (預設 speech-2.5-turbo-preview)
+
+pnpx wrangler secret put --cwd worker OPENAI_TTS_API_KEY
+# 僅在 TTS_PROVIDER=openai 時需要: 你的 OpenAI TTS 金鑰
+
+pnpx wrangler secret put --cwd worker OPENAI_TTS_BASE_URL
+# 僅在 TTS_PROVIDER=openai 時需要: https://api.openai.com/v1
+
+pnpx wrangler secret put --cwd worker OPENAI_TTS_MODEL
+# 選填: gpt-4o-mini-tts (或其他 OpenAI TTS 型號)
+
+pnpx wrangler secret put --cwd worker OPENAI_TTS_INSTRUCTIONS
+# 選填: 固定語氣指示 (例如: 保持活潑愉快)
+
+pnpx wrangler secret put --cwd worker MAN_VOICE_ID
+# 選填: 男聲語音 ID (OpenAI 預設 onyx)
+
+pnpx wrangler secret put --cwd worker WOMAN_VOICE_ID
+# 選填: 女聲語音 ID (OpenAI 預設 nova)
+
+pnpx wrangler secret put --cwd worker AUDIO_SPEED
+# 選填: Edge / Minimax 語速設定
 ```
+
+#### 語音合成提供者設定
+- 預設使用 Microsoft Edge TTS，不需額外金鑰。
+- 設定 `TTS_PROVIDER=openai` 後，需提供 `OPENAI_TTS_API_KEY`、`OPENAI_TTS_BASE_URL` (預設 https://api.openai.com/v1)。
+- 若選擇 Minimax，請同時設定 `TTS_API_URL`、`TTS_API_ID`、`TTS_API_KEY`、`TTS_MODEL`。
+- OpenAI 路徑使用 `gpt-4o-mini-tts`，男聲預設 `onyx`、女聲預設 `nova`，可透過 `MAN_VOICE_ID` / `WOMAN_VOICE_ID` 覆寫。
+- GPT-4o mini TTS 單次輸入上限約 2000 tokens，過長台詞會觸發 400 錯誤，必要時請切段。
+- 若文字摘要改用其他相容端點 (如 Gemini)，記得保留 `OPENAI_TTS_BASE_URL=https://api.openai.com/v1` 以免 404。
+
+#### Token 限制調整
+- `OPENAI_MAX_TOKENS` 控制抓取內容送入模型的最大輸入 tokens。
+- `OPENAI_MAX_COMPLETION_TOKENS` 控制摘要 / 腳本 / 部落格輸出 tokens 的上限，避免超出模型配額。
+- 未設定時分別使用 4096 與 16384 的預設值，確保相容於 GPT-4o 與 Gemini 等模型。
 
 ##### Web 應用環境變數
 
@@ -343,7 +400,7 @@ pnpx wrangler secret put NEXT_STATIC_HOST
 pnpm deploy:worker
 
 # 部署 Web 應用
-pnpm deploy
+pnpm run deploy
 ```
 
 ### 第五步：部署後檢查
@@ -361,8 +418,19 @@ pnpx wrangler deployments list --cwd worker
 pnpx wrangler deployments list
 
 # 手動觸發工作流程測試
+```bash
+# 預設執行當天流程
 curl -X POST https://your-worker-domain.com/workflow
+
+# 指定日期與強制覆寫 (JSON Body)
+curl -X POST https://your-worker-domain.com/workflow \
+     -H "Content-Type: application/json" \
+     -d '{"today":"2025-09-24","force":true}'
+
+# 亦可透過 Query 參數 (GET/POST 皆可)
+curl "https://your-worker-domain.com/workflow?today=2025-09-24&force=true"
 ```
+
 
 > 💡 **檢查 binding**：部署輸出中應顯示以下 binding：
 > - Worker: `HACKER_NEWS_KV`, `HACKER_NEWS_R2`, `HACKER_NEWS_WORKFLOW`
@@ -388,11 +456,22 @@ curl -X POST https://your-worker-domain.com/workflow
 
 ### 環境變數設定
 - [ ] `OPENAI_API_KEY` - OpenAI API 金鑰
-- [ ] `OPENAI_BASE_URL` - https://api.openai.com/v1
+- [ ] `OPENAI_BASE_URL` - https://api.openai.com/v1 (或自訂相容端點)
 - [ ] `OPENAI_MODEL` - gpt-4o-mini
+- [ ] `OPENAI_MAX_TOKENS` (可選) - 最大輸入 tokens
+- [ ] `OPENAI_MAX_COMPLETION_TOKENS` (可選) - 最大輸出 tokens
 - [ ] `WORKER_ENV` - production
 - [ ] `HACKER_NEWS_WORKER_URL` - Worker 域名
 - [ ] `HACKER_NEWS_R2_BUCKET_URL` - R2 公開 URL
+- [ ] `TTS_PROVIDER` (可選) - edge / minimax / openai
+- [ ] `TTS_API_URL` / `TTS_API_ID` / `TTS_API_KEY` (可選) - Minimax 語音服務參數
+- [ ] `TTS_MODEL` (可選) - Minimax 語音模型
+- [ ] `OPENAI_TTS_API_KEY` (可選) - OpenAI TTS 金鑰
+- [ ] `OPENAI_TTS_BASE_URL` (可選) - https://api.openai.com/v1
+- [ ] `OPENAI_TTS_MODEL` (可選) - gpt-4o-mini-tts
+- [ ] `OPENAI_TTS_INSTRUCTIONS` (可選) - 固定語氣指示
+- [ ] `MAN_VOICE_ID` / `WOMAN_VOICE_ID` (可選) - 自訂聲線 ID
+- [ ] `AUDIO_SPEED` (可選) - 語速設定
 - [ ] `NEXTJS_ENV` - production
 - [ ] `NEXT_PUBLIC_BASE_URL` - Web 應用域名
 - [ ] `NEXT_STATIC_HOST` - R2 CDN 域名
@@ -400,7 +479,7 @@ curl -X POST https://your-worker-domain.com/workflow
 ### 部署執行
 - [ ] 執行 `pnpm install` 安裝依賴
 - [ ] 執行 `pnpm deploy:worker` 部署 Worker ⚠️ **(重要：讓 KV/R2 binding 生效)**
-- [ ] 執行 `pnpm deploy` 部署 Web 應用 ⚠️ **(重要：讓 KV/R2 binding 生效)**
+- [ ] 執行 `pnpm run deploy` 部署 Web 應用 ⚠️ **(重要：讓 KV/R2 binding 生效)**
 - [ ] 記錄部署後的 URL
 - [ ] 更新環境變數中的 URL 配置
 - [ ] 測試應用功能正常
@@ -412,15 +491,32 @@ curl -X POST https://your-worker-domain.com/workflow
 - **Worker 應用**: Cloudflare Workers + Hono
 - **Workflow**: Cloudflare Workflows (內容生成流程)
 - **存儲**: Cloudflare R2 (音頻文件) + KV (元數據)
-- **AI 服務**: OpenAI GPT (內容摘要) + Edge TTS (語音合成)
+- **AI 服務**: OpenAI/Gemini (內容摘要) + Edge / OpenAI / Minimax TTS
 
 ### 工作流程
 1. **定時觸發** (每日 23:30 UTC)
 2. **內容抓取** - 多平台新聞來源
-3. **AI 摘要** - OpenAI GPT 生成摘要
-4. **語音合成** - Edge TTS 生成播客音頻
+3. **AI 摘要** - OpenAI / Gemini 模型生成摘要
+4. **語音合成** - Edge / OpenAI / Minimax TTS 生成播客音頻
 5. **音頻合併** - FFmpeg 合併多段音頻
 6. **內容發布** - 更新 RSS 和網頁
+
+## ❓ 常見問題
+
+### 為什麼 `pnpm deploy` 會報錯 "No project was selected for deployment"？
+
+`pnpm deploy` 是 pnpm 的內建命令，用於將 workspace 中的 package 部署到另一個位置。它需要指定目標目錄，但專案中的部署腳本是自定義的 `deploy` 腳本。
+
+**解決方案**：使用 `pnpm run deploy` 而不是 `pnpm deploy`。
+
+```bash
+# 正確的命令
+pnpm run deploy      # 運行自定義的 deploy 腳本
+pnpm deploy:worker   # 運行自定義的 deploy:worker 腳本
+
+# 錯誤的命令 (會觸發 pnpm 內建的 deploy 命令)
+pnpm deploy          # 這會嘗試部署 package，但沒有指定目標
+```
 
 ## 🔧 可用指令
 
@@ -477,8 +573,8 @@ node tests/test-new-sources.mjs  # 測試新聞來源
 ## 🙏 致謝
 
 - 原始專案: [Hacker News 每日播報](https://github.com/ccbikai/hacker-news)
-- AI 服務: OpenAI GPT
-- 語音合成: Microsoft Edge TTS
+- AI 服務: OpenAI/Gemini (內容摘要) + Edge / OpenAI / Minimax TTS
+- 語音合成: Edge TTS (預設) / OpenAI GPT-4o mini TTS / Minimax
 - 雲端平台: Cloudflare Workers
 
 ---

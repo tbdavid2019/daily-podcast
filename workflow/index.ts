@@ -1,11 +1,12 @@
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
 import { createOpenAI } from '@ai-sdk/openai'
-import { generateText } from 'ai'
+import { generateObject, generateText } from 'ai'
+import { z } from 'zod'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle } from '@/config'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import synthesize from './tts'
-import { concatAudioFiles, getAllStories, getHackerNewsStory } from './utils'
+import { getAllStories, getHackerNewsStory } from './utils'
 
 interface PodcastDialogueLine {
   speaker: '男' | '女'
@@ -18,6 +19,7 @@ interface PodcastScriptResponse {
 
 interface Params {
   today?: string
+  force?: boolean
 }
 
 interface Env extends CloudflareEnv {
@@ -26,6 +28,7 @@ interface Env extends CloudflareEnv {
   OPENAI_MODEL: string
   OPENAI_THINKING_MODEL?: string
   OPENAI_MAX_TOKENS?: string
+  OPENAI_MAX_COMPLETION_TOKENS?: string
   JINA_KEY?: string
   WORKER_ENV?: string
   HACKER_NEWS_WORKER_URL: string
@@ -48,6 +51,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     console.info('trigged event: HackerNewsWorkflow', event)
 
     const runEnv = this.env.WORKER_ENV || 'production'
+    const force = Boolean(event.payload?.force)
     const isDev = runEnv !== 'production'
     const breakTime = isDev ? '2 seconds' : '5 seconds'
     const today = event.payload?.today || new Date().toISOString().split('T')[0]
@@ -64,7 +68,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       return null
     })
 
-    if (existingContent) {
+    if (existingContent && !force) {
       console.info('Skipping workflow - content already exists for date:', today)
       return existingContent
     }
@@ -76,7 +80,8 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         Authorization: `Bearer ${this.env.OPENAI_API_KEY!}`,
       },
     })
-    const maxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '4096')
+    const maxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '4096') || 4096
+    const completionTokenLimit = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '16384') || 16384
 
     const storyLimits = isDev
       ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2 }
@@ -165,7 +170,9 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     }
 
     // 一次性處理所有文章摘要
-    const storySummaries = await step.do('summarize all stories', retryConfig, async () => {
+    const summarizationMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
+
+    const storySummaries = await step.do('summarize all stories', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const summaries: string[] = []
 
       const combinedContent = allStoryContents.map(story =>
@@ -176,7 +183,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         model: openai(this.env.OPENAI_MODEL!),
         system: `${summarizeStoryPrompt}\n\n請為每篇文章生成摘要，用 <story-summary id="文章ID"> 標籤包裹每個摘要。`,
         prompt: combinedContent,
-        maxTokens: maxTokens * 2,
+        maxTokens: summarizationMaxTokens,
       })
 
       console.info('batch summarize all stories success', { usage, finishReason })
@@ -211,52 +218,40 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     })
 
     const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
-      const { text, usage, finishReason } = await generateText({
+      const scriptMaxTokens = Math.min(maxTokens * 2, 8000, completionTokenLimit)
+      const { object, usage, finishReason } = await generateObject({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
         system: podcastScriptPrompt,
         prompt: `日期: ${today}\n\n<story-metadata>${JSON.stringify(stories)}</story-metadata>\n\n<story-summaries>\n${storySummaries.join('\n\n---\n\n')}\n</story-summaries>`,
-        maxTokens: Math.min(maxTokens * 2, 8000),
+        maxTokens: scriptMaxTokens,
         maxRetries: 3,
+        schema: z.object({
+          dialogue: z.array(z.object({
+            speaker: z.enum(['男', '女']),
+            text: z.string().min(1),
+          })).min(1),
+        }),
       })
 
       console.info('generate podcast script success', { usage, finishReason })
 
-      let normalized = text.trim()
-      const lower = normalized.toLowerCase()
-      if (lower.startsWith('```json')) {
-        normalized = normalized.slice('```json'.length).trimStart()
-      }
-      else if (normalized.startsWith('```')) {
-        normalized = normalized.slice(3).trimStart()
-      }
-      if (normalized.endsWith('```')) {
-        normalized = normalized.slice(0, -3).trimEnd()
+      if (!object || !Array.isArray(object.dialogue) || !object.dialogue.length) {
+        console.error('Generated podcast script object is empty', { object })
+        throw new Error('podcast script dialogue is empty')
       }
 
-      try {
-        const parsed = JSON.parse(normalized) as PodcastScriptResponse
+      const sanitizedDialogue = object.dialogue.map((line, index) => {
+        const speaker = typeof line?.speaker === 'string' ? line.speaker.trim() : ''
+        const text = typeof line?.text === 'string' ? line.text.trim() : ''
 
-        if (!parsed || !Array.isArray(parsed.dialogue) || !parsed.dialogue.length) {
-          throw new Error('podcast script dialogue is empty')
+        if (!speaker || !['男', '女'].includes(speaker as PodcastDialogueLine['speaker']) || !text) {
+          throw new Error(`invalid dialogue line at index ${index}`)
         }
 
-        const sanitizedDialogue = parsed.dialogue.map((line, index) => {
-          const speaker = line?.speaker?.trim() as PodcastDialogueLine['speaker'] | undefined
-          const text = (line?.text || '').trim()
+        return { speaker: speaker as PodcastDialogueLine['speaker'], text }
+      })
 
-          if (!speaker || !['男', '女'].includes(speaker) || !text) {
-            throw new Error(`invalid dialogue line at index ${index}`)
-          }
-
-          return { speaker, text }
-        })
-
-        return { dialogue: sanitizedDialogue } as PodcastScriptResponse
-      }
-      catch (error) {
-        console.error('Failed to parse podcast script JSON', { text })
-        throw error
-      }
+      return { dialogue: sanitizedDialogue } as PodcastScriptResponse
     })
 
     console.info('podcast script line count', podcastScript.dialogue.length)
@@ -269,11 +264,12 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     await step.sleep('pause before blog content', breakTime)
 
     const blogContent = await step.do('create blog content', retryConfig, async () => {
+      const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
         system: summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
-        maxTokens,
+        maxTokens: blogMaxTokens,
         maxRetries: 3,
       })
 
@@ -301,8 +297,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const podcastKey = `${today.replaceAll('-', '/')}/${runEnv}/hacker-news-${today}.mp3`
 
-    const { audioUrls: audioFiles, tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
-      const audioUrls: string[] = []
+    const { tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const tempKeys: string[] = []
       const timestamp = Date.now()
       const batchSize = 4
@@ -327,9 +322,9 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
           const tempKey = `tmp/${podcastKey}-${index}.mp3`
           await this.env.HACKER_NEWS_R2.put(tempKey, audio)
+          console.info('uploaded temp audio chunk', { index, key: tempKey, size: audio.size })
 
-          const audioUrl = `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${tempKey}?t=${timestamp}`
-          return { audioUrl, tempKey }
+          return { tempKey }
         }))
 
         for (const result of results) {
@@ -337,35 +332,54 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
             continue
           }
           tempKeys.push(result.tempKey)
-          audioUrls.push(result.audioUrl)
         }
       }
 
-      return { audioUrls, tempKeys }
+      return { tempKeys }
     })
 
-    if (!audioFiles.length) {
+    if (!tempKeys.length) {
       console.error('No valid audio files were generated from podcast content')
       throw new Error('no audio files generated for podcast')
     }
 
     await step.do('concat audio files', retryConfig, async () => {
-      if (!this.env.BROWSER) {
-        console.warn('browser is not configured, skip concat audio files')
-        return null
+      const chunkBuffers: Uint8Array[] = []
+
+      for (const [index, tempKey] of tempKeys.entries()) {
+        try {
+          const chunk = await this.env.HACKER_NEWS_R2.get(tempKey)
+          if (!chunk) {
+            console.warn('audio chunk not found', { index, key: tempKey })
+            continue
+          }
+
+          const buffer = new Uint8Array(await chunk.arrayBuffer())
+          console.info('loaded audio chunk', { index, key: tempKey, size: buffer.byteLength })
+          chunkBuffers.push(buffer)
+        }
+        catch (error) {
+          console.error('load audio chunk failed', { index, key: tempKey, error })
+        }
       }
 
-      try {
-        const blob = await concatAudioFiles(audioFiles, this.env.BROWSER, { workerUrl: this.env.HACKER_NEWS_WORKER_URL })
-        await this.env.HACKER_NEWS_R2.put(podcastKey, blob)
+      if (!chunkBuffers.length) {
+        throw new Error('failed to load any podcast audio chunks')
+      }
 
-        return `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${podcastKey}?t=${Date.now()}`
+      const totalLength = chunkBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
+      const combined = new Uint8Array(totalLength)
+
+      let offset = 0
+      for (const buffer of chunkBuffers) {
+        combined.set(buffer, offset)
+        offset += buffer.byteLength
       }
-      catch (error) {
-        console.error('Failed to concat audio files:', error)
-        // Continue without audio concatenation - individual files are still available
-        return null
-      }
+
+      await this.env.HACKER_NEWS_R2.put(podcastKey, combined.buffer)
+      console.info('combined audio chunks', { chunks: chunkBuffers.length, totalLength })
+
+      return `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${podcastKey}?t=${Date.now()}`
     })
 
     console.info('save podcast to r2 success')

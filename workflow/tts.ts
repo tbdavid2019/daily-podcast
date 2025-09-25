@@ -10,6 +10,12 @@ interface Env extends CloudflareEnv {
   MAN_VOICE_ID?: string
   WOMAN_VOICE_ID?: string
   AUDIO_SPEED?: string
+  OPENAI_TTS_API_KEY?: string
+  OPENAI_TTS_BASE_URL?: string
+  OPENAI_TTS_MODEL?: string
+  OPENAI_TTS_INSTRUCTIONS?: string
+  OPENAI_BASE_URL?: string
+  OPENAI_API_KEY?: string
 }
 
 async function edgeTTS(text: string, gender: string, env: Env) {
@@ -65,7 +71,48 @@ async function minimaxTTS(text: string, gender: string, env: Env) {
   throw new Error(`Failed to fetch audio: ${res.statusText}`)
 }
 
+async function openaiTTS(text: string, gender: string, env: Env) {
+  const apiKey = env.OPENAI_TTS_API_KEY || env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OpenAI TTS API key is missing')
+  }
+
+  const baseUrl = (env.OPENAI_TTS_BASE_URL || env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
+  const model = env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
+  const voice = gender === '男' ? (env.MAN_VOICE_ID || 'onyx') : (env.WOMAN_VOICE_ID || 'nova')
+
+  const body: Record<string, unknown> = {
+    model,
+    voice,
+    input: text,
+  }
+
+  if (env.OPENAI_TTS_INSTRUCTIONS) {
+    body.instructions = env.OPENAI_TTS_INSTRUCTIONS
+  }
+
+  const res = await fetch(`${baseUrl}/audio/speech`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errorMessage = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch OpenAI TTS audio: ${res.status} ${res.statusText} ${errorMessage}`)
+  }
+
+  const arrayBuffer = await res.arrayBuffer()
+  return new Blob([arrayBuffer], { type: 'audio/mpeg' })
+}
+
 export default function (text: string, gender: string, env: Env) {
+  if (env.TTS_PROVIDER === 'openai') {
+    return openaiTTS(text, gender, env)
+  }
   if (env.TTS_PROVIDER === 'minimax') {
     return minimaxTTS(text, gender, env)
   }
