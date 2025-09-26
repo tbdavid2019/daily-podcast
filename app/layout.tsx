@@ -54,7 +54,7 @@ export default function RootLayout({
             >
               <Rss className="w-6 h-6 font-bold" />
             </a>
-            <a
+            {/* <a
               href="https://github.com/tbdavid2019/daily-podcast"
               className="text-zinc-700 hover:text-zinc-900 transition-colors ml-2"
               title="GitHub"
@@ -62,7 +62,7 @@ export default function RootLayout({
               rel="noopener noreferrer"
             >
               <Github className="w-6 h-6 font-bold" />
-            </a>
+            </a> */}
           </div>
           <p className="text-md text-gray-500 my-4">{podcastDescription}</p>
         </header>

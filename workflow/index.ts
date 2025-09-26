@@ -85,7 +85,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const storyLimits = isDev
       ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2 }
-      : { 'hacker-news': 8, 'github-trending': 5, 'product-hunt': 5, 'dev-to': 5 }
+      : { 'hacker-news': 10, 'github-trending': 5, 'product-hunt': 5, 'dev-to': 10 }
 
     const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
       const allStories = await getAllStories(today, this.env, { limits: storyLimits })

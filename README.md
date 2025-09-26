@@ -93,8 +93,8 @@ pnpm install
 ./setup-env-vars.sh
 
 # 4. 部署應用
-pnpm deploy:worker  # 部署 Worker
-pnpm deploy         # 部署 Web 應用
+pnpm run deploy:worker  # 部署 Worker
+pnpm run deploy         # 部署 Web 應用
 ```
 
 ### 🔧 詳細安裝步驟
