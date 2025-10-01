@@ -3,7 +3,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import markdownit from 'markdown-it'
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
-import { podcastDescription, podcastTitle } from '@/config'
+import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
 import { getPastDays } from '@/lib/utils'
 
 const md = markdownit()
@@ -28,11 +28,18 @@ export async function GET() {
     categories: ['technology', 'news'],
     itunesImage: `${baseUrl}/logo.png`,
     itunesCategory: [{ text: 'Technology' }, { text: 'News' }],
+    itunesOwner: {
+      name: podcastOwner.name,
+      email: podcastOwner.email,
+    },
+    customNamespaces: {
+      podcast: 'https://podcastindex.org/namespace/1.0',
+    },
   })
 
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV
-  const pastDays = getPastDays(10)
+  const pastDays = getPastDays(rssDays)
   const posts = (await Promise.all(
     pastDays.map(async (day) => {
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')

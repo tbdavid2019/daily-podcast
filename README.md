@@ -4,6 +4,30 @@
 
 **專案倉庫**: https://github.com/tbdavid2019/daily-podcast
 
+## 📚 文檔導航
+
+本專案提供多個專門文檔，方便您快速找到所需資訊：
+
+> 📖 **完整文檔索引**: 查看 [DOCS-INDEX.md](./DOCS-INDEX.md) 獲取詳細的文檔導覽和閱讀建議
+
+| 文檔 | 說明 | 適合對象 |
+|------|------|----------|
+| [README.md](./README.md) | 專案介紹、快速開始、部署指南 | 所有使用者 |
+| [DOCS-INDEX.md](./DOCS-INDEX.md) | 📖 **文檔索引與導覽** | 所有使用者 |
+| [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) | 詳細配置說明（天數限制、環境變數） | 部署與維護者 |
+| [SECURITY.md](./SECURITY.md) | 安全指南、認證機制、應急響應 | 系統管理員 |
+| [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) | RSS Feed 修復說明、播客規範 | 播客開發者 |
+| [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) | 版本更新記錄、新功能說明 | 開發者 |
+
+**📖 快速查找**：
+- 🚀 想要開始使用？看本文檔的「快速開始」章節
+- ⚙️ 配置遇到問題？查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md)
+- 🔒 關注安全性？閱讀 [SECURITY.md](./SECURITY.md)
+- 📻 RSS Feed 問題？參考 [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md)
+- 📚 不知道看哪個文檔？從 [DOCS-INDEX.md](./DOCS-INDEX.md) 開始
+
+---
+
 ## ✨ 專案簡介
 
 基於 AI 技術的多元科技新聞播客，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動生成繁體中文摘要並轉換為播客節目。
@@ -69,6 +93,104 @@
 - 📝 提供文章摘要和完整播报文本
 - 🌐 智能容錯機制，确保服务稳定性
 
+## ⚙️ 配置說明
+
+> 📖 **詳細配置指南**: 查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) 獲取完整的配置說明和故障排除
+
+### 📅 天數限制配置 (`config.ts`)
+
+為避免超過 Cloudflare Workers 的 subrequest 限制（免費方案 50 次、付費方案 1000 次），系統提供三個獨立的天數配置：
+
+```typescript
+// 首頁顯示的天數 (建議 7-30 天)
+export const keepDays = 30
+
+// Sitemap 顯示的天數 (建議 365 天)
+export const sitemapDays = 365
+
+// RSS 顯示的天數 (建議 10 天)
+export const rssDays = 10
+```
+
+#### 📊 配置建議
+
+| 配置項 | 預設值 | 建議範圍 | 說明 |
+|--------|--------|----------|------|
+| `keepDays` | 30 天 | 7-30 天 | 首頁顯示的播客數量，直接影響載入速度 |
+| `sitemapDays` | 365 天 | 90-365 天 | SEO 友好，不會在每次訪問時觸發 |
+| `rssDays` | 10 天 | 7-30 天 | 播客 App 通常不需要太多歷史內容 |
+
+#### ⚠️ 重要提醒
+
+- **免費方案限制**: 單次 Worker 調用最多 50 個子請求
+- **付費方案限制**: 單次 Worker 調用最多 1000 個子請求
+- 首頁會讀取 `keepDays` 次 KV，請確保不超過限制
+- 如果遇到 "Too many API requests by single worker invocation" 錯誤，請降低 `keepDays` 值
+
+#### 🎯 使用場景
+
+**快速載入 (7-14 天)**
+```typescript
+export const keepDays = 7        // 最快載入速度
+export const sitemapDays = 90    // 保留基本 SEO
+export const rssDays = 7         // 最新內容
+```
+
+**平衡設定 (30 天，推薦)**
+```typescript
+export const keepDays = 30       // 一個月歷史
+export const sitemapDays = 365   // 一年 SEO 覆蓋
+export const rssDays = 10        // 充足的 RSS 內容
+```
+
+**最大內容 (付費方案)**
+```typescript
+export const keepDays = 90       // 三個月歷史
+export const sitemapDays = 730   // 兩年 SEO 覆蓋
+export const rssDays = 30        // 一個月 RSS
+```
+
+### 🌐 環境變數說明
+
+#### Worker 應用環境變數
+
+| 變數名 | 說明 | 範例 |
+|--------|------|------|
+| `HACKER_NEWS_WORKER_URL` | 後端 Worker 域名（供內部呼叫）⚠️ **不要公開** | `https://your-worker.workers.dev` |
+| `HACKER_NEWS_R2_BUCKET_URL` | R2 公開 URL（音頻檔案存取） | `https://podcast.david888.com` |
+| `OPENAI_API_KEY` | OpenAI API 金鑰 | `sk-...` |
+| `OPENAI_BASE_URL` | OpenAI API 端點 | `https://api.openai.com/v1` |
+
+#### Web 應用環境變數
+
+| 變數名 | 說明 | 範例 |
+|--------|------|------|
+| `NEXT_PUBLIC_BASE_URL` | 前端網站域名（用於 RSS/Sitemap） | `https://podcast.david888.com` |
+| `NEXT_STATIC_HOST` | R2 CDN 域名（前端播放器使用） | `https://podcast.david888.com` |
+| `NEXTJS_ENV` | 運行環境 | `production` |
+
+#### 🔗 域名對應關係
+
+```mermaid
+graph LR
+    A[用戶訪問] --> B[podcast.david888.com<br/>NEXT_PUBLIC_BASE_URL]
+    B --> C[讀取 KV 元數據]
+    B --> D[播放音頻<br/>NEXT_STATIC_HOST]
+    C --> E[呼叫 Worker API<br/>HACKER_NEWS_WORKER_URL]
+    D --> F[R2 存儲<br/>HACKER_NEWS_R2_BUCKET_URL]
+```
+
+**設定範例**：
+```bash
+# Worker 應用
+HACKER_NEWS_WORKER_URL=https://your-worker.workers.dev  # ⚠️ 保密，不要公開
+HACKER_NEWS_R2_BUCKET_URL=https://podcast.david888.com
+
+# Web 應用
+NEXT_PUBLIC_BASE_URL=https://podcast.david888.com
+NEXT_STATIC_HOST=https://podcast.david888.com
+```
+
 ## 🚀 快速開始
 
 ### 📋 前置需求檢查清單
@@ -93,8 +215,8 @@ pnpm install
 ./setup-env-vars.sh
 
 # 4. 部署應用
-pnpm deploy:worker  # 部署 Worker
-pnpm deploy         # 部署 Web 應用
+pnpm run deploy:worker  # 部署 Worker
+pnpm run deploy         # 部署 Web 應用
 ```
 
 ### 🔧 詳細安裝步驟
@@ -331,10 +453,13 @@ pnpx wrangler secret put --cwd worker WORKER_ENV
 # 輸入: production
 
 pnpx wrangler secret put --cwd worker HACKER_NEWS_WORKER_URL
-# 輸入: https://your-worker-domain.com
+# 輸入: https://your-worker.workers.dev (你的後端 Worker 域名)
+# 用途: 供 Workflow 內部呼叫音頻合併等 Worker API
+# ⚠️ 安全警告: 不要在公開文檔中暴露此 URL
 
 pnpx wrangler secret put --cwd worker HACKER_NEWS_R2_BUCKET_URL
-# 輸入: https://your-r2-domain.com (從 R2 設定中獲取)
+# 輸入: https://podcast.david888.com (你的 R2 公開 URL，用於音頻檔案存取)
+# 用途: Workflow 寫入音頻檔案路徑到 KV 時使用
 
 # OpenAI 配置 (必需)
 pnpx wrangler secret put --cwd worker OPENAI_API_KEY
@@ -418,7 +543,7 @@ pnpx wrangler secret put --cwd worker AUDIO_SPEED
 #### 網域與環境變數對應
 - `HACKER_NEWS_R2_BUCKET_URL`（Worker）與 `NEXT_STATIC_HOST`（前端）必須都指向 R2 公開網址，例如 https://podcast.david888.com；Workflow 寫入 KV 時只會存檔案鍵值，前端播放時會組合 `NEXT_STATIC_HOST + '/' + audio`。
 - `NEXT_PUBLIC_BASE_URL` 僅供前端使用，填網站本身的域名（例如 https://podcast.david888.com）。
-- `HACKER_NEWS_WORKER_URL` 應設定成後端 Worker 域名（例如 https://daily-podcast-worker.oobwei.workers.dev），供流程內部呼叫。
+- `HACKER_NEWS_WORKER_URL` 應設定成後端 Worker 域名（例如 https://your-worker.workers.dev），供流程內部呼叫。⚠️ **不要公開此 URL**。
 
 - 預設使用 Microsoft Edge TTS，不需額外金鑰。
 - 設定 `TTS_PROVIDER=openai` 後，需提供 `OPENAI_TTS_API_KEY`、`OPENAI_TTS_BASE_URL` (預設 https://api.openai.com/v1)。
@@ -439,11 +564,22 @@ pnpx wrangler secret put NEXTJS_ENV
 # 輸入: production
 
 pnpx wrangler secret put NEXT_PUBLIC_BASE_URL
-# 輸入: https://your-web-domain.com
+# 輸入: https://podcast.david888.com (你的前端網站域名)
+# 用途: 用於生成 RSS、Sitemap 中的絕對 URL
 
 pnpx wrangler secret put NEXT_STATIC_HOST
-# 輸入: https://your-r2-domain.com
+# 輸入: https://podcast.david888.com (你的 R2 CDN 域名)
+# 用途: 前端播放器組合音頻檔案完整 URL (NEXT_STATIC_HOST + '/' + audio)
 ```
+
+**📝 環境變數快速參考**：
+
+| 變數名 | 設定位置 | 範例值 | 用途 |
+|--------|----------|--------|------|
+| `HACKER_NEWS_WORKER_URL` | Worker | `https://your-worker.workers.dev` ⚠️ **保密** | Workflow 呼叫後端 API |
+| `HACKER_NEWS_R2_BUCKET_URL` | Worker | `https://podcast.david888.com` | 音頻檔案基礎 URL |
+| `NEXT_PUBLIC_BASE_URL` | Web | `https://podcast.david888.com` | 網站本身域名 |
+| `NEXT_STATIC_HOST` | Web | `https://podcast.david888.com` | R2 音頻檔案 CDN |
 
 ### 第四步：部署應用
 

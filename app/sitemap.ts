@@ -1,13 +1,13 @@
 import type { MetadataRoute } from 'next'
 import process from 'node:process'
-import { keepDays } from '@/config'
+import { sitemapDays } from '@/config'
 import { getPastDays } from '@/lib/utils'
 
 export const revalidate = 86400
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
-  const posts = getPastDays(keepDays).map((day) => {
+  const posts = getPastDays(sitemapDays).map((day) => {
     return {
       date: day,
     }
