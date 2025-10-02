@@ -1,4 +1,4 @@
-# DAVID888 Daily Report 每日報告
+# DAVID888 Daily  每日放送
 
 基於原始專案 [Hacker News 每日播報](https://github.com/ccbikai/hacker-news) 擴展開發
 
