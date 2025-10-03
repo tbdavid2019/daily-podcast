@@ -48,6 +48,8 @@ next-env.d.ts
 .env.production
 worker/.env.production
 
+curl
+
 # wrangler configs (if using plain vars - uncomment if needed)
 # wrangler.jsonc
 # worker/wrangler.jsonc

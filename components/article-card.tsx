@@ -53,9 +53,9 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
 
           <Tabs defaultValue="summary" className="w-full">
             <TabsList>
-              <TabsTrigger value="summary" className="font-bold">总结</TabsTrigger>
+              <TabsTrigger value="summary" className="font-bold">總結</TabsTrigger>
               <TabsTrigger value="podcast" className="font-bold">播客</TabsTrigger>
-              <TabsTrigger value="references" className="font-bold">参考</TabsTrigger>
+              <TabsTrigger value="references" className="font-bold">參考</TabsTrigger>
             </TabsList>
             <TabsContent value="summary" className="prose prose-zinc max-w-none py-4 prose-a:no-underline hover:prose-a:underline">
               <Markdown>{article.blogContent}</Markdown>
