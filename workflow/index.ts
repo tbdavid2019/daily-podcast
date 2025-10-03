@@ -83,9 +83,30 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const maxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '4096') || 4096
     const completionTokenLimit = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '16384') || 16384
 
-    const storyLimits = isDev
-      ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2, 'reddit': 2 }
-      : { 'hacker-news': 10, 'github-trending': 3, 'product-hunt': 5, 'dev-to': 10, 'reddit': 3 }
+    // 實施週期性排程邏輯
+    const date = new Date(today)
+    const dayOfWeek = date.getDay() // 0: 週日, 1: 週一, 2: 週二, 3: 週三, 4: 週四, 5: 週五, 6: 週六
+
+    console.info('Weekly scheduling check:', { today, dayOfWeek })
+
+    // 根據星期幾動態設置各來源的限制
+    const getStoryLimits = () => {
+      const baseLimit = isDev ? 2 : 5
+      const hackerNewsLimit = isDev ? 3 : 10
+      const redditLimit = isDev ? 2 : 3
+
+      return {
+        'hacker-news': hackerNewsLimit, // 每日更新
+        'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
+        'product-hunt': dayOfWeek === 3 ? baseLimit : 0, // 週三
+        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0, // 週一
+        'reddit': redditLimit, // 每日更新
+      }
+    }
+
+    const storyLimits = getStoryLimits()
+
+    console.info('Source limits based on schedule:', storyLimits)
 
     const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
       const allStories = await getAllStories(today, this.env, { limits: storyLimits })

@@ -42,6 +42,121 @@
 - 🚀 **GitHub Trending** - 最熱門的開源專案 (使用 DeepWiki 增強)
 - 🏆 **Product Hunt** - 創新產品發現平台
 - 💻 **Dev.to** - 開發者技術文章精選
+- 📱 **Reddit** - 科技社群熱門討論
+
+## 📅 週期性內容排程
+
+為了避免重複內容並優化資源使用，系統實施智慧的週期性抓取策略：
+
+### 每日更新來源
+
+- **🔥 Hacker News** - 科技新聞每天都有新內容
+- **📱 Reddit** - 論壇討論每天都有熱門話題
+
+### 週期性更新來源
+
+- **週一**: 💻 **Dev.to** - 週度技術文章趨勢
+- **週三**: 🏆 **Product Hunt** - 產品發布和創新展示
+- **週四**: 🚀 **GitHub Trending** - 開源專案趨勢
+
+### 📊 實際數量分配
+
+**生產環境 (WORKER_ENV=production)**:
+
+| 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
+|------|-------------|--------|--------|--------------|--------|------|
+| 週一 | 10 | 3 | 0 | 0 | 10 | **23** |
+| 週二 | 10 | 3 | 0 | 0 | 0 | **13** |
+| 週三 | 10 | 3 | 0 | 5 | 0 | **18** |
+| 週四 | 10 | 3 | 5 | 0 | 0 | **18** |
+| 週五 | 10 | 3 | 0 | 0 | 0 | **13** |
+| 週六 | 10 | 3 | 0 | 0 | 0 | **13** |
+| 週日 | 10 | 3 | 0 | 0 | 0 | **13** |
+
+**開發環境 (WORKER_ENV≠production)**:
+
+| 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
+|------|-------------|--------|--------|--------------|--------|------|
+| 週一 | 3 | 2 | 0 | 0 | 2 | **7** |
+| 週二 | 3 | 2 | 0 | 0 | 0 | **5** |
+| 週三 | 3 | 2 | 0 | 2 | 0 | **7** |
+| 週四 | 3 | 2 | 2 | 0 | 0 | **7** |
+| 週五-日 | 3 | 2 | 0 | 0 | 0 | **5** |
+
+### 🏗️ 技術實作架構
+
+**雙層處理機制**：
+
+1. **`workflow/utils.ts`**: 無條件抓取所有來源，確保數據完整性
+2. **`workflow/index.ts`**: 根據星期幾動態設置 `storyLimits`，控制最終使用數量
+
+**實作邏輯** (`workflow/index.ts` 約第86-105行)：
+
+```typescript
+// 根據星期幾動態設置各來源的限制
+const getStoryLimits = () => {
+  const baseLimit = isDev ? 2 : 5
+  const hackerNewsLimit = isDev ? 3 : 10
+  const redditLimit = isDev ? 2 : 3
+
+  return {
+    'hacker-news': hackerNewsLimit,                           // 每日更新
+    'github-trending': dayOfWeek === 4 ? baseLimit : 0,       // 週四
+    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,          // 週三  
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,         // 週一
+    'reddit': redditLimit,                                     // 每日更新
+  }
+}
+```
+
+### 排程優勢
+
+- 🔄 **避免重複內容** - 變化較慢的來源採用週期性更新
+- ⚡ **提升效率** - 減少不必要的 API 調用
+- 📊 **資源優化** - 符合 Cloudflare Workers 限制
+- 🎯 **內容新鮮度** - 確保每日都有新的內容組合
+- 🛡️ **容錯機制** - 即使週期性來源失效，仍有每日來源保證內容
+
+## 🎯 智慧內容過濾
+
+### Dev.to 活動文章過濾
+
+系統自動過濾 Dev.to 中的活動、挑戰、比賽類型文章，確保播客專注於技術內容：
+
+**過濾關鍵字**:
+
+- `hacktoberfest`, `devchallenge`, `challenge`, `contest`
+- `winners`, `congrats`, `competition`, `featured dev posts`
+- `top 7`, `spotlight`, `writing challenge`, `judge`, `submissions`
+
+**過濾效果**: 從原始 26 篇文章過濾到 18 篇，成功移除活動文章，保留技術性內容。
+
+### Reddit 技術內容篩選
+
+從 6 個精選科技 subreddit 抓取內容：
+
+- `r/technology`, `r/programming`, `r/webdev`
+- `r/MachineLearning`, `r/artificial`, `r/startups`
+
+**篩選條件**:
+
+- 至少 50 個 upvotes
+- 排除置頂帖、廣告和自發文
+- 每個 subreddit 取 2 個熱門文章
+- 按 upvotes 排序，最終取前 5 個
+
+### Product Hunt 選擇器修復
+
+針對 Product Hunt 網站結構變化，系統升級了抓取邏輯：
+
+**修復內容**:
+
+- 更新選擇器從 `[data-test="homepage-section-0"]` 到 `[data-test*="post-item"]`
+- 智慧鏈接解析：自動獲取第一個產品鏈接
+- 標題清理：自動移除排名編號 (如 "1. ", "2. ")
+- 投票數準確解析：從 `[data-test*="vote-button"]` 獲取
+
+**修復效果**: 成功從 33 個產品中抓取到排名前 5 的熱門產品，包含準確的投票數和產品鏈接。
 
 ![daily-podcast](https://socialify.git.ci/tbdavid2019/daily-podcast/image?description=1&forks=1&name=1&owner=1&pattern=Circuit+Board&stargazers=1&theme=Auto)
 
@@ -54,7 +169,8 @@
 - **Hacker News**: 無限制（直接返回所有過濾後的故事）
 - **GitHub Trending**: 取前 10 個
 - **Product Hunt**: 取前 5 個
-- **Dev.to**: 取前 10 個
+- **Dev.to**: 取前 10 個（已過濾活動文章）
+- **Reddit**: 取前 5 個（從 6 個 subreddit 篩選）
 
 ### 第二層限制（環境配置的最终限制）
 
@@ -66,8 +182,9 @@
 | **GitHub Trending** | 10       | 5          | 5        |
 | **Product Hunt** | 5          | 5          | 5        |
 | **Dev.to**       | 10         | 5          | 5        |
+| **Reddit**       | 5          | 3          | 3        |
 
-**總計最終數量**: 生產環境約 25 條，開發環境約 9 條。
+**總計最終數量**: 生產環境約 28 條，開發環境約 12 條。
 
 ### 如何調整數量
 
@@ -75,6 +192,59 @@
 
 1. **調整第一層**: 修改 `workflow/utils.ts` 中對應函數的 `slice(0, X)` 值。
 2. **調整第二層**: 修改 `workflow/index.ts` 中 `storyLimits` 的數值。
+
+### 📅 如何調整週期性排程
+
+週期性排程設定位於 `workflow/index.ts` 的 `getStoryLimits` 函數中（約第90-105行）：
+
+```typescript
+// 根據星期幾動態設置各來源的限制
+const getStoryLimits = () => {
+  const baseLimit = isDev ? 2 : 5
+  const hackerNewsLimit = isDev ? 3 : 10
+  const redditLimit = isDev ? 2 : 3
+
+  return {
+    'hacker-news': hackerNewsLimit,                           // 每日更新
+    'github-trending': dayOfWeek === 4 ? baseLimit : 0,       // 週四
+    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,          // 週三  
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,         // 週一
+    'reddit': redditLimit,                                     // 每日更新
+  }
+}
+```
+
+**週幾對應數字**:
+
+- 0: 週日, 1: 週一, 2: 週二, 3: 週三, 4: 週四, 5: 週五, 6: 週六
+
+**自訂排程範例**:
+
+```typescript
+// 範例1: GitHub 改為週二抓取
+'github-trending': dayOfWeek === 2 ? baseLimit : 0,       // 週二
+
+// 範例2: Product Hunt 改為每日抓取  
+'product-hunt': baseLimit,                                 // 每日
+
+// 範例3: Dev.to 改為週五抓取
+'dev-to': dayOfWeek === 5 ? (isDev ? 2 : 10) : 0,         // 週五
+
+// 範例4: 多天抓取 (週一和週四)
+'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? baseLimit : 0,
+```
+
+**💡 設計原理**:
+
+- **`limit: 0`** = 該來源在當天不會被使用（雖然仍會抓取）
+- **`limit: baseLimit`** = 該來源會被使用，數量由環境決定
+- **容錯機制**: `utils.ts` 仍會抓取所有來源，確保數據完整性
+
+**⚠️ 重要注意**:
+
+- 這種設計**不會**產生 `no stories found` 錯誤，因為 Hacker News 和 Reddit 始終有內容
+- 修改後需要重新部署 Cloudflare Workers
+- 建議保持至少兩個每日更新來源以確保內容豐富度
 
 ---
 
@@ -85,7 +255,10 @@
   - **GitHub Trending**: 開源專案 (使用 DeepWiki 增強)
   - **Product Hunt**: 新產品發表
   - **Dev.to**: 技術文章精選
+  - **Reddit**: 科技社群熱門討論
+- 📅 **智慧週期性排程**：避免重複內容，優化資源使用
 - 🎯 **AI 智慧摘要**：支援 OpenAI / Gemini 模型智慧總結文章內容和評論
+- 🔍 **智慧內容過濾**：自動過濾活動文章，確保技術內容品質
 - 🎙️ **語音合成彈性**：預設 Edge TTS，亦可切換 OpenAI GPT-4o mini TTS 或 Minimax
 - 📱 **多端支援**：支援網頁和播客 App 收聽
 - 🔄 **自動化更新**：每日定時自動更新內容

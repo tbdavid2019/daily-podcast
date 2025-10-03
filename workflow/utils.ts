@@ -342,65 +342,25 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
 
   console.info('Starting to fetch stories from all sources...', { limits })
 
-  // 實施週期性排程邏輯
-  const date = new Date(today)
-  const dayOfWeek = date.getDay() // 0: 週日, 1: 週一, 2: 週二, 3: 週三, 4: 週四, 5: 週五, 6: 週六
-
-  console.info('Weekly scheduling check:', { today, dayOfWeek })
-
-  // 定義各來源的排程規則
-  const shouldFetchGitHub = dayOfWeek === 4 // 週四
-  const shouldFetchProductHunt = dayOfWeek === 3 // 週三
-  const shouldFetchDevTo = dayOfWeek === 1 // 週一
-  const shouldFetchReddit = true // 每日更新 (Reddit 內容變化快)
-  const shouldFetchHackerNews = true // 每日更新
-
-  console.info('Source scheduling:', {
-    'hacker-news': shouldFetchHackerNews,
-    'github-trending': shouldFetchGitHub,
-    'product-hunt': shouldFetchProductHunt,
-    'dev-to': shouldFetchDevTo,
-    'reddit': shouldFetchReddit,
-  })
-
-  // 條件性抓取內容
+  // 並行抓取所有來源的內容
   const [hackerNewsStories, githubStories, productHuntStories, devToStories, redditStories] = await Promise.all([
-    // Hacker News: 每日抓取
-    shouldFetchHackerNews
-      ? getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY })
-      : Promise.resolve([]),
-
-    // GitHub Trending: 僅週四抓取
-    shouldFetchGitHub
-      ? getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-          console.error('Failed to get GitHub trending stories:', err)
-          return []
-        })
-      : Promise.resolve([]),
-
-    // Product Hunt: 僅週三抓取
-    shouldFetchProductHunt
-      ? getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-          console.error('Failed to get Product Hunt stories:', err)
-          return []
-        })
-      : Promise.resolve([]),
-
-    // Dev.to: 僅週一抓取
-    shouldFetchDevTo
-      ? getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-          console.error('Failed to get Dev.to stories:', err)
-          return []
-        })
-      : Promise.resolve([]),
-
-    // Reddit: 每日抓取
-    shouldFetchReddit
-      ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-          console.error('Failed to get Reddit stories:', err)
-          return []
-        })
-      : Promise.resolve([]),
+    getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY }),
+    getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      console.error('Failed to get GitHub trending stories:', err)
+      return []
+    }),
+    getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      console.error('Failed to get Product Hunt stories:', err)
+      return []
+    }),
+    getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      console.error('Failed to get Dev.to stories:', err)
+      return []
+    }),
+    getRedditStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      console.error('Failed to get Reddit stories:', err)
+      return []
+    }),
   ])
 
   console.info('Stories fetched from all sources:', {
