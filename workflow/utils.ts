@@ -91,7 +91,7 @@ export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRA
   return stories.filter(story => story.id && story.url).map(story => ({
     ...story,
     source: 'hacker-news' as const,
-    sourceUrl: story.hackerNewsUrl
+    sourceUrl: story.hackerNewsUrl,
   }))
 }
 
@@ -112,17 +112,18 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
       getContentFromJina(`https://news.ycombinator.com/item?id=${story.id}`, 'markdown', { include: '#pagespace + tr', exclude: '.navs' }, JINA_KEY)
         .catch(() => getContentFromFirecrawl(`https://news.ycombinator.com/item?id=${story.id}`, 'markdown', { include: '#pagespace + tr', exclude: '.navs' }, FIRECRAWL_KEY)),
     ])
-    
+
     return [
       story.title ? `<title>${story.title}</title>` : '',
       article ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
       comments ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
-  } else {
+  }
+  else {
     // 對於其他來源，只獲取主要內容
     const article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
       .catch(() => getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY))
-    
+
     return [
       story.title ? `<title>${story.title}</title>` : '',
       story.description ? `<description>${story.description}</description>` : '',
@@ -162,9 +163,9 @@ export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, {
 
 export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
   const url = 'https://github.com/trending'
-  
+
   let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
-  
+
   if (!html) {
     html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
   }
@@ -179,13 +180,14 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
     const title = titleLink.text().trim()
     const description = $el.find('p').text().trim()
     const starsText = $el.find('.octicon-star').parent().text().trim()
-    const stars = parseInt(starsText.replace(/,/g, '')) || 0
-    
-    if (!repoName || !title) return null
+    const stars = Number.parseInt(starsText.replace(/,/g, '')) || 0
+
+    if (!repoName || !title)
+      return null
 
     const originalUrl = `https://github.com${titleLink.attr('href')}`
     const deepwikiUrl = `https://deepwiki.com${titleLink.attr('href')}`
-    
+
     return {
       id: repoName.replace('/', '-'),
       title: `${title} (${stars} ⭐)`,
@@ -193,7 +195,7 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
       source: 'github-trending' as const,
       sourceUrl: originalUrl,
       description,
-      stars
+      stars,
     }
   }).get().filter(Boolean) as Story[]
 
@@ -201,27 +203,57 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
 }
 
 export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+  console.info('Fetching Product Hunt stories...')
   const url = 'https://www.producthunt.com'
-  
+
   let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
-  
+
   if (!html) {
+    console.info('Jina failed, trying Firecrawl for Product Hunt...')
     html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
   }
 
-  const $ = cheerio.load(html)
-  const products = $('[data-test="homepage-section-0"] [data-test*="post-item"]')
+  if (!html) {
+    console.error('Failed to get HTML content from both Jina and Firecrawl for Product Hunt')
+    throw new Error('No HTML content available for Product Hunt')
+  }
 
-  const stories: Story[] = products.map((i: number, el: cheerio.Element) => {
+  console.info('Product Hunt HTML length:', html.length)
+
+  const $ = cheerio.load(html)
+  // 使用修正後的選擇器：尋找所有包含 post-item 的元素
+  const products = $('[data-test*="post-item"]')
+
+  console.info('Product Hunt products found:', products.length)
+
+  const stories: Story[] = products.map((i: number, el: any) => {
     const $el = $(el)
-    const titleEl = $el.find('a[data-test="post-name"]')
-    const title = titleEl.text().trim()
-    const description = $el.find('[data-test="post-description"]').text().trim()
-    const votesText = $el.find('[data-test="vote-button"]').text().trim()
-    const votes = parseInt(votesText) || 0
-    const href = titleEl.attr('href')
-    
-    if (!title || !href) return null
+
+    // 找第一個鏈接，這通常是產品鏈接
+    const firstLink = $el.find('a').first()
+    const href = firstLink.attr('href')
+    let title = firstLink.text().trim()
+
+    // 移除排名編號 (如 "1. " "2. ")
+    title = title.replace(/^\d+\.\s*/, '')
+
+    // 尋找投票按鈕獲取投票數
+    const votesText = $el.find('[data-test*="vote-button"]').text().trim()
+    const votes = Number.parseInt(votesText) || 0
+
+    // 嘗試找描述 - 可能在不同的位置
+    let description = $el.find('[data-test*="post-description"]').text().trim()
+    if (!description) {
+      // 如果沒有描述，嘗試從其他地方獲取
+      description = $el.find('.text-sm, .description, p').first().text().trim()
+    }
+
+    if (!title || !href) {
+      console.warn('Product Hunt item missing title or href:', { title, href, index: i })
+      return null
+    }
+
+    console.info('Product Hunt story found:', { title, votes, href })
 
     return {
       id: href.split('/').pop() || `ph-${i}`,
@@ -230,18 +262,19 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
       source: 'product-hunt' as const,
       sourceUrl: `https://www.producthunt.com${href}`,
       description,
-      votes
+      votes,
     }
   }).get().filter(Boolean) as Story[]
 
+  console.info('Product Hunt stories processed:', stories.length)
   return stories.slice(0, 5) // 取前 5 個
 }
 
 export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
   const url = 'https://dev.to/top/week'
-  
+
   let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
-  
+
   if (!html) {
     html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
   }
@@ -249,15 +282,46 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
   const $ = cheerio.load(html)
   const articles = $('.crayons-story')
 
-  const stories: Story[] = articles.map((i: number, el: cheerio.Element) => {
+  // 定義需要過濾的關鍵字 - 活動、挑戰、比賽類型文章
+  const filterKeywords = [
+    'hacktoberfest',
+    'devchallenge',
+    'challenge',
+    'contest',
+    'winners',
+    'congrats',
+    'competition',
+    'featured dev posts',
+    'top 7',
+    'spotlight',
+    'writing challenge',
+    'judge',
+    'submissions',
+  ]
+
+  const stories: Story[] = articles.map((i: number, el: any) => {
     const $el = $(el)
     const titleLink = $el.find('.crayons-story__title a')
     const title = titleLink.text().trim()
     const href = titleLink.attr('href')
     const description = $el.find('.crayons-story__tags').text().trim()
     const author = $el.find('.crayons-story__secondary .crayons-link').first().text().trim()
-    
-    if (!title || !href) return null
+
+    if (!title || !href)
+      return null
+
+    // 檢查標題和描述是否包含活動類型關鍵字
+    const titleLower = title.toLowerCase()
+    const descriptionLower = description.toLowerCase()
+    const shouldFilter = filterKeywords.some(keyword =>
+      titleLower.includes(keyword) || descriptionLower.includes(keyword),
+    )
+
+    // 如果包含活動關鍵字，跳過這篇文章
+    if (shouldFilter) {
+      console.info(`[Dev.to Filter] 過濾活動文章: ${title}`)
+      return null
+    }
 
     return {
       id: href.split('/').pop() || `dev-${i}`,
@@ -265,35 +329,93 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
       url: href.startsWith('http') ? href : `https://dev.to${href}`,
       source: 'dev-to' as const,
       sourceUrl: href.startsWith('http') ? href : `https://dev.to${href}`,
-      description
+      description,
     }
   }).get().filter(Boolean) as Story[]
 
+  console.info(`[Dev.to] 原始文章數: ${articles.length}, 過濾後: ${stories.length}`)
   return stories.slice(0, 10) // 取前 10 個
 }
 
 export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: StoryFetchOptions = {}) {
   const { limits = {} } = options
 
-  const [hackerNewsStories, githubStories, productHuntStories, devToStories] = await Promise.all([
-    getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY }),
-    getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch(err => {
-      console.error('Failed to get GitHub trending stories:', err)
-      return []
-    }),
-    getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch(err => {
-      console.error('Failed to get Product Hunt stories:', err)
-      return []
-    }),
-    getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch(err => {
-      console.error('Failed to get Dev.to stories:', err)
-      return []
-    })
+  console.info('Starting to fetch stories from all sources...', { limits })
+
+  // 實施週期性排程邏輯
+  const date = new Date(today)
+  const dayOfWeek = date.getDay() // 0: 週日, 1: 週一, 2: 週二, 3: 週三, 4: 週四, 5: 週五, 6: 週六
+
+  console.info('Weekly scheduling check:', { today, dayOfWeek })
+
+  // 定義各來源的排程規則
+  const shouldFetchGitHub = dayOfWeek === 4 // 週四
+  const shouldFetchProductHunt = dayOfWeek === 3 // 週三
+  const shouldFetchDevTo = dayOfWeek === 1 // 週一
+  const shouldFetchReddit = true // 每日更新 (Reddit 內容變化快)
+  const shouldFetchHackerNews = true // 每日更新
+
+  console.info('Source scheduling:', {
+    'hacker-news': shouldFetchHackerNews,
+    'github-trending': shouldFetchGitHub,
+    'product-hunt': shouldFetchProductHunt,
+    'dev-to': shouldFetchDevTo,
+    'reddit': shouldFetchReddit,
+  })
+
+  // 條件性抓取內容
+  const [hackerNewsStories, githubStories, productHuntStories, devToStories, redditStories] = await Promise.all([
+    // Hacker News: 每日抓取
+    shouldFetchHackerNews
+      ? getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY })
+      : Promise.resolve([]),
+
+    // GitHub Trending: 僅週四抓取
+    shouldFetchGitHub
+      ? getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+          console.error('Failed to get GitHub trending stories:', err)
+          return []
+        })
+      : Promise.resolve([]),
+
+    // Product Hunt: 僅週三抓取
+    shouldFetchProductHunt
+      ? getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+          console.error('Failed to get Product Hunt stories:', err)
+          return []
+        })
+      : Promise.resolve([]),
+
+    // Dev.to: 僅週一抓取
+    shouldFetchDevTo
+      ? getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+          console.error('Failed to get Dev.to stories:', err)
+          return []
+        })
+      : Promise.resolve([]),
+
+    // Reddit: 每日抓取
+    shouldFetchReddit
+      ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+          console.error('Failed to get Reddit stories:', err)
+          return []
+        })
+      : Promise.resolve([]),
   ])
+
+  console.info('Stories fetched from all sources:', {
+    'hacker-news': hackerNewsStories.length,
+    'github-trending': githubStories.length,
+    'product-hunt': productHuntStories.length,
+    'dev-to': devToStories.length,
+    'reddit': redditStories.length,
+  })
 
   const applyLimit = (stories: Story[], source: StorySource) => {
     const limit = limits[source]
-    return typeof limit === 'number' ? stories.slice(0, limit) : stories
+    const limitedStories = typeof limit === 'number' ? stories.slice(0, limit) : stories
+    console.info(`Applied limit for ${source}:`, { original: stories.length, limit, final: limitedStories.length })
+    return limitedStories
   }
 
   return [
@@ -301,5 +423,84 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
     ...applyLimit(githubStories, 'github-trending'),
     ...applyLimit(productHuntStories, 'product-hunt'),
     ...applyLimit(devToStories, 'dev-to'),
+    ...applyLimit(redditStories, 'reddit'),
   ]
+}
+
+export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+  console.info('Fetching Reddit stories...')
+
+  // 選擇科技相關的熱門 subreddits
+  const subreddits = [
+    'technology',
+    'programming',
+    'webdev',
+    'MachineLearning',
+    'artificial',
+    'startups',
+  ]
+
+  const allStories: Story[] = []
+
+  for (const subreddit of subreddits) {
+    try {
+      const url = `https://www.reddit.com/r/${subreddit}/hot/.json?limit=5`
+
+      console.info(`Fetching from r/${subreddit}...`)
+
+      // Reddit API 不需要 Jina/Firecrawl，直接使用 JSON API
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
+        },
+      })
+
+      if (!response.ok) {
+        console.warn(`Failed to fetch r/${subreddit}: ${response.status}`)
+        continue
+      }
+
+      const data = await response.json() as any
+      const posts = data?.data?.children || []
+
+      const stories: Story[] = posts
+        .filter((post: any) => {
+          const postData = post.data
+          // 過濾掉置頂帖、廣告和被刪除的帖子
+          return !postData.stickied
+            && !postData.is_self
+            && !postData.removed_by_category
+            && postData.url
+            && postData.ups > 50 // 至少 50 個 upvotes
+        })
+        .slice(0, 2) // 每個 subreddit 取 2 個
+        .map((post: any) => {
+          const postData = post.data
+          return {
+            id: postData.id,
+            title: `${postData.title} (r/${subreddit})`,
+            url: postData.url,
+            source: 'reddit' as const,
+            sourceUrl: `https://www.reddit.com${postData.permalink}`,
+            description: postData.selftext?.substring(0, 200) || '',
+            upvotes: postData.ups,
+            subreddit,
+          }
+        })
+
+      allStories.push(...stories)
+      console.info(`Fetched ${stories.length} stories from r/${subreddit}`)
+    }
+    catch (error) {
+      console.error(`Error fetching r/${subreddit}:`, error)
+    }
+  }
+
+  // 按 upvotes 排序，取前 5 個
+  const topStories = allStories
+    .sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
+    .slice(0, 5)
+
+  console.info('Reddit stories processed:', topStories.length)
+  return topStories
 }

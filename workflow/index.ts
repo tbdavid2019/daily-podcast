@@ -84,8 +84,8 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const completionTokenLimit = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '16384') || 16384
 
     const storyLimits = isDev
-      ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2 }
-      : { 'hacker-news': 10, 'github-trending': 3, 'product-hunt': 5, 'dev-to': 10 }
+      ? { 'hacker-news': 3, 'github-trending': 2, 'product-hunt': 2, 'dev-to': 2, 'reddit': 2 }
+      : { 'hacker-news': 10, 'github-trending': 3, 'product-hunt': 5, 'dev-to': 10, 'reddit': 3 }
 
     const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
       const allStories = await getAllStories(today, this.env, { limits: storyLimits })
