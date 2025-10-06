@@ -1012,9 +1012,6 @@ node tests/test-new-sources.mjs  # 測試新聞來源
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 開啟 Pull Request
 
-## 📄 授權
-
-本專案採用 MIT 授權 - 查看 [LICENSE](LICENSE) 文件了解詳情。
 
 ## 🙏 致謝
 
