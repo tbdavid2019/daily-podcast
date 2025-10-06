@@ -160,38 +160,123 @@ const getStoryLimits = () => {
 
 ![daily-podcast](https://socialify.git.ci/tbdavid2019/daily-podcast/image?description=1&forks=1&name=1&owner=1&pattern=Circuit+Board&stargazers=1&theme=Auto)
 
-## 📊 來源數量限制
+## 📊 來源數量配置
 
-系統從多個來源抓取故事，並有兩層限制機制：
+系統使用統一的配置架構管理各來源的抓取數量，所有參數集中在各函數開頭的 CONFIG 物件中。
 
-### 第一層限制（各來源函數的初始抓取）
+### 📝 各來源配置參數
 
-- **Hacker News**: 無限制（直接返回所有過濾後的故事）
-- **GitHub Trending**: 取前 10 個
-- **Product Hunt**: 取前 5 個
-- **Dev.to**: 取前 10 個（已過濾活動文章）
-- **Reddit**: 取前 5 個（從 6 個 subreddit 篩選）
+#### 🔥 Hacker News
+- **位置**: `workflow/utils.ts` → `getHackerNewsTopStories`
+- **配置**: 無限制，返回所有過濾後的故事
+- **最終限制**: 由 `workflow/index.ts` 控制（生產環境 10 條，開發環境 3 條）
 
-### 第二層限制（環境配置的最终限制）
+#### 🚀 GitHub Trending
+- **位置**: `workflow/utils.ts` → `getGitHubTrendingStories`
+- **配置參數**:
+  ```typescript
+  const GITHUB_CONFIG = {
+    MAX_REPOS: 10,              // 最多返回的 repo 數量
+    USE_DEEPWIKI: true,         // 是否使用 deepwiki 替代原始 GitHub URL
+  }
+  ```
 
-生產環境下各來源的限制數量：
+#### 🏆 Product Hunt
+- **位置**: `workflow/utils.ts` → `getProductHuntStories`
+- **配置參數**:
+  ```typescript
+  const PRODUCT_HUNT_CONFIG = {
+    MAX_PRODUCTS: 5,            // 最多返回的產品數量
+    REMOVE_RANKING: true,       // 是否移除標題中的排名編號
+  }
+  ```
 
-| 來源              | 第一層限制 | 第二層限制 | 最終數量 |
-|-------------------|------------|------------|----------|
-| **Hacker News**  | 無         | 10         | 10       |
-| **GitHub Trending** | 10       | 5          | 5        |
-| **Product Hunt** | 5          | 5          | 5        |
-| **Dev.to**       | 10         | 5          | 5        |
-| **Reddit**       | 5          | 3          | 3        |
+#### 💻 Dev.to
+- **位置**: `workflow/utils.ts` → `getDevToStories`
+- **配置參數**:
+  ```typescript
+  const DEV_TO_CONFIG = {
+    MAX_ARTICLES: 10,           // 最多返回的文章數量
+    ENABLE_FILTER: true,        // 是否啟用活動文章過濾
+    FILTER_KEYWORDS: [...]      // 過濾關鍵字列表
+  }
+  ```
 
-**總計最終數量**: 生產環境約 28 條，開發環境約 12 條。
+#### 📱 Reddit
+- **位置**: `workflow/utils.ts` → `getRedditStories`
+- **配置參數**:
+  ```typescript
+  const REDDIT_CONFIG = {
+    API_LIMIT: 10,              // Reddit API 每次請求的文章數量上限
+    PER_SUBREDDIT: 2,           // 每個 subreddit 實際使用的文章數量
+    FINAL_TOP_STORIES: 5,       // 最終返回的熱門文章數量
+    MIN_UPVOTES: 50,            // 最低 upvotes 門檻
+  }
+  ```
 
-### 如何調整數量
+### 📊 雙層限制機制
 
-若要擴大某來源的數量：
+系統採用兩層限制機制來精確控制內容數量：
 
-1. **調整第一層**: 修改 `workflow/utils.ts` 中對應函數的 `slice(0, X)` 值。
-2. **調整第二層**: 修改 `workflow/index.ts` 中 `storyLimits` 的數值。
+| 來源 | 第一層限制<br/>(utils.ts CONFIG) | 第二層限制<br/>(index.ts) | 生產環境最終數量 |
+|------|----------------------------------|---------------------------|------------------|
+| **Hacker News** | 無限制 | 10 | 10 |
+| **GitHub Trending** | 10 | 5 | 5 |
+| **Product Hunt** | 5 | 5 | 5 |
+| **Dev.to** | 10 | 10 | 10 |
+| **Reddit** | 5 | 3 | 3 |
+
+**總計**: 生產環境約 33 條，開發環境約 12 條。
+
+### 🔧 如何調整數量
+
+#### 方法 1: 調整第一層限制（各來源函數）
+
+編輯 `workflow/utils.ts` 中對應函數的 CONFIG 物件：
+
+```typescript
+// 範例：增加 GitHub Trending 數量
+const GITHUB_CONFIG = {
+  MAX_REPOS: 20,              // 從 10 改為 20
+  USE_DEEPWIKI: true,
+}
+
+// 範例：調整 Reddit 配置
+const REDDIT_CONFIG = {
+  API_LIMIT: 15,              // 增加 API 請求量
+  PER_SUBREDDIT: 3,           // 每個 subreddit 取 3 個（原本 2 個）
+  FINAL_TOP_STORIES: 8,       // 最終返回 8 個（原本 5 個）
+  MIN_UPVOTES: 30,            // 降低門檻到 30（原本 50）
+}
+```
+
+#### 方法 2: 調整第二層限制（環境配置）
+
+編輯 `workflow/index.ts` 中的 `getStoryLimits` 函數：
+
+```typescript
+const getStoryLimits = () => {
+  const baseLimit = isDev ? 2 : 5
+  const hackerNewsLimit = isDev ? 3 : 15  // 從 10 改為 15
+  const redditLimit = isDev ? 2 : 5       // 從 3 改為 5
+
+  return {
+    'hacker-news': hackerNewsLimit,
+    'github-trending': dayOfWeek === 4 ? baseLimit : 0,
+    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,
+    'reddit': redditLimit,
+  }
+}
+```
+
+### ⚡ 優勢特點
+
+1. **集中管理** - 所有數量參數都在 CONFIG 物件中，一目了然
+2. **清晰註解** - 每個參數都有明確的說明
+3. **易於維護** - 只需修改 CONFIG 物件即可調整
+4. **功能開關** - 可以透過布林值控制功能啟用/停用
+5. **避免衝突** - 統一的配置避免多處數字不一致的問題
 
 ### 📅 如何調整週期性排程
 

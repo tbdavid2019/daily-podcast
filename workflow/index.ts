@@ -93,7 +93,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const getStoryLimits = () => {
       const baseLimit = isDev ? 2 : 5
       const hackerNewsLimit = isDev ? 3 : 10
-      const redditLimit = isDev ? 2 : 3
+      const redditLimit = isDev ? 2 : 5
 
       return {
         'hacker-news': hackerNewsLimit, // 每日更新
@@ -195,23 +195,30 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const storySummaries = await step.do('summarize all stories', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const summaries: string[] = []
+      const expectedCount = allStoryContents.length
 
-      const combinedContent = allStoryContents.map(story =>
-        `<story id="${story.id}" title="${story.title}">\n${story.content}\n</story>`,
+      console.info('Starting batch summarization', {
+        storyCount: expectedCount,
+        maxTokens: summarizationMaxTokens,
+      })
+
+      const combinedContent = allStoryContents.map((story, index) =>
+        `<story id="${story.id}" title="${story.title}" number="${index + 1}">\n${story.content}\n</story>`,
       ).join('\n\n---\n\n')
 
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_MODEL!),
-        system: `${summarizeStoryPrompt}\n\n請為每篇文章生成摘要，用 <story-summary id="文章ID"> 標籤包裹每個摘要。`,
+        system: `${summarizeStoryPrompt}\n\n請為每篇文章生成摘要。**重要：你必須為所有 ${expectedCount} 篇文章都生成摘要**。請用 <story-summary id="文章ID"> 標籤包裹每個摘要，確保數量正確。`,
         prompt: combinedContent,
         maxTokens: summarizationMaxTokens,
       })
 
-      console.info('batch summarize all stories success', { usage, finishReason })
+      console.info('batch summarize all stories success', { usage, finishReason, responseLength: text.length })
 
       // 解析批次摘要結果 - 使用簡單的字符串匹配而非正則
       const parts = text.split('<story-summary')
       if (parts.length > 1) {
+        console.info('Parsing story-summary tags', { foundTags: parts.length - 1 })
         for (let i = 1; i < parts.length; i++) {
           const endIndex = parts[i].indexOf('</story-summary>')
           if (endIndex !== -1) {
@@ -221,29 +228,154 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         }
       }
       else {
-        // 如果格式不正確，按文章數量分割
-        const textParts = text.split('---').filter(part => part.trim())
-        textParts.forEach((part) => {
-          if (part.trim()) {
-            summaries.push(`<story>${part.trim()}</story>`)
-          }
-        })
+        console.warn('No story-summary tags found, using fallback parsing')
+        // 如果格式不正確，嘗試按照文章標題或編號分割
+        const storyTitles = allStoryContents.map(s => s.title)
 
-        // 如果還是沒有合適的分割，直接使用整個回應
-        if (summaries.length === 0) {
+        // 嘗試用標題來分割
+        let foundByTitle = false
+        for (let i = 0; i < storyTitles.length && !foundByTitle; i++) {
+          if (text.includes(storyTitles[i])) {
+            foundByTitle = true
+            console.info('Attempting to split by story titles')
+            // 如果包含標題，嘗試更智能的分割
+            let remainingText = text
+            for (const title of storyTitles) {
+              const titleIndex = remainingText.indexOf(title)
+              if (titleIndex !== -1) {
+                const nextTitleIndex = storyTitles.slice(storyTitles.indexOf(title) + 1)
+                  .map(t => remainingText.indexOf(t))
+                  .find(idx => idx > titleIndex)
+
+                const segment = nextTitleIndex
+                  ? remainingText.substring(titleIndex, nextTitleIndex)
+                  : remainingText.substring(titleIndex)
+
+                if (segment.trim()) {
+                  summaries.push(`<story>${segment.trim()}</story>`)
+                }
+
+                if (nextTitleIndex) {
+                  remainingText = remainingText.substring(nextTitleIndex)
+                }
+              }
+            }
+          }
+        }
+
+        // 如果標題分割失敗，按 --- 分割
+        if (!foundByTitle) {
+          console.info('Attempting to split by --- delimiter')
+          const textParts = text.split('---').filter(part => part.trim())
+          textParts.forEach((part) => {
+            if (part.trim()) {
+              summaries.push(`<story>${part.trim()}</story>`)
+            }
+          })
+        }
+
+        // 如果還是數量不對且只有 1 個，嘗試用編號分割
+        if (summaries.length <= 1 && expectedCount > 1) {
+          console.warn('Fallback: attempting to split by story numbers')
+          summaries.length = 0
+          for (let i = 1; i <= expectedCount; i++) {
+            const nextNum = i + 1
+            const pattern1 = `${i}.`
+            const pattern2 = `${i}、`
+            const pattern3 = `第${i}`
+
+            let startIdx = -1
+            let endIdx = -1
+
+            if (text.includes(pattern1))
+              startIdx = text.indexOf(pattern1)
+            else if (text.includes(pattern2))
+              startIdx = text.indexOf(pattern2)
+            else if (text.includes(pattern3))
+              startIdx = text.indexOf(pattern3)
+
+            if (startIdx !== -1) {
+              if (nextNum <= expectedCount) {
+                const nextPattern1 = `${nextNum}.`
+                const nextPattern2 = `${nextNum}、`
+                const nextPattern3 = `第${nextNum}`
+
+                if (text.includes(nextPattern1))
+                  endIdx = text.indexOf(nextPattern1)
+                else if (text.includes(nextPattern2))
+                  endIdx = text.indexOf(nextPattern2)
+                else if (text.includes(nextPattern3))
+                  endIdx = text.indexOf(nextPattern3)
+              }
+
+              const segment = endIdx !== -1
+                ? text.substring(startIdx, endIdx)
+                : text.substring(startIdx)
+
+              if (segment.trim()) {
+                summaries.push(`<story>${segment.trim()}</story>`)
+              }
+            }
+          }
+        }
+
+        // 最後的保底：如果還是只有少量摘要，直接使用整個文本
+        if (summaries.length < expectedCount * 0.3) { // 少於 30% 的預期數量
+          console.error('Failed to parse summaries correctly, using full text as single summary', {
+            expected: expectedCount,
+            parsed: summaries.length,
+          })
+          summaries.length = 0
           summaries.push(`<story>${text}</story>`)
         }
+      }
+
+      console.info('Summary parsing complete', {
+        expected: expectedCount,
+        actual: summaries.length,
+        ratio: `${Math.round(summaries.length / expectedCount * 100)}%`,
+      })
+
+      // 如果摘要數量明顯不對，記錄警告
+      if (summaries.length < expectedCount * 0.5) {
+        console.warn('⚠️  Summary count is significantly lower than expected!', {
+          expected: expectedCount,
+          actual: summaries.length,
+          stories: allStoryContents.map(s => ({ id: s.id, title: s.title })),
+        })
       }
 
       return summaries
     })
 
     const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
-      const scriptMaxTokens = Math.min(maxTokens * 2, 8000, completionTokenLimit)
+      const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
+
+      // 準備更詳細的 prompt，明確列出所有故事
+      const storyList = stories.map((story, index) =>
+        `${index + 1}. [${story.source}] ${story.title}`,
+      ).join('\n')
+
+      const enhancedPrompt = `日期: ${today}
+
+【必須討論的故事清單】（共 ${stories.length} 個故事，每一個都必須討論）
+${storyList}
+
+<story-metadata>${JSON.stringify(stories)}</story-metadata>
+
+<story-summaries>
+${storySummaries.join('\n\n---\n\n')}
+</story-summaries>
+
+⚠️ 重要提醒：請確保對話中涵蓋上述所有 ${stories.length} 個故事，不要遺漏任何一個。建議按順序逐一討論。`
+
+      console.info('Generating podcast script for', stories.length, 'stories')
+      console.info('Story sources distribution:', storiesPerSource)
+
       const { object, usage, finishReason } = await generateObject({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
         system: podcastScriptPrompt,
-        prompt: `日期: ${today}\n\n<story-metadata>${JSON.stringify(stories)}</story-metadata>\n\n<story-summaries>\n${storySummaries.join('\n\n---\n\n')}\n</story-summaries>`,
+        prompt: enhancedPrompt,
         maxTokens: scriptMaxTokens,
         maxRetries: 3,
         schema: z.object({
@@ -254,7 +386,12 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         }),
       })
 
-      console.info('generate podcast script success', { usage, finishReason })
+      console.info('generate podcast script success', {
+        usage,
+        finishReason,
+        dialogueLength: object.dialogue.length,
+        expectedStories: stories.length,
+      })
 
       if (!object || !Array.isArray(object.dialogue) || !object.dialogue.length) {
         console.error('Generated podcast script object is empty', { object })
@@ -271,6 +408,36 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
         return { speaker: speaker as PodcastDialogueLine['speaker'], text }
       })
+
+      // 驗證對話是否涵蓋所有故事來源
+      const dialogueText = sanitizedDialogue.map(line => line.text).join(' ')
+      const mentionedSources = new Set<string>()
+
+      stories.forEach((story) => {
+        // 檢查標題關鍵字是否在對話中出現
+        const titleWords = story.title?.split(' ').filter(w => w.length > 3) || []
+        const isMentioned = titleWords.some(word =>
+          dialogueText.toLowerCase().includes(word.toLowerCase()),
+        ) || dialogueText.includes(story.source || '')
+
+        if (isMentioned) {
+          mentionedSources.add(story.source || 'unknown')
+        }
+      })
+
+      console.info('Coverage check:', {
+        totalStories: stories.length,
+        sourcesInDialogue: Array.from(mentionedSources),
+        allSources: Object.keys(storiesPerSource),
+        coverageRate: `${Math.round(mentionedSources.size / Object.keys(storiesPerSource).length * 100)}%`,
+      })
+
+      // 如果覆蓋率太低，記錄警告
+      if (mentionedSources.size < Object.keys(storiesPerSource).length * 0.7) {
+        console.warn('⚠️ Low coverage detected! Some sources may be missing from the dialogue.')
+        console.warn('Missing sources:', Object.keys(storiesPerSource).filter(s => !mentionedSources.has(s)),
+        )
+      }
 
       return { dialogue: sanitizedDialogue } as PodcastScriptResponse
     })
@@ -320,7 +487,6 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const { tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const tempKeys: string[] = []
-      const timestamp = Date.now()
       const batchSize = 4
 
       for (let start = 0; start < podcastScript.dialogue.length; start += batchSize) {
