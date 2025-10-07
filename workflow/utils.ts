@@ -67,32 +67,104 @@ async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown',
 }
 
 export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+  console.info('[Hacker News] Fetching stories for date:', today)
+
+  // 優先使用 RSS feed，更穩定可靠
+  try {
+    const rssUrl = 'https://news.ycombinator.com/rss'
+    console.info('[Hacker News] Fetching RSS from:', rssUrl)
+
+    const response = await fetch(rssUrl)
+    const rssText = await response.text()
+
+    console.info('[Hacker News] RSS feed length:', rssText.length)
+
+    const $ = cheerio.load(rssText, { xmlMode: true })
+    const items = $('item')
+
+    console.info('[Hacker News] Found RSS items:', items.length)
+
+    const stories: Story[] = items.map((i: number, el: any) => {
+      const $item = $(el)
+      const link = $item.find('link').text()
+      const title = $item.find('title').text()
+      const commentsLink = $item.find('comments').text()
+
+      // 從 comments link 提取 ID: https://news.ycombinator.com/item?id=12345
+      const idMatch = commentsLink.match(/id=(\d+)/)
+      const id = idMatch ? idMatch[1] : ''
+
+      return {
+        id,
+        title,
+        url: link,
+        hackerNewsUrl: commentsLink,
+      }
+    }).get()
+
+    const filteredStories = stories
+      .filter(story => story.id && story.url && story.title)
+      .map(story => ({
+        ...story,
+        source: 'hacker-news' as const,
+        sourceUrl: story.hackerNewsUrl,
+      }))
+
+    console.info(`[Hacker News] RSS returned ${filteredStories.length} stories (filtered from ${stories.length} raw items)`)
+
+    if (filteredStories.length > 0) {
+      return filteredStories
+    }
+
+    console.warn('[Hacker News] RSS returned 0 stories, falling back to web scraping...')
+  }
+  catch (error) {
+    console.error('[Hacker News] RSS fetch failed:', error)
+    console.info('[Hacker News] Falling back to web scraping...')
+  }
+
+  // Fallback: 使用原有的網頁抓取方式
   const url = `https://news.ycombinator.com/front?day=${today}`
 
+  console.info('[Hacker News] Fetching from web page:', url)
+
   const html = await getContentFromJina(url, 'html', {}, JINA_KEY)
+
+  console.info('[Hacker News] HTML length from Jina:', html.length)
 
   let $ = cheerio.load(html)
   let items = $('.athing.submission')
 
-  if (!items.length) {
-    const html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
+  console.info('[Hacker News] Found items from Jina:', items.length)
 
-    $ = cheerio.load(html)
+  if (!items.length) {
+    console.warn('[Hacker News] No items from Jina, trying Firecrawl...')
+    const firecrawlHtml = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
+
+    console.info('[Hacker News] HTML length from Firecrawl:', firecrawlHtml.length)
+
+    $ = cheerio.load(firecrawlHtml)
     items = $('.athing.submission')
+
+    console.info('[Hacker News] Found items from Firecrawl:', items.length)
   }
 
-  const stories: Story[] = items.map((i: number, el: cheerio.Element) => ({
+  const stories: Story[] = items.map((i: number, el: any) => ({
     id: $(el).attr('id'),
     title: $(el).find('.titleline > a').text(),
     url: $(el).find('.titleline > a').attr('href'),
     hackerNewsUrl: `https://news.ycombinator.com/item?id=${$(el).attr('id')}`,
   })).get()
 
-  return stories.filter(story => story.id && story.url).map(story => ({
+  const filteredStories = stories.filter(story => story.id && story.url).map(story => ({
     ...story,
     source: 'hacker-news' as const,
     sourceUrl: story.hackerNewsUrl,
   }))
+
+  console.info(`[Hacker News] Web scraping returned ${filteredStories.length} stories (filtered from ${stories.length} raw items)`)
+
+  return filteredStories
 }
 
 export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
@@ -164,8 +236,8 @@ export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, {
 export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
   // GitHub Trending 抓取設定
   const GITHUB_CONFIG = {
-    MAX_REPOS: 10,              // 最多返回的 repo 數量
-    USE_DEEPWIKI: true,         // 是否使用 deepwiki 替代原始 GitHub URL
+    MAX_REPOS: 10, // 最多返回的 repo 數量
+    USE_DEEPWIKI: true, // 是否使用 deepwiki 替代原始 GitHub URL
   }
 
   const url = 'https://github.com/trending'
@@ -215,8 +287,8 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
 
   // Product Hunt 抓取設定
   const PRODUCT_HUNT_CONFIG = {
-    MAX_PRODUCTS: 5,            // 最多返回的產品數量
-    REMOVE_RANKING: true,       // 是否移除標題中的排名編號
+    MAX_PRODUCTS: 5, // 最多返回的產品數量
+    REMOVE_RANKING: true, // 是否移除標題中的排名編號
   }
 
   const url = 'https://www.producthunt.com'
@@ -290,8 +362,8 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
 export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
   // Dev.to 抓取設定
   const DEV_TO_CONFIG = {
-    MAX_ARTICLES: 10,           // 最多返回的文章數量
-    ENABLE_FILTER: true,        // 是否啟用活動文章過濾
+    MAX_ARTICLES: 10, // 最多返回的文章數量
+    ENABLE_FILTER: true, // 是否啟用活動文章過濾
     // 需要過濾的關鍵字 - 活動、挑戰、比賽類型文章
     FILTER_KEYWORDS: [
       'hacktoberfest',
@@ -376,30 +448,38 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
   const fetchPromises: Record<StorySource, Promise<Story[]>> = {
     'hacker-news': shouldFetchSource('hacker-news')
       ? getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY })
+          .then((stories) => {
+            console.info(`[Hacker News] Fetched ${stories.length} stories successfully`)
+            return stories
+          })
+          .catch((err) => {
+            console.error('Failed to get Hacker News stories:', err)
+            return []
+          })
       : Promise.resolve([]),
     'github-trending': shouldFetchSource('github-trending')
       ? getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-        console.error('Failed to get GitHub trending stories:', err)
-        return []
-      })
+          console.error('Failed to get GitHub trending stories:', err)
+          return []
+        })
       : Promise.resolve([]),
     'product-hunt': shouldFetchSource('product-hunt')
       ? getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-        console.error('Failed to get Product Hunt stories:', err)
-        return []
-      })
+          console.error('Failed to get Product Hunt stories:', err)
+          return []
+        })
       : Promise.resolve([]),
     'dev-to': shouldFetchSource('dev-to')
       ? getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-        console.error('Failed to get Dev.to stories:', err)
-        return []
-      })
+          console.error('Failed to get Dev.to stories:', err)
+          return []
+        })
       : Promise.resolve([]),
     'reddit': shouldFetchSource('reddit')
       ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
-        console.error('Failed to get Reddit stories:', err)
-        return []
-      })
+          console.error('Failed to get Reddit stories:', err)
+          return []
+        })
       : Promise.resolve([]),
   }
 
@@ -409,7 +489,7 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
     fetchPromises['github-trending'],
     fetchPromises['product-hunt'],
     fetchPromises['dev-to'],
-    fetchPromises['reddit'],
+    fetchPromises.reddit,
   ])
 
   console.info('Stories fetched from all sources:', {
@@ -441,10 +521,10 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
 
   // Reddit 抓取設定 - 統一管理所有數量參數
   const REDDIT_CONFIG = {
-    API_LIMIT: 10,              // Reddit API 每次請求的文章數量上限
-    PER_SUBREDDIT: 2,           // 每個 subreddit 實際使用的文章數量
-    FINAL_TOP_STORIES: 5,       // 最終返回的熱門文章數量
-    MIN_UPVOTES: 50,            // 最低 upvotes 門檻
+    API_LIMIT: 15, // Reddit API 每次請求的文章數量上限（增加以獲取更多選擇）
+    PER_SUBREDDIT: 3, // 每個 subreddit 實際使用的文章數量（從 2 增加到 3）
+    FINAL_TOP_STORIES: 10, // 最終返回的熱門文章數量（從 5 增加到 10）
+    MIN_UPVOTES: 50, // 最低 upvotes 門檻
   }
 
   // 選擇科技相關的熱門 subreddits

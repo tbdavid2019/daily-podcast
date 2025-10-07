@@ -93,7 +93,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const getStoryLimits = () => {
       const baseLimit = isDev ? 2 : 5
       const hackerNewsLimit = isDev ? 3 : 10
-      const redditLimit = isDev ? 2 : 5
+      const redditLimit = isDev ? 3 : 10 // 從 5 增加到 10
 
       return {
         'hacker-news': hackerNewsLimit, // 每日更新
@@ -351,6 +351,20 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
 
+      // 根據故事數量動態計算建議的對話輪數
+      // 公式：每 2-3 個故事需要 1 輪對話，再加上開場和結尾
+      const storiesPerTurn = 2.5 // 平均每輪討論 2-3 個故事
+      const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 4 // +4 為開場和結尾
+      const minTurns = Math.max(10, Math.ceil(stories.length / 3)) // 最少輪數
+      const maxTurns = Math.min(30, Math.ceil(stories.length / 1.5)) // 最多輪數
+
+      console.info('Dynamic dialogue turns calculation:', {
+        storyCount: stories.length,
+        suggestedTurns,
+        minTurns,
+        maxTurns,
+      })
+
       // 準備更詳細的 prompt，明確列出所有故事
       const storyList = stories.map((story, index) =>
         `${index + 1}. [${story.source}] ${story.title}`,
@@ -360,6 +374,11 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
 【必須討論的故事清單】（共 ${stories.length} 個故事，每一個都必須討論）
 ${storyList}
+
+【動態對話輪數建議】
+- 建議對話輪數：${suggestedTurns} 輪（範圍：${minTurns}-${maxTurns} 輪）
+- 每輪應涵蓋 2-3 個相關故事，每段話 100-300 字
+- 根據實際內容靈活調整，但確保所有故事都被涵蓋
 
 <story-metadata>${JSON.stringify(stories)}</story-metadata>
 
@@ -371,6 +390,7 @@ ${storySummaries.join('\n\n---\n\n')}
 
       console.info('Generating podcast script for', stories.length, 'stories')
       console.info('Story sources distribution:', storiesPerSource)
+      console.info('Suggested dialogue structure:', { suggestedTurns, minTurns, maxTurns })
 
       const { object, usage, finishReason } = await generateObject({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
