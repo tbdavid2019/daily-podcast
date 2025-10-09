@@ -355,8 +355,8 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       // 公式：每 2-3 個故事需要 1 輪對話，再加上開場和結尾
       const storiesPerTurn = 2.5 // 平均每輪討論 2-3 個故事
       const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 4 // +4 為開場和結尾
-      const minTurns = Math.max(10, Math.ceil(stories.length / 3)) // 最少輪數
-      const maxTurns = Math.min(30, Math.ceil(stories.length / 1.5)) // 最多輪數
+      const minTurns = Math.max(8, Math.ceil(stories.length / 4)) // 最少輪數，調整公式減少輪數
+      const maxTurns = Math.min(25, Math.ceil(stories.length / 2)) // 最多輪數，降低上限避免過長
 
       console.info('Dynamic dialogue turns calculation:', {
         storyCount: stories.length,
@@ -376,8 +376,9 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 ${storyList}
 
 【動態對話輪數建議】
-- 建議對話輪數：${suggestedTurns} 輪（範圍：${minTurns}-${maxTurns} 輪）
-- 每輪應涵蓋 2-3 個相關故事，每段話 100-300 字
+- 建議對話輪數：${Math.min(suggestedTurns, maxTurns)} 輪（範圍：${minTurns}-${maxTurns} 輪）
+- 每輪應涵蓋 2-4 個相關故事，每段話 120-300 字
+- ⚠️ **重要限制**：為避免 TTS API 調用過多，請控制對話輪數不超過 ${maxTurns} 輪
 - 根據實際內容靈活調整，但確保所有故事都被涵蓋
 
 <story-metadata>${JSON.stringify(stories)}</story-metadata>
@@ -507,10 +508,19 @@ ${storySummaries.join('\n\n---\n\n')}
 
     const { tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const tempKeys: string[] = []
-      const batchSize = 4
+      const batchSize = 2 // 降低併發數量從 4 到 2
 
       for (let start = 0; start < podcastScript.dialogue.length; start += batchSize) {
         const chunk = podcastScript.dialogue.slice(start, start + batchSize)
+
+        // 添加批次間延遲以避免 subrequest 限制
+        if (start > 0) {
+          console.info(`Waiting between batches to avoid subrequest limit...`)
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 1秒延遲
+        }
+
+        console.info(`Processing audio batch ${Math.floor(start / batchSize) + 1}/${Math.ceil(podcastScript.dialogue.length / batchSize)}`, { start, end: start + batchSize, total: podcastScript.dialogue.length })
+
         const results = await Promise.all(chunk.map(async (line, offset) => {
           const index = start + offset
           const text = line.text.trim()
@@ -542,6 +552,7 @@ ${storySummaries.join('\n\n---\n\n')}
         }
       }
 
+      console.info(`Audio generation complete: ${tempKeys.length} files created`)
       return { tempKeys }
     })
 
