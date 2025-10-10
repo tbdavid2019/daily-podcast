@@ -710,6 +710,13 @@ chmod +x setup-env-vars.sh
 pnpx wrangler secret put --cwd worker WORKER_ENV
 # 輸入: production
 
+# 時區配置 (新增，可選)
+pnpx wrangler secret put --cwd worker TIMEZONE_OFFSET
+# 輸入: +8 (台北), -5 (美東標準), -4 (美東夏令), -8 (美西), +1 (歐洲), +9 (日本)
+
+pnpx wrangler secret put --cwd worker TIMEZONE_NAME
+# 輸入: Asia/Taipei (台北), America/New_York (美東), America/Los_Angeles (美西), Europe/London (歐洲), Asia/Tokyo (日本)
+
 pnpx wrangler secret put --cwd worker HACKER_NEWS_WORKER_URL
 # 輸入: https://your-worker.workers.dev (你的後端 Worker 域名)
 # 用途: 供 Workflow 內部呼叫音頻合併等 Worker API
@@ -907,6 +914,8 @@ curl "https://your-worker-domain.com/workflow?today=2025-09-24&force=true"
 - [ ] `OPENAI_MAX_TOKENS` (可選) - 最大輸入 tokens
 - [ ] `OPENAI_MAX_COMPLETION_TOKENS` (可選) - 最大輸出 tokens
 - [ ] `WORKER_ENV` - production
+- [ ] `TIMEZONE_OFFSET` (可選) - 時區偏移，例如：+8 (台北)、-5 (美東標準)、-4 (美東夏令)
+- [ ] `TIMEZONE_NAME` (可選) - 時區名稱，例如：Asia/Taipei、America/New_York
 - [ ] `HACKER_NEWS_WORKER_URL` - Worker 域名
 - [ ] `HACKER_NEWS_R2_BUCKET_URL` - R2 公開 URL
 - [ ] `TTS_PROVIDER` (可選) - edge / minimax / openai
@@ -939,8 +948,128 @@ curl "https://your-worker-domain.com/workflow?today=2025-09-24&force=true"
 - **存儲**: Cloudflare R2 (音頻文件) + KV (元數據)
 - **AI 服務**: OpenAI/Gemini (內容摘要) + Edge / OpenAI / Minimax TTS
 
+### 🌐 時區處理機制
+
+系統支援配置化時區處理，可適應不同地區用戶的需求：
+
+#### 📅 時區計算邏輯
+
+```typescript
+// 從環境變數讀取時區配置，預設為台北時間（UTC+8）
+const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
+const timezoneName = this.env.TIMEZONE_NAME || 'Asia/Taipei'
+
+// UTC 今天
+const utcToday = now.toISOString().split('T')[0] 
+
+// 指定時區今天
+const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
+const localToday = localTime.toISOString().split('T')[0]
+
+// 雙日期策略
+const displayDate = userSpecifiedDate || localToday  // 顯示用日期
+const fetchDate = userSpecifiedDate || utcToday      // 抓取用日期
+```
+
+#### � 多時區配置支援
+
+| 地區 | TIMEZONE_OFFSET | TIMEZONE_NAME | Cron 時間 (08:30 當地) | 範例觸發時間 |
+|------|-----------------|---------------|----------------------|-------------|
+| **台北** | `+8` | `Asia/Taipei` | `30 0 * * *` | UTC 00:30 = 台北 08:30 |
+| **美東 (標準)** | `-5` | `America/New_York` | `30 13 * * *` | UTC 13:30 = 美東 08:30 |
+| **美東 (夏令)** | `-4` | `America/New_York` | `30 12 * * *` | UTC 12:30 = 美東 08:30 |
+| **美西 (標準)** | `-8` | `America/Los_Angeles` | `30 16 * * *` | UTC 16:30 = 美西 08:30 |
+| **歐洲 (標準)** | `+1` | `Europe/London` | `30 7 * * *` | UTC 07:30 = 歐洲 08:30 |
+| **日本** | `+9` | `Asia/Tokyo` | `30 23 * * *` | UTC 23:30 = 日本 08:30 |
+
+
+```
+台北時間 10/11 08:30 觸發時：
+
+UTC 時間: 2025-10-11 00:30
+抓取日期: utcYesterday = 2025-10-10 ✅ (UTC 前一天)
+顯示日期: localToday = 2025-10-11 ✅ (台北今天)
+結果: 抓取 10/10 的 Hacker News，標題顯示 10/11
+```
+
+#### 🛠️ 美東用戶部署步驟
+
+##### 1. 設定環境變數
+
+```bash
+# 美東標準時間 (EST, UTC-5)
+pnpx wrangler secret put --cwd worker TIMEZONE_OFFSET
+# 輸入: -5
+
+pnpx wrangler secret put --cwd worker TIMEZONE_NAME  
+# 輸入: America/New_York
+
+# 或美東夏令時間 (EDT, UTC-4)
+pnpx wrangler secret put --cwd worker TIMEZONE_OFFSET
+# 輸入: -4
+```
+
+##### 2. 調整 Cron 排程
+
+編輯 `worker/wrangler.jsonc`：
+
+```jsonc
+"triggers": {
+  "crons": [
+    "30 13 * * *"  // UTC 13:30 = 美東 08:30 (標準時間)
+    // 或
+    "30 12 * * *"  // UTC 12:30 = 美東 08:30 (夏令時間)  
+  ]
+}
+```
+
+##### 3. 重新部署
+
+```bash
+pnpm deploy:worker
+```
+
+#### �🎯 使用場景範例 (美東用戶)
+
+**觸發時間**：美東時間 2025-10-11 08:30  
+**抓取內容**：Hacker News 2025-10-11 的內容（UTC 當天）  
+**顯示標題**：`DAVID888 Daily 每日放送 2025-10-11`  
+**存儲 Key**：`content:production:hacker-news:2025-10-11`
+
+#### ⏰ Cron 排程設定
+
+```bash
+# Cloudflare Workers Cron 設定
+"30 0 * * *"  # UTC 00:30 = 台北 08:30
+```
+
+**位置**：`worker/wrangler.jsonc` → `triggers.crons`
+
+#### 🔧 日期使用分離
+
+| 用途 | 使用日期 | 範例 | 說明 |
+|------|----------|------|------|
+| **內容抓取** | `fetchDate` (UTC) | 2025-10-10 | Hacker News 等使用 UTC 時區 |
+| **標題顯示** | `displayDate` (台北) | 2025-10-11 | 用戶看到的播客日期 |
+| **KV 存儲** | `displayDate` (台北) | 2025-10-11 | 避免重複產生 |
+| **音檔路徑** | `displayDate` (台北) | 2025/10/11/production/... | R2 存儲路徑 |
+
+#### 💡 設計優勢
+
+- **用戶友好**：播客標題顯示台北當天日期，符合用戶預期
+- **內容新鮮**：抓取前一天 UTC 的完整內容，確保資料完整性
+- **避免重複**：基於台北日期的 KV key，防止重複生成
+- **時區靈活**：支援手動指定日期覆寫自動計算
+
+#### 📍 實作位置
+
+- **主要邏輯**：`workflow/index.ts` (約第 57-83 行)
+- **Cron 設定**：`worker/wrangler.jsonc` → `triggers.crons`
+- **日期日誌**：Workflow 執行時會詳細記錄時區計算過程
+
 ### 工作流程
-1. **定時觸發** (每日 23:30 UTC)
+
+1. **定時觸發** (每日 00:30 UTC / 08:30 台北時間)
 2. **內容抓取** - 多平台新聞來源
 3. **AI 摘要** - OpenAI / Gemini 模型生成摘要
 4. **語音合成** - Edge / OpenAI / Minimax TTS 生成播客音頻
@@ -985,6 +1114,7 @@ node tests/test-new-sources.mjs  # 測試新聞來源
 ## 📝 更新日誌
 
 ### 🆕 v0.3.0 - 多平台內容聚合 (2025-01-XX)
+
 - ✅ 新增 **GitHub Trending** 開源項目追蹤 (使用 DeepWiki 增強)
 - ✅ 新增 **Product Hunt** 新產品發現
 - ✅ 新增 **Dev.to** 技術文章精選
@@ -992,12 +1122,14 @@ node tests/test-new-sources.mjs  # 測試新聞來源
 - ✅ 針對不同內容類型的專業化 AI 處理策略
 
 ### 🆕 v0.2.0 - 基礎功能完善 (2024-XX-XX)
+
 - ✅ 完整的 Hacker News 播客生成功能
 - ✅ Cloudflare Workers 完整部署
 - ✅ RSS 訂閱支援
 - ✅ 響應式網頁設計
 
 ### 🆕 v0.1.0 - 初始版本 (2024-XX-XX)
+
 - ✅ 基於原始專案的基礎功能
 - ✅ 繁體中文支援
 - ✅ AI 摘要和語音合成

@@ -35,6 +35,9 @@ interface Env extends CloudflareEnv {
   HACKER_NEWS_R2_BUCKET_URL: string
   HACKER_NEWS_WORKFLOW: Workflow
   BROWSER: Fetcher
+  // 新增時區配置
+  TIMEZONE_OFFSET?: string // 時區偏移，例如："+8" (台北) 或 "-5" (美東標準) 或 "-4" (美東夏令)
+  TIMEZONE_NAME?: string // 時區名稱，用於日誌顯示，例如："Asia/Taipei" 或 "America/New_York"
 }
 
 const retryConfig: WorkflowStepConfig = {
@@ -54,22 +57,57 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const force = Boolean(event.payload?.force)
     const isDev = runEnv !== 'production'
     const breakTime = isDev ? '2 seconds' : '5 seconds'
-    const today = event.payload?.today || new Date().toISOString().split('T')[0]
-    const contentKey = `content:${runEnv}:hacker-news:${today}`
+
+    // 時區處理邏輯 - 支援配置化時區
+    const now = new Date()
+    const utcToday = now.toISOString().split('T')[0] // UTC 今天
+
+    // 從環境變數讀取時區配置，預設為台北時間（UTC+8）
+    const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
+    const timezoneName = this.env.TIMEZONE_NAME || 'Asia/Taipei'
+
+    // 計算指定時區的時間
+    const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
+    const localToday = localTime.toISOString().split('T')[0]
+
+    // 用戶可以手動指定日期，否則使用自動計算
+    const userSpecifiedDate = event.payload?.today
+
+    // 顯示日期：用戶指定 > 本地時區今天
+    const displayDate = userSpecifiedDate || localToday
+
+    // 抓取日期：用戶指定 > UTC 昨天（確保抓取前一天完整內容）
+    const utcYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const fetchDate = userSpecifiedDate || utcYesterday
+
+    console.info('Date calculation with configurable timezone:', {
+      utcNow: now.toISOString(),
+      utcToday,
+      utcYesterday,
+      timezoneOffset,
+      timezoneName,
+      localTime: localTime.toISOString(),
+      localToday,
+      userSpecified: userSpecifiedDate,
+      displayDate: `${displayDate} (用於內容標題和存儲)`,
+      fetchDate: `${fetchDate} (用於抓取 HN 內容)`,
+    })
+
+    const contentKey = `content:${runEnv}:hacker-news:${displayDate}`
 
     // Check if content already exists to prevent duplicate processing
     const existingContent = await step.do('check existing content', retryConfig, async () => {
       const existing = await this.env.HACKER_NEWS_KV.get(contentKey)
       if (existing) {
-        console.info('Content already exists for date:', today, 'Key:', contentKey)
+        console.info('Content already exists for date:', displayDate, 'Key:', contentKey)
         return JSON.parse(existing)
       }
-      console.info('No existing content found for date:', today, 'Key:', contentKey)
+      console.info('No existing content found for date:', displayDate, 'Key:', contentKey)
       return null
     })
 
     if (existingContent && !force) {
-      console.info('Skipping workflow - content already exists for date:', today)
+      console.info('Skipping workflow - content already exists for date:', displayDate)
       return existingContent
     }
 
@@ -84,10 +122,10 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const completionTokenLimit = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '16384') || 16384
 
     // 實施週期性排程邏輯
-    const date = new Date(today)
+    const date = new Date(displayDate)
     const dayOfWeek = date.getDay() // 0: 週日, 1: 週一, 2: 週二, 3: 週三, 4: 週四, 5: 週五, 6: 週六
 
-    console.info('Weekly scheduling check:', { today, dayOfWeek })
+    console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
 
     // 根據星期幾動態設置各來源的限制
     const getStoryLimits = () => {
@@ -108,8 +146,8 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     console.info('Source limits based on schedule:', storyLimits)
 
-    const stories = await step.do(`get all stories ${today}`, retryConfig, async () => {
-      const allStories = await getAllStories(today, this.env, { limits: storyLimits })
+    const stories = await step.do(`get all stories ${fetchDate}`, retryConfig, async () => {
+      const allStories = await getAllStories(fetchDate, this.env, { limits: storyLimits })
 
       if (!allStories.length) {
         throw new Error('no stories found')
@@ -370,7 +408,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         `${index + 1}. [${story.source}] ${story.title}`,
       ).join('\n')
 
-      const enhancedPrompt = `日期: ${today}
+      const enhancedPrompt = `日期: ${displayDate}
 
 【必須討論的故事清單】（共 ${stories.length} 個故事，每一個都必須討論）
 ${storyList}
@@ -504,7 +542,7 @@ ${storySummaries.join('\n\n---\n\n')}
       return text
     })
 
-    const podcastKey = `${today.replaceAll('-', '/')}/${runEnv}/hacker-news-${today}.mp3`
+    const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/hacker-news-${displayDate}.mp3`
 
     const { tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
       const tempKeys: string[] = []
@@ -621,8 +659,8 @@ ${storySummaries.join('\n\n---\n\n')}
 
     await step.do('save content to kv', retryConfig, async () => {
       await this.env.HACKER_NEWS_KV.put(contentKey, JSON.stringify({
-        date: today,
-        title: `${podcastTitle} ${today}`,
+        date: displayDate,
+        title: `${podcastTitle} ${displayDate}`,
         stories,
         podcastContent,
         podcastScript,

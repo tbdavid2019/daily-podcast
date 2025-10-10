@@ -71,20 +71,54 @@ export default {
       params = await extractParamsFromRequest(event)
     }
 
-    const instance = await env.HACKER_NEWS_WORKFLOW.create(params ? { params } : undefined)
+    // 檢查是否有相同參數的 workflow 正在執行
+    const paramsKey = JSON.stringify(params || {})
+    const runningCheckKey = `workflow:running:${paramsKey}`
 
-    const instanceDetails = {
-      id: instance.id,
-      params: params ?? null,
-      details: await instance.status(),
+    try {
+      // 檢查是否已有相同參數的 workflow 在 5 分鐘內被觸發
+      const existingRun = await env.HACKER_NEWS_KV.get(runningCheckKey)
+      if (existingRun) {
+        const existing = JSON.parse(existingRun)
+        console.warn('Duplicate workflow request detected, returning existing instance:', existing)
+        return new Response(JSON.stringify({
+          message: 'Workflow already running with same parameters',
+          existingInstance: existing,
+          duplicateDetected: true,
+        }), {
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          status: 409, // Conflict
+        })
+      }
+
+      const instance = await env.HACKER_NEWS_WORKFLOW.create(params ? { params } : undefined)
+
+      const instanceDetails = {
+        id: instance.id,
+        params: params ?? null,
+        details: await instance.status(),
+      }
+
+      // 記錄此次執行，5 分鐘後自動過期
+      await env.HACKER_NEWS_KV.put(runningCheckKey, JSON.stringify(instanceDetails), {
+        expirationTtl: 300, // 5 分鐘
+      })
+
+      console.info('instance detail:', instanceDetails)
+      return new Response(JSON.stringify(instanceDetails), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      })
     }
-
-    console.info('instance detail:', instanceDetails)
-    return new Response(JSON.stringify(instanceDetails), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-    })
+    catch (error) {
+      console.error('Error in runWorkflow:', error)
+      // 清理可能殘留的鎖定狀態
+      await env.HACKER_NEWS_KV.delete(runningCheckKey).catch(() => {})
+      throw error
+    }
   },
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url)
