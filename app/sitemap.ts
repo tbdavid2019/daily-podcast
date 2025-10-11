@@ -7,7 +7,7 @@ export const revalidate = 86400
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
-  const posts = getPastDays(sitemapDays).map((day) => {
+  const posts = getPastDays(sitemapDays, 8).map((day) => {
     return {
       date: day,
     }

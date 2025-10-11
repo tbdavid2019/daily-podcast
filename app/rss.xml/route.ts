@@ -39,7 +39,7 @@ export async function GET() {
 
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV
-  const pastDays = getPastDays(rssDays)
+  const pastDays = getPastDays(rssDays, 8)
   const posts = (await Promise.all(
     pastDays.map(async (day) => {
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')

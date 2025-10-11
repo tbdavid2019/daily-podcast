@@ -8,7 +8,8 @@ export const revalidate = 600
 export default async function Home() {
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV
-  const pastDays = getPastDays(keepDays)
+  // 使用台北時區（UTC+8）來匹配後端的 KV key 生成邏輯
+  const pastDays = getPastDays(keepDays, 8)
   const posts = (await Promise.all(
     pastDays.map(async (day) => {
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')
