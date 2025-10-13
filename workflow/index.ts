@@ -129,15 +129,14 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     // 根據星期幾動態設置各來源的限制
     const getStoryLimits = () => {
-      const baseLimit = isDev ? 2 : 5
       const hackerNewsLimit = isDev ? 3 : 10
       const redditLimit = isDev ? 3 : 10 // 從 5 增加到 10
 
       return {
         'hacker-news': hackerNewsLimit, // 每日更新
-        'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
-        'product-hunt': dayOfWeek === 3 ? baseLimit : 0, // 週三
-        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0, // 週一
+        'github-trending': dayOfWeek === 4 ? (isDev ? 2 : 4) : 0, // 週四：生產環境 4 篇
+        'product-hunt': dayOfWeek === 3 ? (isDev ? 2 : 3) : 0, // 週三：生產環境 3 篇
+        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0, // 週一
         'reddit': redditLimit, // 每日更新
       }
     }
