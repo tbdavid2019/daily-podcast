@@ -7,6 +7,14 @@ import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/confi
 import { getPastDays } from '@/lib/utils'
 
 const md = markdownit()
+// YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
+const MAX_DESCRIPTION_LENGTH = 3800
+
+const ensureDescriptionLength = (value: string) => {
+  if (!value) return value
+  if (value.length <= MAX_DESCRIPTION_LENGTH) return value
+  return `${value.slice(0, MAX_DESCRIPTION_LENGTH - 3).trimEnd()}...`
+}
 
 export const revalidate = 3600
 
@@ -55,9 +63,11 @@ export async function GET() {
     const blogContentHtml = md.render(post.blogContent || '')
     const finalContent = `<div>${blogContentHtml}<hr/>${linkContent}</div>`
 
+    const description = ensureDescriptionLength(post.introContent || post.podcastContent || '')
+
     feed.addItem({
       title: post.title || '',
-      description: post.introContent || post.podcastContent || '',
+      description,
       content: finalContent,
       url: `${baseUrl}/post/${post.date}`,
       guid: `${baseUrl}/post/${post.date}`,
