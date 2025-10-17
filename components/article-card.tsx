@@ -78,7 +78,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
                   <Link
                     href={`https://news.ycombinator.com/item?id=${story.id}`}
                     className="text-sm px-2 py-1 rounded-md bg-zinc-100 text-zinc-500 hover:bg-zinc-200 transition-all"
-                    title="评论"
+                    title="評論"
                     rel="nofollow"
                     target="_blank"
                   >
