@@ -30,6 +30,18 @@ export const metadata: Metadata = {
       ],
     },
   },
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon.png', type: 'image/png', sizes: '512x512' },
+    ],
+    shortcut: ['/favicon.ico'],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', type: 'image/png', sizes: '180x180' },
+    ],
+  },
+  manifest: '/manifest.webmanifest',
+  themeColor: '#111827',
 }
 
 export default function RootLayout({
