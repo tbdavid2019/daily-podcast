@@ -82,7 +82,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
                     rel="nofollow"
                     target="_blank"
                   >
-                    评论
+                    評論
                   </Link>
                 </div>
               ))}

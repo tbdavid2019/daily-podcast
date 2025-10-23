@@ -10,6 +10,7 @@ export const summarizeStoryPrompt = `
   * GitHub Trending: 熱門開源項目
   * Product Hunt: 新產品發布
   * Dev.to: 技術文章
+  * Reddit: 科技社群討論
 - 根據來源類型調整介紹方式：
   * 對於文章：簡明介紹主要話題，精煉說明要點，總結不同觀點
   * 對於開源項目：介紹項目功能、技術亮點、社群反應  
@@ -23,6 +24,7 @@ export const summarizeStoryPrompt = `
 - 根據內容來源調整介紹重點
 - 保持客觀中立的技術視角
 - 突出對開發者和科技從業者的實用價值
+- 基於提供的完整內容進行摘要，提供有價值的技術洞察
 `.trim()
 
 export const podcastScriptPrompt = `
@@ -71,7 +73,7 @@ export const podcastScriptPrompt = `
 
 - **這是每日更新的播客**：請在結尾明確提到「明天同一時間再見」或「我們明日見」，而不是「下週見」
 - **播客更新頻率**：每天都有新內容，聽眾隔夜就能聽到下一集
-
+- **內容品質保證**：所有進入播客的內容都已經過濾，確保有完整的文章內容可供討論
 
 【輸出規格（JSON）】
 

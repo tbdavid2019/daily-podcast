@@ -168,22 +168,79 @@ export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRA
 }
 
 export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
-  const headers: HeadersInit = {
-    'X-Retain-Images': 'none',
-  }
-
-  if (JINA_KEY) {
-    headers.Authorization = `Bearer ${JINA_KEY}`
-  }
+  console.info(`[Content Fetch] Processing story: ${story.title}`)
+  console.info(`[Content Fetch] Source: ${story.source}, URL: ${story.url}`)
 
   // 根據來源類型處理不同的內容獲取邏輯
   if (story.source === 'hacker-news') {
-    const [article, comments] = await Promise.all([
-      getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
-        .catch(() => getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)),
-      getContentFromJina(`https://news.ycombinator.com/item?id=${story.id}`, 'markdown', { include: '#pagespace + tr', exclude: '.navs' }, JINA_KEY)
-        .catch(() => getContentFromFirecrawl(`https://news.ycombinator.com/item?id=${story.id}`, 'markdown', { include: '#pagespace + tr', exclude: '.navs' }, FIRECRAWL_KEY)),
-    ])
+    console.info(`[Hacker News] Fetching article and comments for story ID: ${story.id}`)
+
+    // 先嘗試抓取原始文章內容
+    let article = ''
+    try {
+      console.info(`[Hacker News] Trying Jina for article: ${story.url}`)
+      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+      if (!article || article.trim().length < 50) {
+        throw new Error('Jina returned empty or too short content')
+      }
+      console.info(`[Hacker News] Jina success - article length: ${article.length}`)
+    }
+    catch (jinaError) {
+      console.warn(`[Hacker News] Jina failed for article: ${jinaError}`)
+      try {
+        console.info(`[Hacker News] Trying Firecrawl for article: ${story.url}`)
+        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
+        if (!article || article.trim().length < 50) {
+          throw new Error('Firecrawl returned empty or too short content')
+        }
+        console.info(`[Hacker News] Firecrawl success - article length: ${article.length}`)
+      }
+      catch (firecrawlError) {
+        console.error(`[Hacker News] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
+        article = ''
+      }
+    }
+
+    // 如果無法獲取文章內容，直接返回空字串，讓上層過濾掉
+    if (!article || article.trim().length < 50) {
+      console.error(`[Hacker News] ⚠️ SKIP: No article content for "${story.title}" - story will be filtered out`)
+      console.error(`[Hacker News] URL: ${story.url}`)
+      return '' // 返回空字串，讓上層過濾
+    }
+
+    // 再抓取 Hacker News 評論（評論可選，失敗不影響文章處理）
+    let comments = ''
+    try {
+      console.info(`[Hacker News] Fetching comments for ID: ${story.id}`)
+      comments = await getContentFromJina(
+        `https://news.ycombinator.com/item?id=${story.id}`,
+        'markdown',
+        { include: '#pagespace + tr', exclude: '.navs' },
+        JINA_KEY,
+      )
+      if (!comments || comments.trim().length < 30) {
+        throw new Error('Comments content too short')
+      }
+      console.info(`[Hacker News] Comments fetched successfully - length: ${comments.length}`)
+    }
+    catch (commentsError) {
+      console.warn(`[Hacker News] Failed to fetch comments: ${commentsError}`)
+      try {
+        comments = await getContentFromFirecrawl(
+          `https://news.ycombinator.com/item?id=${story.id}`,
+          'markdown',
+          { include: '#pagespace + tr', exclude: '.navs' },
+          FIRECRAWL_KEY,
+        )
+        console.info(`[Hacker News] Comments fetched via Firecrawl - length: ${comments.length}`)
+      }
+      catch (fallbackError) {
+        console.warn(`[Hacker News] Comments unavailable (non-critical): ${fallbackError}`)
+        comments = '' // 評論失敗不影響文章處理
+      }
+    }
+
+    console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${article.length} chars, Comments: ${comments.length} chars`)
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
@@ -192,9 +249,42 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     ].filter(Boolean).join('\n\n---\n\n')
   }
   else {
-    // 對於其他來源，只獲取主要內容
-    const article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
-      .catch(() => getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY))
+    // 對於其他來源（Product Hunt, GitHub, Dev.to, Reddit），獲取主要內容
+    console.info(`[${story.source}] Fetching content for: ${story.title}`)
+
+    let article = ''
+    try {
+      console.info(`[${story.source}] Trying Jina for: ${story.url}`)
+      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+      if (!article || article.trim().length < 50) {
+        throw new Error('Jina returned empty or too short content')
+      }
+      console.info(`[${story.source}] Jina success - length: ${article.length}`)
+    }
+    catch (jinaError) {
+      console.warn(`[${story.source}] Jina failed: ${jinaError}`)
+      try {
+        console.info(`[${story.source}] Trying Firecrawl for: ${story.url}`)
+        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
+        if (!article || article.trim().length < 50) {
+          throw new Error('Firecrawl returned empty or too short content')
+        }
+        console.info(`[${story.source}] Firecrawl success - length: ${article.length}`)
+      }
+      catch (firecrawlError) {
+        console.error(`[${story.source}] Both services failed: ${firecrawlError}`)
+        article = ''
+      }
+    }
+
+    // 對於非 Hacker News 來源，如果抓取失敗也直接過濾掉
+    if (!article || article.trim().length < 50) {
+      console.error(`[${story.source}] ⚠️ SKIP: No content for "${story.title}" - story will be filtered out`)
+      console.error(`[${story.source}] URL: ${story.url}`)
+      return '' // 返回空字串，讓上層過濾
+    }
+
+    console.info(`[${story.source}] ✅ Successfully fetched content - length: ${article.length}`)
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
@@ -344,12 +434,15 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
 
     console.info('Product Hunt story found:', { title, votes, href })
 
+    // 檢查 href 是否已經是完整 URL，避免重複前綴
+    const fullUrl = href.startsWith('http') ? href : `https://www.producthunt.com${href}`
+
     return {
       id: href.split('/').pop() || `ph-${i}`,
       title: `${title} (${votes} 👍)`,
-      url: `https://www.producthunt.com${href}`,
+      url: fullUrl,
       source: 'product-hunt' as const,
-      sourceUrl: `https://www.producthunt.com${href}`,
+      sourceUrl: fullUrl,
       description,
       votes,
     }

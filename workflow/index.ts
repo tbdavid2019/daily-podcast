@@ -198,20 +198,31 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         for (const story of sourceStories) {
           try {
             const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
+
+            // 如果內容為空或太短，跳過這個故事，不加入到最終處理中
+            if (!storyContent || storyContent.trim().length < 50) {
+              console.warn(`⚠️ FILTERED OUT: Story "${story.title}" has no content - excluding from podcast`)
+              continue // 跳過這個故事
+            }
+
             contents.push({
               id: story.id || '',
               title: story.title || '',
               content: storyContent,
               source: story.source,
             })
-            console.info(`get story ${story.id} content success`)
+            console.info(`✅ Story ${story.id} content fetched successfully`)
           }
           catch (error) {
-            console.error(`get story ${story.id} content failed:`, error)
+            console.error(`❌ Story ${story.id} content failed:`, error)
+            // 出錯的故事也不加入處理
           }
         }
 
-        if (contents.length === sourceStories.length && contents.length > 0) {
+        console.info(`📊 Content fetch summary for ${source}: ${contents.length}/${sourceStories.length} stories have valid content`)
+
+        // 修改緩存邏輯：只有當有有效內容時才緩存
+        if (contents.length > 0) {
           try {
             await this.env.HACKER_NEWS_KV.put(cacheKey, JSON.stringify(contents), { expirationTtl: 60 * 60 * 24 })
             console.info(`cached story contents for ${source}`, { count: contents.length })
