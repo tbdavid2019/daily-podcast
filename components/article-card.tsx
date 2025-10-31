@@ -64,28 +64,56 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
               {article.podcastContent}
             </TabsContent>
             <TabsContent value="references" className="py-4">
-              {article.stories?.map(story => (
-                <div key={story.id} className="flex items-center gap-2 py-1 group">
-                  <Link
-                    href={story.url ?? ''}
-                    className="text-base text-zinc-800 hover:text-zinc-950 transition-colors line-clamp-1 flex-1 font-semibold hover:underline"
-                    title={story.title}
-                    rel="nofollow"
-                    target="_blank"
-                  >
-                    {story.title}
-                  </Link>
-                  <Link
-                    href={`https://news.ycombinator.com/item?id=${story.id}`}
-                    className="text-sm px-2 py-1 rounded-md bg-zinc-100 text-zinc-500 hover:bg-zinc-200 transition-all"
-                    title="評論"
-                    rel="nofollow"
-                    target="_blank"
-                  >
-                    評論
-                  </Link>
-                </div>
-              ))}
+              {article.stories?.map((story) => {
+                const sourceLabel = (() => {
+                  switch (story.source) {
+                    case 'hacker-news':
+                      return '評論'
+                    case 'github-trending':
+                      return 'GitHub'
+                    case 'product-hunt':
+                      return 'Product Hunt'
+                    case 'dev-to':
+                      return 'Dev.to'
+                    case 'reddit':
+                      return story.subreddit ? `r/${story.subreddit}` : 'Reddit'
+                    default:
+                      return null
+                  }
+                })()
+
+                const sourceLink = (() => {
+                  if (story.source === 'hacker-news') {
+                    return story.hackerNewsUrl ?? story.sourceUrl ?? (story.id ? `https://news.ycombinator.com/item?id=${story.id}` : undefined)
+                  }
+                  return story.sourceUrl ?? story.url
+                })()
+
+                return (
+                  <div key={`${story.id}-${story.source}`} className="flex items-center gap-2 py-1 group">
+                    <Link
+                      href={story.url ?? story.sourceUrl ?? '#'}
+                      className="text-base text-zinc-800 hover:text-zinc-950 transition-colors line-clamp-1 flex-1 font-semibold hover:underline"
+                      title={story.title}
+                      rel="nofollow"
+                      target="_blank"
+                    >
+                      {story.title}
+                    </Link>
+                    {sourceLabel && sourceLink && (
+                      <Link
+                        href={sourceLink}
+                        className="text-sm px-2 py-1 rounded-md bg-zinc-100 text-zinc-500 hover:bg-zinc-200 transition-all"
+                        title={sourceLabel}
+                        rel="nofollow"
+                        target="_blank"
+                      >
+                        {sourceLabel}
+                      </Link>
+                    )}
+                  </div>
+                )
+              })}
             </TabsContent>
           </Tabs>
         </CardFooter>
