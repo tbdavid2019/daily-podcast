@@ -38,6 +38,7 @@ interface Env extends CloudflareEnv {
   // 新增時區配置
   TIMEZONE_OFFSET?: string // 時區偏移，例如："+8" (台北) 或 "-5" (美東標準) 或 "-4" (美東夏令)
   TIMEZONE_NAME?: string // 時區名稱，用於日誌顯示，例如："Asia/Taipei" 或 "America/New_York"
+  MAX_STORY_BUDGET?: string
 }
 
 const retryConfig: WorkflowStepConfig = {
@@ -52,13 +53,11 @@ const retryConfig: WorkflowStepConfig = {
 // 每輪 workflow 的故事與音訊配置限制
 const SOURCE_PRIORITY: readonly string[] = [
   'hacker-news',
+  'reddit',
   'product-hunt',
   'github-trending',
   'dev-to',
-  'reddit',
 ]
-const MAX_TOTAL_STORIES_PROD = 12
-const MAX_TOTAL_STORIES_DEV = 8
 const MAX_TTS_SEGMENT_CHARS = 260
 const TTS_RETRY_LIMIT = 3
 const TTS_RETRY_BASE_DELAY_MS = 500
@@ -230,8 +229,21 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         Authorization: `Bearer ${this.env.OPENAI_API_KEY!}`,
       },
     })
-    const maxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '4096') || 4096
-    const completionTokenLimit = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '16384') || 16384
+    const modelName = (this.env.OPENAI_MODEL || '').toLowerCase()
+    const isGeminiModel = modelName.includes('gemini')
+
+    const defaultMaxTokens = isGeminiModel ? 8192 : 4096
+    const defaultCompletionTokens = isGeminiModel ? 32768 : 16384
+
+    const parsedMaxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '', 10)
+    const parsedCompletionTokens = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '', 10)
+
+    const maxTokens = Number.isFinite(parsedMaxTokens) && parsedMaxTokens > 0
+      ? parsedMaxTokens
+      : defaultMaxTokens
+    const completionTokenLimit = Number.isFinite(parsedCompletionTokens) && parsedCompletionTokens > 0
+      ? parsedCompletionTokens
+      : defaultCompletionTokens
 
     // 實施週期性排程邏輯
     const date = new Date(displayDate)
@@ -240,24 +252,36 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
 
     // 根據星期幾動態設置各來源的限制
-    const storyBudget = isDev ? MAX_TOTAL_STORIES_DEV : MAX_TOTAL_STORIES_PROD
+    const parsedBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '')
+    const storyBudget = Number.isFinite(parsedBudget) && parsedBudget > 0
+      ? parsedBudget
+      : undefined
+
     const getStoryLimits = () => {
-      const baseLimits: Record<string, number> = {
-        'hacker-news': isDev ? 2 : 4,
-        'github-trending': dayOfWeek === 4 ? (isDev ? 1 : 2) : 0,
-        'product-hunt': dayOfWeek === 3 ? (isDev ? 1 : 2) : 0,
-        'dev-to': dayOfWeek === 1 ? (isDev ? 1 : 2) : 0,
-        'reddit': isDev ? 2 : 3,
+      const baseLimit = isDev ? 2 : 3
+      const hackerNewsLimit = isDev ? 3 : 6
+      const redditLimit = isDev ? 3 : 3
+
+      const limits: Record<string, number> = {
+        'hacker-news': hackerNewsLimit, // 每日
+        'reddit': redditLimit, // 每日
+        'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
+        'product-hunt': dayOfWeek === 3 ? baseLimit : 0, // 週三
+        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0, // 週一
       }
 
-      return applyStoryBudget(baseLimits, storyBudget, SOURCE_PRIORITY)
+      if (!storyBudget) {
+        return limits
+      }
+
+      return applyStoryBudget(limits, storyBudget, SOURCE_PRIORITY)
     }
 
     const storyLimits = getStoryLimits()
 
     console.info('Source limits based on schedule:', {
       ...storyLimits,
-      budget: storyBudget,
+      budget: storyBudget ?? 'none',
       dayOfWeek,
     })
 
