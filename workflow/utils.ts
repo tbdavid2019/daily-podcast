@@ -201,13 +201,6 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
       }
     }
 
-    // 如果無法獲取文章內容，直接返回空字串，讓上層過濾掉
-    if (!article || article.trim().length < 50) {
-      console.error(`[Hacker News] ⚠️ SKIP: No article content for "${story.title}" - story will be filtered out`)
-      console.error(`[Hacker News] URL: ${story.url}`)
-      return '' // 返回空字串，讓上層過濾
-    }
-
     // 再抓取 Hacker News 評論（評論可選，失敗不影響文章處理）
     let comments = ''
     try {
@@ -240,12 +233,21 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
       }
     }
 
-    console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${article.length} chars, Comments: ${comments.length} chars`)
+    const articleLength = article.trim().length
+    const commentsLength = comments.trim().length
+
+    if (articleLength + commentsLength < 50) {
+      console.error(`[Hacker News] ⚠️ SKIP: Combined article/comments content too short for "${story.title}"`)
+      console.error(`[Hacker News] URL: ${story.url}`)
+      return ''
+    }
+
+    console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
-      article ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
-      comments ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
+      articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+      commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
   else {

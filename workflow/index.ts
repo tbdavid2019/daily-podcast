@@ -49,6 +49,118 @@ const retryConfig: WorkflowStepConfig = {
   timeout: '3 minutes',
 }
 
+// 每輪 workflow 的故事與音訊配置限制
+const SOURCE_PRIORITY: readonly string[] = [
+  'hacker-news',
+  'product-hunt',
+  'github-trending',
+  'dev-to',
+  'reddit',
+]
+const MAX_TOTAL_STORIES_PROD = 12
+const MAX_TOTAL_STORIES_DEV = 8
+const MAX_TTS_SEGMENT_CHARS = 260
+const TTS_RETRY_LIMIT = 3
+const TTS_RETRY_BASE_DELAY_MS = 500
+const TTS_RATE_LIMIT_DELAY_MS = 400
+
+function applyStoryBudget(
+  limits: Record<string, number>,
+  budget: number,
+  priorityOrder: readonly string[],
+) {
+  const result: Record<string, number> = { ...limits }
+  let total = Object.values(result).reduce((sum, value) => sum + Math.max(0, value || 0), 0)
+
+  if (total <= budget) {
+    return result
+  }
+
+  for (const source of [...priorityOrder].reverse()) {
+    let value = Math.max(0, result[source] || 0)
+    while (value > 0 && total > budget) {
+      value -= 1
+      total -= 1
+    }
+    result[source] = value
+    if (total <= budget) {
+      return result
+    }
+  }
+
+  if (total <= budget) {
+    return result
+  }
+
+  for (const key of Object.keys(result)) {
+    if (priorityOrder.includes(key)) {
+      continue
+    }
+    let value = Math.max(0, result[key] || 0)
+    while (value > 0 && total > budget) {
+      value -= 1
+      total -= 1
+    }
+    result[key] = value
+    if (total <= budget) {
+      break
+    }
+  }
+
+  return result
+}
+
+function chunkDialogueText(text: string, maxChars = MAX_TTS_SEGMENT_CHARS) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return []
+  }
+  if (normalized.length <= maxChars) {
+    return [normalized]
+  }
+
+  const sentences = normalized.match(/[^。！？!?；;]+[。！？!?；;]?/gu) || [normalized]
+  const segments: string[] = []
+  let current = ''
+
+  for (const sentence of sentences) {
+    const trimmedSentence = sentence.trim()
+    if (!trimmedSentence) {
+      continue
+    }
+
+    if ((current + trimmedSentence).length <= maxChars) {
+      current += trimmedSentence
+      continue
+    }
+
+    if (current) {
+      segments.push(current.trim())
+      current = ''
+    }
+
+    if (trimmedSentence.length <= maxChars) {
+      current = trimmedSentence
+      continue
+    }
+
+    for (let i = 0; i < trimmedSentence.length; i += maxChars) {
+      const chunk = trimmedSentence.slice(i, i + maxChars).trim()
+      if (chunk) {
+        segments.push(chunk)
+      }
+    }
+  }
+
+  if (current) {
+    segments.push(current.trim())
+  }
+
+  return segments
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
 export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     console.info('trigged event: HackerNewsWorkflow', event)
@@ -128,22 +240,26 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
 
     // 根據星期幾動態設置各來源的限制
+    const storyBudget = isDev ? MAX_TOTAL_STORIES_DEV : MAX_TOTAL_STORIES_PROD
     const getStoryLimits = () => {
-      const hackerNewsLimit = isDev ? 3 : 6
-      const redditLimit = isDev ? 3 : 6 // 從 5 增加到 10
-
-      return {
-        'hacker-news': hackerNewsLimit, // 每日更新
-        'github-trending': dayOfWeek === 4 ? (isDev ? 2 : 4) : 0, // 週四：生產環境 4 篇
-        'product-hunt': dayOfWeek === 3 ? (isDev ? 2 : 2) : 0, // 週三：生產環境 3 篇
-        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0, // 週一
-        'reddit': redditLimit, // 每日更新
+      const baseLimits: Record<string, number> = {
+        'hacker-news': isDev ? 2 : 4,
+        'github-trending': dayOfWeek === 4 ? (isDev ? 1 : 2) : 0,
+        'product-hunt': dayOfWeek === 3 ? (isDev ? 1 : 2) : 0,
+        'dev-to': dayOfWeek === 1 ? (isDev ? 1 : 2) : 0,
+        'reddit': isDev ? 2 : 3,
       }
+
+      return applyStoryBudget(baseLimits, storyBudget, SOURCE_PRIORITY)
     }
 
     const storyLimits = getStoryLimits()
 
-    console.info('Source limits based on schedule:', storyLimits)
+    console.info('Source limits based on schedule:', {
+      ...storyLimits,
+      budget: storyBudget,
+      dayOfWeek,
+    })
 
     const stories = await step.do(`get all stories ${fetchDate}`, retryConfig, async () => {
       const allStories = await getAllStories(fetchDate, this.env, { limits: storyLimits })
@@ -554,117 +670,87 @@ ${storySummaries.join('\n\n---\n\n')}
 
     const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/hacker-news-${displayDate}.mp3`
 
-    const { tempKeys } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
-      const tempKeys: string[] = []
-      const batchSize = 2 // 降低併發數量從 4 到 2
+    const { segmentCount, totalLength } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
+      const segmentBuffers: Uint8Array[] = []
 
-      for (let start = 0; start < podcastScript.dialogue.length; start += batchSize) {
-        const chunk = podcastScript.dialogue.slice(start, start + batchSize)
+      for (const [index, line] of podcastScript.dialogue.entries()) {
+        const text = line.text.trim()
 
-        // 添加批次間延遲以避免 subrequest 限制
-        if (start > 0) {
-          console.info(`Waiting between batches to avoid subrequest limit...`)
-          await new Promise(resolve => setTimeout(resolve, 1000)) // 1秒延遲
+        if (!text) {
+          console.warn('dialogue line text is empty', { index, line })
+          continue
         }
 
-        console.info(`Processing audio batch ${Math.floor(start / batchSize) + 1}/${Math.ceil(podcastScript.dialogue.length / batchSize)}`, { start, end: start + batchSize, total: podcastScript.dialogue.length })
+        const segments = chunkDialogueText(text)
+        console.info('Processing dialogue line', {
+          index,
+          speaker: line.speaker,
+          preview: text.slice(0, 40),
+          segmentCount: segments.length,
+        })
 
-        const results = await Promise.all(chunk.map(async (line, offset) => {
-          const index = start + offset
-          const text = line.text.trim()
+        for (const [segmentIndex, segment] of segments.entries()) {
+          let attempt = 0
+          // 限制重試次數，落盤等待避免速率限制
+          while (true) {
+            try {
+              const audio = await synthesize(segment, line.speaker, this.env)
+              const arrayBuffer = await audio.arrayBuffer()
+              const typedBuffer = new Uint8Array(arrayBuffer)
 
-          if (!text) {
-            console.warn('dialogue line text is empty', { index, line })
-            return null
+              if (!typedBuffer.byteLength) {
+                throw new Error('podcast audio size is 0')
+              }
+
+              segmentBuffers.push(typedBuffer)
+              break
+            }
+            catch (error) {
+              attempt += 1
+              if (attempt >= TTS_RETRY_LIMIT) {
+                console.error('TTS synthesis failed after retries', { index, segmentIndex, error })
+                throw error
+              }
+
+              const delay = TTS_RETRY_BASE_DELAY_MS * attempt
+              console.warn('TTS request failed, retrying', { index, segmentIndex, attempt, delay })
+              await sleep(delay)
+            }
           }
 
-          console.info('create conversation audio', { index, speaker: line.speaker, preview: text.slice(0, 40) })
-          const audio = await synthesize(text, line.speaker, this.env)
-
-          if (!audio.size) {
-            throw new Error('podcast audio size is 0')
+          if (!(segmentIndex === segments.length - 1 && index === podcastScript.dialogue.length - 1)) {
+            await sleep(TTS_RATE_LIMIT_DELAY_MS)
           }
-
-          const tempKey = `tmp/${podcastKey}-${index}.mp3`
-          await this.env.HACKER_NEWS_R2.put(tempKey, audio)
-          console.info('uploaded temp audio chunk', { index, key: tempKey, size: audio.size })
-
-          return { tempKey }
-        }))
-
-        for (const result of results) {
-          if (!result) {
-            continue
-          }
-          tempKeys.push(result.tempKey)
-        }
-      }
-
-      console.info(`Audio generation complete: ${tempKeys.length} files created`)
-      return { tempKeys }
-    })
-
-    if (!tempKeys.length) {
-      console.error('No valid audio files were generated from podcast content')
-      throw new Error('no audio files generated for podcast')
-    }
-
-    await step.do('concat audio files', retryConfig, async () => {
-      const chunkBuffers: Uint8Array[] = []
-
-      for (const [index, tempKey] of tempKeys.entries()) {
-        try {
-          const chunk = await this.env.HACKER_NEWS_R2.get(tempKey)
-          if (!chunk) {
-            console.warn('audio chunk not found', { index, key: tempKey })
-            continue
-          }
-
-          const buffer = new Uint8Array(await chunk.arrayBuffer())
-          console.info('loaded audio chunk', { index, key: tempKey, size: buffer.byteLength })
-          chunkBuffers.push(buffer)
-        }
-        catch (error) {
-          console.error('load audio chunk failed', { index, key: tempKey, error })
         }
       }
 
-      if (!chunkBuffers.length) {
-        throw new Error('failed to load any podcast audio chunks')
+      if (!segmentBuffers.length) {
+        throw new Error('no audio segments generated for podcast')
       }
 
-      const totalLength = chunkBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
+      const totalLength = segmentBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
       const combined = new Uint8Array(totalLength)
 
       let offset = 0
-      for (const buffer of chunkBuffers) {
+      for (const buffer of segmentBuffers) {
         combined.set(buffer, offset)
         offset += buffer.byteLength
       }
 
       await this.env.HACKER_NEWS_R2.put(podcastKey, combined.buffer)
-      console.info('combined audio chunks', { chunks: chunkBuffers.length, totalLength })
+      console.info('combined audio chunks', { chunks: segmentBuffers.length, totalLength })
 
-      return `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${podcastKey}?t=${Date.now()}`
+      return {
+        segmentCount: segmentBuffers.length,
+        totalLength,
+      }
     })
 
-    console.info('save podcast to r2 success')
-
-    await step.do('delete temp files', retryConfig, async () => {
-      const cleanupPromises = tempKeys.map(async (tempKey) => {
-        try {
-          await Promise.race([
-            this.env.HACKER_NEWS_R2.delete(tempKey),
-            new Promise(resolve => setTimeout(resolve, 1000)), // Timeout after 1 second
-          ])
-        }
-        catch (error) {
-          console.warn(`delete temp file ${tempKey} failed:`, error)
-        }
-      })
-
-      await Promise.allSettled(cleanupPromises)
-      return 'cleanup completed'
+    console.info('save podcast to r2 success', {
+      podcastKey,
+      segmentCount,
+      totalLength,
+      url: `${this.env.HACKER_NEWS_R2_BUCKET_URL}/${podcastKey}?t=${Date.now()}`,
     })
 
     await step.do('save content to kv', retryConfig, async () => {
