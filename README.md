@@ -8,23 +8,23 @@
 
 本專案提供多個專門文檔，方便您快速找到所需資訊：
 
-> 📖 **完整文檔索引**: 查看 [DOCS-INDEX.md](./DOCS-INDEX.md) 獲取詳細的文檔導覽和閱讀建議
+> 📖 **完整文檔索引**: 查看 [DOCS-INDEX.md](docs/DOCS-INDEX.md) 獲取詳細的文檔導覽和閱讀建議
 
 | 文檔 | 說明 | 適合對象 |
 |------|------|----------|
 | [README.md](./README.md) | 專案介紹、快速開始、部署指南 | 所有使用者 |
-| [DOCS-INDEX.md](./DOCS-INDEX.md) | 📖 **文檔索引與導覽** | 所有使用者 |
-| [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) | 詳細配置說明（天數限制、環境變數） | 部署與維護者 |
-| [SECURITY.md](./SECURITY.md) | 安全指南、認證機制、應急響應 | 系統管理員 |
-| [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) | RSS Feed 修復說明、播客規範 | 播客開發者 |
-| [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) | 版本更新記錄、新功能說明 | 開發者 |
+| [DOCS-INDEX.md](docs/DOCS-INDEX.md) | 📖 **文檔索引與導覽** | 所有使用者 |
+| [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) | 詳細配置說明（天數限制、環境變數） | 部署與維護者 |
+| [SECURITY.md](docs/SECURITY.md) | 安全指南、認證機制、應急響應 | 系統管理員 |
+| [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md) | RSS Feed 修復說明、播客規範 | 播客開發者 |
+| [CHANGELOG-新聞來源擴充.md](docs/CHANGELOG-新聞來源擴充.md) | 版本更新記錄、新功能說明 | 開發者 |
 
 **📖 快速查找**：
 - 🚀 想要開始使用？看本文檔的「快速開始」章節
-- ⚙️ 配置遇到問題？查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md)
-- 🔒 關注安全性？閱讀 [SECURITY.md](./SECURITY.md)
-- 📻 RSS Feed 問題？參考 [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md)
-- 📚 不知道看哪個文檔？從 [DOCS-INDEX.md](./DOCS-INDEX.md) 開始
+- ⚙️ 配置遇到問題？查看 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md)
+- 🔒 關注安全性？閱讀 [SECURITY.md](docs/SECURITY.md)
+- 📻 RSS Feed 問題？參考 [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md)
+- 📚 不知道看哪個文檔？從 [DOCS-INDEX.md](docs/DOCS-INDEX.md) 開始
 
 ---
 
@@ -353,7 +353,7 @@ const getStoryLimits = () => {
 
 ## ⚙️ 配置說明
 
-> 📖 **詳細配置指南**: 查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) 獲取完整的配置說明和故障排除
+> 📖 **詳細配置指南**: 查看 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) 獲取完整的配置說明和故障排除
 
 ### 📅 天數限制配置 (`config.ts`)
 

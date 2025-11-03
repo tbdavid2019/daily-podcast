@@ -25,7 +25,7 @@
 
 ### ⚙️ 配置與設定
 
-#### [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置使用指南
+#### [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置使用指南
 **適合對象**: 部署與維護者
 
 **內容概覽**:
@@ -111,7 +111,7 @@
 
 ### 📝 更新記錄
 
-#### [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本更新記錄
+#### [CHANGELOG-新聞來源擴充.md](docs/CHANGELOG-新聞來源擴充.md) - 版本更新記錄
 **適合對象**: 開發者、貢獻者
 
 **內容概覽**:
@@ -134,7 +134,7 @@
 3. 參考「部署檢查清單」確保一切就緒
 
 #### ⚙️ 修改配置
-1. 查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md)
+1. 查看 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md)
 2. 找到對應的配置項（天數限制、環境變數等）
 3. 按照說明修改並重新部署
 
@@ -151,7 +151,7 @@
 #### ❓ 解決問題
 1. 先查看 [README.md](./README.md) 的「常見問題」
 2. 再查看對應主題的專門文檔
-3. 檢查 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) 的「常見錯誤」章節
+3. 檢查 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) 的「常見錯誤」章節
 
 ---
 
@@ -187,26 +187,26 @@ README.md (主入口)
 按以下順序閱讀：
 1. [README.md](./README.md) - 了解專案
 2. [README.md](./README.md) 快速開始 - 部署應用
-3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置調整
+3. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置調整
 4. [SECURITY.md](./SECURITY.md) - 保護應用
 
 ### 👨‍💻 開發者
 重點閱讀：
 1. [README.md](./README.md) - 技術架構
-2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置系統
+2. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置系統
 3. [SECURITY.md](./SECURITY.md) - 安全最佳實踐
-4. [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本歷史
+4. [CHANGELOG-新聞來源擴充.md](docs/CHANGELOG-新聞來源擴充.md) - 版本歷史
 
 ### 🎙️ 播客製作者
 重點閱讀：
 1. [README.md](./README.md) - 專案功能
 2. [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) - RSS 優化
-3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 內容配置
+3. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 內容配置
 
 ### 🛡️ 系統管理員
 重點閱讀：
 1. [SECURITY.md](./SECURITY.md) - 全面安全指南
-2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 環境配置
+2. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 環境配置
 3. [README.md](./README.md) - 部署檢查清單
 
 ---

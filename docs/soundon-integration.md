@@ -34,6 +34,10 @@
   - 每次頁面 revalidate 都要打 SoundOn RSS，需注意頻率與第三方流量。
   - 若 SoundOn RSS/MP3 一時故障，頁面會少內容；沒有本地備份。
   - 播放與資料皆依賴外部來源，無法離線使用。
+- **錯誤處理建議**：
+  - `fetch` 失敗（網路錯誤 / timeout）時應捕捉例外，記錄 log，並回傳空陣列讓頁面正常渲染，同時顯示「SoundOn 資料暫時不可用」的提示。
+  - 服務回傳 4xx/5xx 時檢查 `response.ok`，若為 false 則跳過解析，同樣回傳空陣列。
+  - 可視需求將最後一次成功的 RSS 內容暫存於 KV 供離線 fallback，避免 SoundOn offline 時整段內容消失。
 
 ---
 

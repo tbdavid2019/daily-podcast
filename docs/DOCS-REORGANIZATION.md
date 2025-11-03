@@ -221,4 +221,4 @@ README.md (部署檢查清單)
 
 ---
 
-**📖 開始使用文檔系統**: [查看 DOCS-INDEX.md](./DOCS-INDEX.md)
+**📖 開始使用文檔系統**: [查看 DOCS-INDEX.md](docs/DOCS-INDEX.md)

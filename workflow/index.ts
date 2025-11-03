@@ -259,7 +259,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const getStoryLimits = () => {
       const baseLimit = isDev ? 2 : 3
-      const hackerNewsLimit = isDev ? 3 : 6
+      const hackerNewsLimit = isDev ? 3 : 4
       const redditLimit = isDev ? 3 : 3
 
       const limits: Record<string, number> = {
@@ -267,7 +267,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
         'reddit': redditLimit, // 每日
         'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
         'product-hunt': dayOfWeek === 3 ? baseLimit : 0, // 週三
-        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0, // 週一
+        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0, // 週一
       }
 
       if (!storyBudget) {
@@ -565,7 +565,7 @@ ${storyList}
 
 【動態對話輪數建議】
 - 建議對話輪數：${Math.min(suggestedTurns, maxTurns)} 輪（範圍：${minTurns}-${maxTurns} 輪）
-- 每輪應涵蓋 2-4 個相關故事，每段話 120-300 字
+- 每輪應涵蓋 2-4 個相關故事，每段話 120-200 字
 - ⚠️ **重要限制**：為避免 TTS API 調用過多，請控制對話輪數不超過 ${maxTurns} 輪
 - 根據實際內容靈活調整，但確保所有故事都被涵蓋
 
