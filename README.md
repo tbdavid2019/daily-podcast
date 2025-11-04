@@ -61,27 +61,31 @@
 
 ### 📊 實際數量分配
 
-**生產環境 (WORKER_ENV=production)**:
+**生產環境 (WORKER_ENV=production)**：
 
 | 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
 |------|-------------|--------|--------|--------------|--------|------|
-| 週一 | 10 | 10 | 0 | 0 | 3 | **23** |
-| 週二 | 10 | 10 | 0 | 0 | 0 | **20** |
-| 週三 | 10 | 10 | 0 | 3 | 0 | **25** |
-| 週四 | 10 | 10 | 4 | 0 | 0 | **25** |
-| 週五 | 10 | 10 | 0 | 0 | 0 | **20** |
-| 週六 | 10 | 10 | 0 | 0 | 0 | **20** |
-| 週日 | 10 | 10 | 0 | 0 | 0 | **20** |
+| 週一 | 4 | 3 | 0 | 0 | 3 | **10** |
+| 週二 | 5 | 5 | 0 | 0 | 0 | **10** |
+| 週三 | 4 | 3 | 0 | 3 | 0 | **10** |
+| 週四 | 4 | 3 | 3 | 0 | 0 | **10** |
+| 週五 | 5 | 5 | 0 | 0 | 0 | **10** |
+| 週六 | 5 | 5 | 0 | 0 | 0 | **10** |
+| 週日 | 5 | 5 | 0 | 0 | 0 | **10** |
 
-**開發環境 (WORKER_ENV≠production)**:
+**開發環境 (WORKER_ENV≠production)**：
 
 | 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
 |------|-------------|--------|--------|--------------|--------|------|
 | 週一 | 3 | 3 | 0 | 0 | 2 | **8** |
-| 週二 | 3 | 3 | 0 | 0 | 0 | **6** |
+| 週二 | 5 | 5 | 0 | 0 | 0 | **10** |
 | 週三 | 3 | 3 | 0 | 2 | 0 | **8** |
 | 週四 | 3 | 3 | 2 | 0 | 0 | **8** |
-| 週五-日 | 3 | 3 | 0 | 0 | 0 | **6** |
+| 週五 | 5 | 5 | 0 | 0 | 0 | **10** |
+| 週六 | 5 | 5 | 0 | 0 | 0 | **10** |
+| 週日 | 5 | 5 | 0 | 0 | 0 | **10** |
+
+> 週二、週五以及週末沒有其他來源排程，因此會加碼 Hacker News 與 Reddit，各擷取 5 則。
 
 ### 🏗️ 技術實作架構
 
@@ -95,17 +99,27 @@
 ```typescript
 // 根據星期幾動態設置各來源的限制
 const getStoryLimits = () => {
-  const baseLimit = isDev ? 2 : 5
-  const hackerNewsLimit = isDev ? 3 : 10
-  const redditLimit = isDev ? 3 : 10       // 增加到 10（原本 5）
+  const baseLimit = isDev ? 2 : 3
+  const isTuesday = dayOfWeek === 2
+  const isFriday = dayOfWeek === 5
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  const isHighFocusDay = isTuesday || isFriday || isWeekend // 週二、週五與週末加碼
+  const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
+  const redditLimit = isHighFocusDay ? 5 : 3
 
-  return {
-    'hacker-news': hackerNewsLimit,                           // 每日更新
-    'github-trending': dayOfWeek === 4 ? baseLimit : 0,       // 週四
-    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,          // 週三  
-    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,         // 週一
-    'reddit': redditLimit,                                     // 每日更新
+  const limits: Record<string, number> = {
+    'hacker-news': hackerNewsLimit, // 每日，週二週五加碼
+    'reddit': redditLimit,          // 每日，週二週五加碼
+    'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
+    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,    // 週三
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0,    // 週一
   }
+
+  if (!storyBudget) {
+    return limits
+  }
+
+  return applyStoryBudget(limits, storyBudget, SOURCE_PRIORITY)
 }
 ```
 
@@ -169,7 +183,7 @@ const getStoryLimits = () => {
 #### 🔥 Hacker News
 - **位置**: `workflow/utils.ts` → `getHackerNewsTopStories`
 - **配置**: 無限制，返回所有過濾後的故事
-- **最終限制**: 由 `workflow/index.ts` 控制（生產環境 10 條，開發環境 3 條）
+- **最終限制**: 由 `workflow/index.ts` 控制（生產環境平日 4、週二/週五 5；開發環境平日 3、週二/週五 5）
 
 #### 🚀 GitHub Trending
 - **位置**: `workflow/utils.ts` → `getGitHubTrendingStories`
@@ -220,13 +234,13 @@ const getStoryLimits = () => {
 
 | 來源 | 第一層限制<br/>(utils.ts CONFIG) | 第二層限制<br/>(index.ts) | 生產環境最終數量 |
 |------|----------------------------------|---------------------------|------------------|
-| **Hacker News** | 無限制 | 10 | 10 |
-| **GitHub Trending** | 10 | 5 | 5 |
-| **Product Hunt** | 5 | 5 | 5 |
-| **Dev.to** | 10 | 10 | 10 |
-| **Reddit** | 10 | 10 | 10 |
+| **Hacker News** | 無限制 | 週二/週五：5，其餘：4 | 4（週二/週五 5） |
+| **GitHub Trending** | 10 | 週四：baseLimit=3（dev=2） | 3（僅週四） |
+| **Product Hunt** | 5 | 週三：baseLimit=3（dev=2） | 3（僅週三） |
+| **Dev.to** | 10 | 週一：isDev ? 2 : 3 | 3（僅週一） |
+| **Reddit** | 10 | 週二/週五：5，其餘：3 | 3（週二/週五 5） |
 
-**總計**: 生產環境 20-30 條（視週幾而定），開發環境約 6-8 條。
+**總計**：生產環境每日約 7-10 則、開發環境約 6-10 則（視星期而定）。
 
 ### 🔧 如何調整數量
 
@@ -256,15 +270,15 @@ const REDDIT_CONFIG = {
 
 ```typescript
 const getStoryLimits = () => {
-  const baseLimit = isDev ? 2 : 5
-  const hackerNewsLimit = isDev ? 3 : 15  // 從 10 改為 15
-  const redditLimit = isDev ? 2 : 5       // 從 3 改為 5
+  const baseLimit = isDev ? 2 : 4     // 調整週期性來源的文章數
+  const hackerNewsLimit = isDev ? 4 : 6 // 更多 Hacker News 內容
+  const redditLimit = isDev ? 3 : 5     // Reddit 稍微加碼
 
   return {
     'hacker-news': hackerNewsLimit,
     'github-trending': dayOfWeek === 4 ? baseLimit : 0,
     'product-hunt': dayOfWeek === 3 ? baseLimit : 0,
-    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 4) : 0,
     'reddit': redditLimit,
   }
 }
@@ -285,17 +299,27 @@ const getStoryLimits = () => {
 ```typescript
 // 根據星期幾動態設置各來源的限制
 const getStoryLimits = () => {
-  const baseLimit = isDev ? 2 : 5
-  const hackerNewsLimit = isDev ? 3 : 10
-  const redditLimit = isDev ? 2 : 3
+  const baseLimit = isDev ? 2 : 3
+  const isTuesday = dayOfWeek === 2
+  const isFriday = dayOfWeek === 5
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  const isHighFocusDay = isTuesday || isFriday || isWeekend // 週二、週五與週末加碼
+  const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
+  const redditLimit = isHighFocusDay ? 5 : 3
 
-  return {
-    'hacker-news': hackerNewsLimit,                           // 每日更新
-    'github-trending': dayOfWeek === 4 ? baseLimit : 0,       // 週四
-    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,          // 週三  
-    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 10) : 0,         // 週一
-    'reddit': redditLimit,                                     // 每日更新
+  const limits: Record<string, number> = {
+    'hacker-news': hackerNewsLimit, // 每日，週二週五加碼
+    'reddit': redditLimit,          // 每日，週二週五加碼
+    'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
+    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,    // 週三
+    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0,    // 週一
   }
+
+  if (!storyBudget) {
+    return limits
+  }
+
+  return applyStoryBudget(limits, storyBudget, SOURCE_PRIORITY)
 }
 ```
 
@@ -313,7 +337,7 @@ const getStoryLimits = () => {
 'product-hunt': baseLimit,                                 // 每日
 
 // 範例3: Dev.to 改為週五抓取
-'dev-to': dayOfWeek === 5 ? (isDev ? 2 : 10) : 0,         // 週五
+'dev-to': dayOfWeek === 5 ? (isDev ? 2 : 3) : 0,          // 週五
 
 // 範例4: 多天抓取 (週一和週四)
 'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? baseLimit : 0,
