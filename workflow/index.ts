@@ -259,8 +259,11 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const getStoryLimits = () => {
       const baseLimit = isDev ? 2 : 3
-      const hackerNewsLimit = isDev ? 3 : 4
-      const redditLimit = isDev ? 3 : 3
+      const isTuesday = dayOfWeek === 2
+      const isFriday = dayOfWeek === 5
+      const isHighFocusDay = isTuesday || isFriday
+      const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
+      const redditLimit = isHighFocusDay ? 5 : 3
 
       const limits: Record<string, number> = {
         'hacker-news': hackerNewsLimit, // 每日

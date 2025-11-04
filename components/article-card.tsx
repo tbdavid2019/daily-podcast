@@ -1,7 +1,7 @@
 'use client'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import Markdown from 'react-markdown'
+import MarkdownIt from 'markdown-it'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -10,6 +10,22 @@ const AudioPlayer = dynamic(() => import('player.style/tailwind-audio/react'), {
   ssr: false,
   loading: () => <Skeleton className="w-full h-24" />,
 })
+
+const markdownRenderer = new MarkdownIt({
+  html: true,
+  linkify: true,
+  breaks: true,
+})
+
+const defaultLinkRenderer = markdownRenderer.renderer.rules.link_open
+  ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+
+markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]
+  token.attrSet('target', '_blank')
+  token.attrSet('rel', 'nofollow noopener noreferrer')
+  return defaultLinkRenderer(tokens, idx, options, env, self)
+}
 
 interface ArticleCardProps {
   article: Article
@@ -58,7 +74,9 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
               <TabsTrigger value="references" className="font-bold">參考</TabsTrigger>
             </TabsList>
             <TabsContent value="summary" className="prose prose-zinc max-w-none py-4 prose-a:no-underline hover:prose-a:underline">
-              <Markdown>{article.blogContent}</Markdown>
+              {article.blogContent && (
+                <div dangerouslySetInnerHTML={{ __html: markdownRenderer.render(article.blogContent) }} />
+              )}
             </TabsContent>
             <TabsContent value="podcast" className="prose prose-zinc max-w-none whitespace-pre-line py-4">
               {article.podcastContent}
