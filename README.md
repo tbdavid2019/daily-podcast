@@ -39,7 +39,7 @@
 ## 🌟 新聞來源
 
 - 🔥 **Hacker News** - 程式設計師最愛的科技新聞社群
-- 🚀 **GitHub Trending** - 最熱門的開源專案 (使用 DeepWiki 增強)
+- 🚀 **GitHub Trending** - 最熱門的開源專案（預設直接讀 GitHub 原始頁面，DeepWiki 已暫停）
 - 🏆 **Product Hunt** - 創新產品發現平台
 - 💻 **Dev.to** - 開發者技術文章精選
 - 📱 **Reddit** - 科技社群熱門討論
@@ -50,42 +50,27 @@
 
 ### 每日更新來源
 
-- **🔥 Hacker News** - 科技新聞每天都有新內容
-- **📱 Reddit** - 論壇討論每天都有熱門話題
+- **🔥 Hacker News** - 每天 4 則
+- **📱 Reddit** - 每天 3 則
 
 ### 週期性更新來源
 
-- **週一**: 💻 **Dev.to** - 週度技術文章趨勢
-- **週三**: 🏆 **Product Hunt** - 產品發布和創新展示
-- **週四**: 🚀 **GitHub Trending** - 開源專案趨勢
+- **週一**: 🚀 **GitHub Trending** 2 則
+- **週二**: 🏆 **Product Hunt** 2 則
+- **週三、週四、週五**: 💻 **Dev.to** 各 2 則
+- **週六、週日**: 週末僅做每日來源（Hacker News、Reddit）
 
 ### 📊 實際數量分配
 
-**生產環境 (WORKER_ENV=production)**：
-
 | 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
 |------|-------------|--------|--------|--------------|--------|------|
-| 週一 | 4 | 3 | 0 | 0 | 3 | **10** |
-| 週二 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週三 | 4 | 3 | 0 | 3 | 0 | **10** |
-| 週四 | 4 | 3 | 3 | 0 | 0 | **10** |
-| 週五 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週六 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週日 | 5 | 5 | 0 | 0 | 0 | **10** |
-
-**開發環境 (WORKER_ENV≠production)**：
-
-| 星期 | Hacker News | Reddit | GitHub | Product Hunt | Dev.to | 總計 |
-|------|-------------|--------|--------|--------------|--------|------|
-| 週一 | 3 | 3 | 0 | 0 | 2 | **8** |
-| 週二 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週三 | 3 | 3 | 0 | 2 | 0 | **8** |
-| 週四 | 3 | 3 | 2 | 0 | 0 | **8** |
-| 週五 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週六 | 5 | 5 | 0 | 0 | 0 | **10** |
-| 週日 | 5 | 5 | 0 | 0 | 0 | **10** |
-
-> 週二、週五以及週末沒有其他來源排程，因此會加碼 Hacker News 與 Reddit，各擷取 5 則。
+| 週一 | 4 | 3 | 2 | 0 | 0 | **9** |
+| 週二 | 4 | 3 | 0 | 2 | 0 | **9** |
+| 週三 | 4 | 3 | 0 | 0 | 2 | **9** |
+| 週四 | 4 | 3 | 0 | 0 | 2 | **9** |
+| 週五 | 4 | 3 | 0 | 0 | 2 | **9** |
+| 週六 | 4 | 3 | 0 | 0 | 0 | **7** |
+| 週日 | 4 | 3 | 0 | 0 | 0 | **7** |
 
 ### 🏗️ 技術實作架構
 
@@ -99,20 +84,12 @@
 ```typescript
 // 根據星期幾動態設置各來源的限制
 const getStoryLimits = () => {
-  const baseLimit = isDev ? 2 : 3
-  const isTuesday = dayOfWeek === 2
-  const isFriday = dayOfWeek === 5
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-  const isHighFocusDay = isTuesday || isFriday || isWeekend // 週二、週五與週末加碼
-  const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
-  const redditLimit = isHighFocusDay ? 5 : 3
-
   const limits: Record<string, number> = {
-    'hacker-news': hackerNewsLimit, // 每日，週二週五加碼
-    'reddit': redditLimit,          // 每日，週二週五加碼
-    'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
-    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,    // 週三
-    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0,    // 週一
+    'hacker-news': 4, // 每日固定 4
+    'reddit': 3, // 每日固定 3
+    'github-trending': dayOfWeek === 1 ? 2 : 0, // 週一
+    'product-hunt': dayOfWeek === 2 ? 2 : 0, // 週二
+    'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 2 : 0, // 週三至週五
   }
 
   if (!storyBudget) {
@@ -183,7 +160,7 @@ const getStoryLimits = () => {
 #### 🔥 Hacker News
 - **位置**: `workflow/utils.ts` → `getHackerNewsTopStories`
 - **配置**: 無限制，返回所有過濾後的故事
-- **最終限制**: 由 `workflow/index.ts` 控制（生產環境平日 4、週二/週五 5；開發環境平日 3、週二/週五 5）
+- **最終限制**: 由 `workflow/index.ts` 控制，每日 4 則
 
 #### 🚀 GitHub Trending
 - **位置**: `workflow/utils.ts` → `getGitHubTrendingStories`
@@ -191,7 +168,7 @@ const getStoryLimits = () => {
   ```typescript
   const GITHUB_CONFIG = {
     MAX_REPOS: 10,              // 最多返回的 repo 數量
-    USE_DEEPWIKI: true,         // 是否使用 deepwiki 替代原始 GitHub URL
+    USE_DEEPWIKI: false,        // 是否使用 deepwiki 替代原始 GitHub URL（目前暫停）
   }
   ```
 
@@ -234,13 +211,13 @@ const getStoryLimits = () => {
 
 | 來源 | 第一層限制<br/>(utils.ts CONFIG) | 第二層限制<br/>(index.ts) | 生產環境最終數量 |
 |------|----------------------------------|---------------------------|------------------|
-| **Hacker News** | 無限制 | 週二/週五：5，其餘：4 | 4（週二/週五 5） |
-| **GitHub Trending** | 10 | 週四：baseLimit=3（dev=2） | 3（僅週四） |
-| **Product Hunt** | 5 | 週三：baseLimit=3（dev=2） | 3（僅週三） |
-| **Dev.to** | 10 | 週一：isDev ? 2 : 3 | 3（僅週一） |
-| **Reddit** | 10 | 週二/週五：5，其餘：3 | 3（週二/週五 5） |
+| **Hacker News** | 無限制 | 每日 4 | 4（每日） |
+| **GitHub Trending** | 10 | 週一：2 | 2（僅週一） |
+| **Product Hunt** | 5 | 週二：2 | 2（僅週二） |
+| **Dev.to** | 10 | 週三至週五：2 | 2（週三至週五） |
+| **Reddit** | 10 | 每日 3 | 3（每日） |
 
-**總計**：生產環境每日約 7-10 則、開發環境約 6-10 則（視星期而定）。
+**總計**：每日約 7-9 則（視星期而定）。
 
 ### 🔧 如何調整數量
 
@@ -299,20 +276,12 @@ const getStoryLimits = () => {
 ```typescript
 // 根據星期幾動態設置各來源的限制
 const getStoryLimits = () => {
-  const baseLimit = isDev ? 2 : 3
-  const isTuesday = dayOfWeek === 2
-  const isFriday = dayOfWeek === 5
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-  const isHighFocusDay = isTuesday || isFriday || isWeekend // 週二、週五與週末加碼
-  const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
-  const redditLimit = isHighFocusDay ? 5 : 3
-
   const limits: Record<string, number> = {
-    'hacker-news': hackerNewsLimit, // 每日，週二週五加碼
-    'reddit': redditLimit,          // 每日，週二週五加碼
-    'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
-    'product-hunt': dayOfWeek === 3 ? baseLimit : 0,    // 週三
-    'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0,    // 週一
+    'hacker-news': 4, // 每日固定 4
+    'reddit': 3, // 每日固定 3
+    'github-trending': dayOfWeek === 1 ? 2 : 0, // 週一
+    'product-hunt': dayOfWeek === 2 ? 2 : 0,    // 週二
+    'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 2 : 0, // 週三至週五
   }
 
   if (!storyBudget) {
@@ -361,7 +330,7 @@ const getStoryLimits = () => {
 
 - 🤖 **多平台內容自動抓取**：
   - **Hacker News**: 熱門文章與社群討論
-  - **GitHub Trending**: 開源專案 (使用 DeepWiki 增強)
+  - **GitHub Trending**: 開源專案（預設使用 GitHub 原始頁面，可選 DeepWiki）
   - **Product Hunt**: 新產品發表
   - **Dev.to**: 技術文章精選
   - **Reddit**: 科技社群熱門討論
@@ -1139,7 +1108,7 @@ node tests/test-new-sources.mjs  # 測試新聞來源
 
 ### 🆕 v0.3.0 - 多平台內容聚合 (2025-01-XX)
 
-- ✅ 新增 **GitHub Trending** 開源項目追蹤 (使用 DeepWiki 增強)
+- ✅ 新增 **GitHub Trending** 開源項目追蹤（可選 DeepWiki，預設關閉）
 - ✅ 新增 **Product Hunt** 新產品發現
 - ✅ 新增 **Dev.to** 技術文章精選
 - ✅ 智能容錯機制，確保單一來源失效不影響整體服務

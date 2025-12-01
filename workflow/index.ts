@@ -258,20 +258,12 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       : undefined
 
     const getStoryLimits = () => {
-      const baseLimit = isDev ? 2 : 3
-      const isTuesday = dayOfWeek === 2
-      const isFriday = dayOfWeek === 5
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-      const isHighFocusDay = isTuesday || isFriday || isWeekend
-      const hackerNewsLimit = isHighFocusDay ? 5 : (isDev ? 3 : 4)
-      const redditLimit = isHighFocusDay ? 5 : 3
-
       const limits: Record<string, number> = {
-        'hacker-news': hackerNewsLimit, // 每日
-        'reddit': redditLimit, // 每日
-        'github-trending': dayOfWeek === 4 ? baseLimit : 0, // 週四
-        'product-hunt': dayOfWeek === 3 ? baseLimit : 0, // 週三
-        'dev-to': dayOfWeek === 1 ? (isDev ? 2 : 3) : 0, // 週一
+        'hacker-news': 4, // 每日
+        'reddit': 3, // 每日
+        'github-trending': dayOfWeek === 1 ? 2 : 0, // 週一
+        'product-hunt': dayOfWeek === 2 ? 2 : 0, // 週二
+        'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 2 : 0, // 週三至週五
       }
 
       if (!storyBudget) {
