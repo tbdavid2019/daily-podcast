@@ -329,7 +329,7 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
   // GitHub Trending 抓取設定
   const GITHUB_CONFIG = {
     MAX_REPOS: 10, // 最多返回的 repo 數量
-    USE_DEEPWIKI: true, // 是否使用 deepwiki 替代原始 GitHub URL
+    USE_DEEPWIKI: false, // 暫時關閉 deepwiki，直接使用 GitHub 原始連結
   }
 
   const url = 'https://github.com/trending'
