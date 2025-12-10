@@ -258,9 +258,10 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
       : undefined
 
     const getStoryLimits = () => {
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const limits: Record<string, number> = {
-        'hacker-news': 4, // 每日
-        'reddit': 3, // 每日
+        'hacker-news': isWeekend ? 5 : 4, // 週末加量
+        'reddit': isWeekend ? 5 : 4, // 週末加量
         'github-trending': dayOfWeek === 1 ? 2 : 0, // 週一
         'product-hunt': dayOfWeek === 2 ? 2 : 0, // 週二
         'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 2 : 0, // 週三至週五
@@ -690,31 +691,34 @@ ${storySummaries.join('\n\n---\n\n')}
 
     const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/hacker-news-${displayDate}.mp3`
 
-    const { segmentCount, totalLength } = await step.do('create podcast audio files', { ...retryConfig, timeout: '12 minutes' }, async () => {
-      const segmentBuffers: Uint8Array[] = []
+    // 1. Flatten and chunk all dialogue
+    const allSegments: { text: string, speaker: '男' | '女' }[] = []
+    for (const line of podcastScript.dialogue) {
+      const text = line.text.trim()
+      if (!text)
+        continue
+      const chunks = chunkDialogueText(text)
+      for (const chunk of chunks) {
+        allSegments.push({ text: chunk, speaker: line.speaker })
+      }
+    }
 
-      for (const [index, line] of podcastScript.dialogue.entries()) {
-        const text = line.text.trim()
+    // 2. Process in batches
+    const BATCH_SIZE = 10
+    const batchKeys: string[] = []
 
-        if (!text) {
-          console.warn('dialogue line text is empty', { index, line })
-          continue
-        }
+    for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {
+      const batchIndex = Math.floor(i / BATCH_SIZE)
+      const batchSegments = allSegments.slice(i, i + BATCH_SIZE)
 
-        const segments = chunkDialogueText(text)
-        console.info('Processing dialogue line', {
-          index,
-          speaker: line.speaker,
-          preview: text.slice(0, 40),
-          segmentCount: segments.length,
-        })
+      const batchKey = await step.do(`create audio batch ${batchIndex + 1}`, { ...retryConfig, timeout: '15 minutes' }, async () => {
+        const segmentBuffers: Uint8Array[] = []
 
-        for (const [segmentIndex, segment] of segments.entries()) {
+        for (const [index, segment] of batchSegments.entries()) {
           let attempt = 0
-          // 限制重試次數，落盤等待避免速率限制
           while (true) {
             try {
-              const audio = await synthesize(segment, line.speaker, this.env)
+              const audio = await synthesize(segment.text, segment.speaker, this.env)
               const arrayBuffer = await audio.arrayBuffer()
               const typedBuffer = new Uint8Array(arrayBuffer)
 
@@ -728,40 +732,66 @@ ${storySummaries.join('\n\n---\n\n')}
             catch (error) {
               attempt += 1
               if (attempt >= TTS_RETRY_LIMIT) {
-                console.error('TTS synthesis failed after retries', { index, segmentIndex, error })
+                console.error('TTS synthesis failed after retries', { batchIndex, index, error })
                 throw error
               }
 
               const delay = TTS_RETRY_BASE_DELAY_MS * attempt
-              console.warn('TTS request failed, retrying', { index, segmentIndex, attempt, delay })
+              console.warn('TTS request failed, retrying', { batchIndex, index, attempt, delay })
               await sleep(delay)
             }
           }
-
-          if (!(segmentIndex === segments.length - 1 && index === podcastScript.dialogue.length - 1)) {
+          // Rate limit between segments
+          if (index < batchSegments.length - 1) {
             await sleep(TTS_RATE_LIMIT_DELAY_MS)
           }
         }
+
+        // Combine batch
+        const totalLength = segmentBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
+        const combined = new Uint8Array(totalLength)
+        let offset = 0
+        for (const buffer of segmentBuffers) {
+          combined.set(buffer, offset)
+          offset += buffer.byteLength
+        }
+
+        // Upload batch to R2
+        const key = `${displayDate.replaceAll('-', '/')}/${runEnv}/temp/batch-${batchIndex}-${Date.now()}.mp3`
+        await this.env.HACKER_NEWS_R2.put(key, combined.buffer)
+        return key
+      })
+
+      batchKeys.push(batchKey)
+    }
+
+    // 3. Merge all batches
+    const { segmentCount, totalLength } = await step.do('merge audio batches', { ...retryConfig, timeout: '10 minutes' }, async () => {
+      const buffers: Uint8Array[] = []
+
+      for (const key of batchKeys) {
+        const object = await this.env.HACKER_NEWS_R2.get(key)
+        if (!object)
+          throw new Error(`Missing batch file: ${key}`)
+        const arrayBuffer = await object.arrayBuffer()
+        buffers.push(new Uint8Array(arrayBuffer))
       }
 
-      if (!segmentBuffers.length) {
-        throw new Error('no audio segments generated for podcast')
-      }
-
-      const totalLength = segmentBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
+      const totalLength = buffers.reduce((total, buffer) => total + buffer.byteLength, 0)
       const combined = new Uint8Array(totalLength)
-
       let offset = 0
-      for (const buffer of segmentBuffers) {
+      for (const buffer of buffers) {
         combined.set(buffer, offset)
         offset += buffer.byteLength
       }
 
       await this.env.HACKER_NEWS_R2.put(podcastKey, combined.buffer)
-      console.info('combined audio chunks', { chunks: segmentBuffers.length, totalLength })
+
+      // Cleanup temp files
+      await Promise.all(batchKeys.map(key => this.env.HACKER_NEWS_R2.delete(key)))
 
       return {
-        segmentCount: segmentBuffers.length,
+        segmentCount: allSegments.length,
         totalLength,
       }
     })
