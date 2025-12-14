@@ -260,7 +260,7 @@ export class HackerNewsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const getStoryLimits = () => {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const limits: Record<string, number> = {
-        'hacker-news': isWeekend ? 5 : 4, // 週末加量
+        'hacker-news': isWeekend ? 4 : 4, // 週末加量
         'reddit': isWeekend ? 5 : 4, // 週末加量
         'github-trending': dayOfWeek === 1 ? 2 : 0, // 週一
         'product-hunt': dayOfWeek === 2 ? 2 : 0, // 週二
