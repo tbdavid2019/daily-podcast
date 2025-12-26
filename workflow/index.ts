@@ -397,7 +397,7 @@ ${storyList}
 
 【動態對話輪數建議】
 - 建議對話輪數：${Math.min(suggestedTurns, maxTurns)} 輪（範圍：${minTurns}-${maxTurns} 輪）
-- 每輪專注討論 1-2 個故事（拒絕走馬看花），每段話 150-250 字
+- 每輪專注討論 1-2 個故事（拒絕走馬看花），每段話 200-600 字
 - 根據實際內容靈活調整，但確保所有故事都被涵蓋
 
 <story-metadata>${JSON.stringify(stories)}</story-metadata>
