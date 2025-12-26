@@ -110,7 +110,7 @@ export const summarizeBlogPrompt = `
 - 直接返回 Markdown 格式的正文內容，不要使用 \`\`\`markdown 包裹正文內容。
 - 不要返回前言，直接返回正文內容。
 - 文章結構清晰，使用二級標題、三級標題 (如"## 標題"、"### 子標題") 與分段正文形式呈現博客的核心精簡內容。
-- 使用 <stories> 中的信息為二級標題增加超鏈接(使用 hackerNewsUrl 字段的值)。二級標題需要使用繁體中文。
+- 使用 <stories> 中的信息為二級標題增加超鏈接，格式必須為 Markdown 鏈接：\`[標題](URL)\`。URL 請優先使用 hackerNewsUrl，若無則使用 url。
 `.trim()
 
 export const introPrompt = `

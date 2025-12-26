@@ -571,18 +571,14 @@ pnpm dev         # 終端 2: 啟動 Web 應用
 測試新聞來源的可用性和應用功能：
 
 ```bash
-# 測試所有新聞來源網站可用性
-pnpm test:sources
-
-# 或者直接運行測試腳本
-node tests/test-new-sources.mjs
+# 測試所有新聞來源網站可用性 (推薦：本地驗證爬蟲邏輯)
+npx tsx test-new-sources.mjs
 
 # 測試 Worker 應用 (本地開發時)
 pnpm dev:worker
 
 # 測試 Web 應用 (本地開發時)
 pnpm dev
-
 # 查看 Worker 日誌 (生產環境)
 pnpm logs:worker
 ```

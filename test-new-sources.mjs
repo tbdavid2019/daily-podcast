@@ -41,6 +41,26 @@ async function testNewSources() {
       console.log(`    URL: ${story.url}`)
       console.log(`    來源: ${story.source}`)
     })
+
+    if (devToStories.length > 0) {
+        console.log('\n🕵️ 測試 Dev.to 內容爬取 (Jina)...')
+        try {
+            // Import getHackerNewsStory locally if not exported, or assume it's imported
+            // Verify content fetching for the first story
+            const { getHackerNewsStory } = await import('./workflow/utils.ts')
+            const content = await getHackerNewsStory(devToStories[0], 1000, testEnv)
+            
+            if (content && content.length > 100) {
+                console.log(`✅ 成功抓取內容！長度: ${content.length}`)
+                console.log('--- 內容預覽 ---')
+                console.log(content.substring(0, 200) + '...')
+            } else {
+                console.log('❌ 內容抓取失敗或過短 (可能被 Jina 擋掉或解析失敗)')
+            }
+        } catch (err) {
+            console.error('❌ 內容爬取發生錯誤:', err.message)
+        }
+    }
     console.log()
 
     // 測試所有來源聚合

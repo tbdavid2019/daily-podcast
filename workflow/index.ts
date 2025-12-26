@@ -197,11 +197,11 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const getStoryLimits = () => {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const limits: Record<string, number> = {
-        'hacker-news': isWeekend ? 4 : 4,
-        'reddit': isWeekend ? 5 : 4,
+        'hacker-news': isWeekend ? 6 : 5,
+        'reddit': isWeekend ? 6 : 5,
         'github-trending': dayOfWeek === 1 ? 2 : 0,
         'product-hunt': dayOfWeek === 2 ? 2 : 0,
-        'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 2 : 0,
+        'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 3 : 0,
       }
 
       if (!storyBudget) {
@@ -373,7 +373,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       const storiesPerTurn = 2.5
       const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 4
       const minTurns = Math.max(8, Math.ceil(stories.length / 4))
-      const maxTurns = Math.min(25, Math.ceil(stories.length / 2))
+      const maxTurns = Math.min(35, Math.max(minTurns + 5, stories.length))
 
       console.info('Dynamic dialogue turns calculation:', {
         storyCount: stories.length,
@@ -397,7 +397,7 @@ ${storyList}
 
 【動態對話輪數建議】
 - 建議對話輪數：${Math.min(suggestedTurns, maxTurns)} 輪（範圍：${minTurns}-${maxTurns} 輪）
-- 每輪應涵蓋 2-4 個相關故事，每段話 120-200 字
+- 每輪專注討論 1-2 個故事（拒絕走馬看花），每段話 150-250 字
 - 根據實際內容靈活調整，但確保所有故事都被涵蓋
 
 <story-metadata>${JSON.stringify(stories)}</story-metadata>

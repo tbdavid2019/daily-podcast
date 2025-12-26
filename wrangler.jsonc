@@ -38,18 +38,7 @@
       "bucket_name": "hacker-news"
     }
   ],
-  "workflows": [
-    {
-      "name": "hacker-news-workflow",
-      "binding": "HACKER_NEWS_WORKFLOW",
-      "class_name": "PodcastScriptWorkflow"
-    },
-    {
-      "name": "hacker-news-audio-workflow",
-      "binding": "HACKER_NEWS_AUDIO_WORKFLOW",
-      "class_name": "PodcastAudioWorkflow"
-    }
-  ],
+
   "durable_objects": {
     "bindings": [
       {

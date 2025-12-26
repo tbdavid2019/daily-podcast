@@ -479,6 +479,70 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
 
   const url = 'https://dev.to/top/week'
 
+  // 嘗試使用 RSS Feed (更穩定)
+  try {
+    const rssUrl = 'https://dev.to/feed'
+    console.info('[Dev.to] Fetching RSS from:', rssUrl)
+    
+    const response = await fetch(rssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+      }
+    })
+    
+    if (!response.ok) {
+       throw new Error(`RSS Error ${response.status}: ${response.statusText}`)
+    }
+
+    const rssText = await response.text()
+    
+    const $ = cheerio.load(rssText, { xmlMode: true })
+    const items = $('item')
+    
+    console.info('[Dev.to] Found RSS items:', items.length)
+    
+    const rssStories: Story[] = items.map((i: number, el: any) => {
+      if (i >= DEV_TO_CONFIG.MAX_ARTICLES * 2) return null // Optimization
+      
+      const $item = $(el)
+      const title = $item.find('title').text()
+      const link = $item.find('link').text()
+      const author = $item.find('dc\\:creator').text() || $item.find('creator').text()
+      // Use categories as description/tags
+      const categories = $item.find('category').map((_: number, c: any) => $(c).text()).get().join(', ')
+      
+      if (!title || !link) return null
+
+      // Filter logic
+      if (DEV_TO_CONFIG.ENABLE_FILTER) {
+        const titleLower = title.toLowerCase()
+        const descLower = categories.toLowerCase()
+        const shouldFilter = DEV_TO_CONFIG.FILTER_KEYWORDS.some(keyword =>
+          titleLower.includes(keyword) || descLower.includes(keyword),
+        )
+        if (shouldFilter) return null
+      }
+
+      return {
+        id: link.split('/').pop() || `dev-rss-${i}`,
+        title: `${title} by ${author}`,
+        url: link,
+        source: 'dev-to' as const,
+        sourceUrl: link,
+        description: categories,
+      }
+    }).get().filter(Boolean) as Story[]
+
+    console.info(`[Dev.to] RSS returned ${rssStories.length} valid stories`)
+    
+    if (rssStories.length > 0) {
+      return rssStories.slice(0, DEV_TO_CONFIG.MAX_ARTICLES)
+    }
+  } catch (error) {
+    console.warn('[Dev.to] RSS Fetch failed, falling back to scraping:', error)
+  }
+
   let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
 
   if (!html) {

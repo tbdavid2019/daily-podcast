@@ -7,12 +7,11 @@ import { podcastTitle } from '@/config'
 export const revalidate = 3600
 
 // Helper to map new script data to Article interface
-function mapScriptToArticle(data: any, date: string, runEnv: string, variant: string = 'hacker-news'): any {
+function mapScriptToArticle(data: any, date: string, runEnv: string, variant: string): any {
     if (!data) return null;
     
     // Construct audio path based on new workflow convention
     // Path: {yyyy}/{mm}/{dd}/{env}/{variant}-{date}.mp3
-    // Note: The audio workflow uploads to: `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
     const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
 
     // Format dialogue as string for the frontend
@@ -21,9 +20,9 @@ function mapScriptToArticle(data: any, date: string, runEnv: string, variant: st
         : data.dialogue
 
     return {
-        title: `David888 Daily ${data.displayDate}`, // Default title
+        title: `David888 Daily ${data.displayDate} (${variant})`, 
         date: data.displayDate,
-        updatedAt: Date.now(), // Use current time or retrieval time
+        updatedAt: Date.now(),
         introContent: data.introContent,
         blogContent: data.blogContent,
         podcastContent: podcastContent,
@@ -34,14 +33,13 @@ function mapScriptToArticle(data: any, date: string, runEnv: string, variant: st
 }
 
 // 生成页面的元数据
-export async function generateMetadata({ params }: { params: Promise<{ date: string }> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ date: string, variant: string }> }): Promise<Metadata> {
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV || 'production'
-  const date = (await params).date
+  const resolvedParams = await params
+  const date = resolvedParams.date
+  const variant = resolvedParams.variant
 
-  // Try new key format first (Script Workflow) - Default to hacker-news variant for now
-  // In the future, we might want to support variant selection via URL
-  const variant = 'hacker-news' 
   const scriptKey = `script:${runEnv}:${variant}:${date}`
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
   
@@ -49,9 +47,6 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
   
   if (scriptData) {
       post = mapScriptToArticle(scriptData, date, runEnv, variant)
-  } else {
-      // Fallback to old key format
-      post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
   }
 
   if (!post) {
@@ -60,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
 
   const title = post.title
   const description = post.introContent || post.podcastContent?.slice(0, 200) || title
-  const url = `${env.NEXT_STATIC_HOST}/post/${post.date}`
+  const url = `${env.NEXT_STATIC_HOST}/post/${post.date}/${variant}`
 
   return {
     title,
@@ -81,14 +76,14 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
   }
 }
 
-export default async function PostPage({ params }: { params: Promise<{ date: string }> }) {
+export default async function PostVariantPage({ params }: { params: Promise<{ date: string, variant: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV || 'production'
 
-  const date = (await params).date
+  const resolvedParams = await params
+  const date = resolvedParams.date
+  const variant = resolvedParams.variant
 
-  // Try new key format first
-  const variant = 'hacker-news'
   const scriptKey = `script:${runEnv}:${variant}:${date}`
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
 
@@ -96,9 +91,6 @@ export default async function PostPage({ params }: { params: Promise<{ date: str
   
   if (scriptData) {
       post = mapScriptToArticle(scriptData, date, runEnv, variant)
-  } else {
-      // Fallback to old key format
-      post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
   }
 
   if (!post) {
@@ -107,7 +99,7 @@ export default async function PostPage({ params }: { params: Promise<{ date: str
 
   return (
     <ArticleCard
-      key={post.date}
+      key={`${post.date}-${variant}`}
       article={post}
       staticHost={env.NEXT_STATIC_HOST}
       showFooter
