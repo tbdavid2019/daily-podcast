@@ -1,14 +1,14 @@
-export * from '../workflow'
+export { PodcastScriptWorkflow } from '../workflow/index'
+export { PodcastAudioWorkflow } from '../workflow/audio'
+import type { WorkflowParams } from '../workflow/types'
 
 interface Env extends CloudflareEnv {
   HACKER_NEWS_WORKFLOW: Workflow
+  HACKER_NEWS_AUDIO_WORKFLOW: Workflow
+  HACKER_NEWS_KV: KVNamespace
   BROWSER: Fetcher
   ASSETS: Fetcher
-}
-
-interface WorkflowParams {
-  today?: string
-  force?: boolean
+  WORKER_ENV?: string
 }
 
 function parseBoolean(value: string | null): boolean | undefined {
@@ -39,6 +39,16 @@ async function extractParamsFromRequest(request: Request): Promise<WorkflowParam
     params.force = forceFromQuery
   }
 
+  const variantFromQuery = url.searchParams.get('variant')?.trim() || url.searchParams.get('type')?.trim()
+  if (variantFromQuery) {
+    params.variant = variantFromQuery
+  }
+  
+  const phaseFromQuery = url.searchParams.get('phase')?.trim()
+  if (phaseFromQuery === 'audio' || phaseFromQuery === 'script') {
+    params.phase = phaseFromQuery
+  }
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     const contentType = request.headers.get('content-type') || ''
 
@@ -50,6 +60,12 @@ async function extractParamsFromRequest(request: Request): Promise<WorkflowParam
         }
         if (typeof body.force === 'boolean') {
           params.force = body.force
+        }
+        if (body.variant || body.type) {
+            params.variant = (body.variant || body.type)?.trim()
+        }
+        if (body.phase === 'audio' || body.phase === 'script') {
+            params.phase = body.phase
         }
       }
       catch (error) {
@@ -71,8 +87,23 @@ export default {
       params = await extractParamsFromRequest(event)
     }
 
+    // Default params
+    const effectiveParams = {
+        variant: 'hacker-news',
+        phase: 'script',
+        ...params
+    }
+    
+    // Alias handling
+    if (params?.type && !params.variant) {
+        effectiveParams.variant = params.type
+    }
+    if (effectiveParams.variant === 'main') {
+        effectiveParams.variant = 'hacker-news'
+    }
+
     // 檢查是否有相同參數的 workflow 正在執行
-    const paramsKey = JSON.stringify(params || {})
+    const paramsKey = JSON.stringify(effectiveParams)
     const runningCheckKey = `workflow:running:${paramsKey}`
 
     try {
@@ -93,11 +124,18 @@ export default {
         })
       }
 
-      const instance = await env.HACKER_NEWS_WORKFLOW.create(params ? { params } : undefined)
+      let instance;
+      if (effectiveParams.phase === 'audio') {
+          console.info('Triggering Audio Workflow', effectiveParams)
+          instance = await env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: effectiveParams })
+      } else {
+          console.info('Triggering Script Workflow', effectiveParams)
+          instance = await env.HACKER_NEWS_WORKFLOW.create({ params: effectiveParams })
+      }
 
       const instanceDetails = {
         id: instance.id,
-        params: params ?? null,
+        params: effectiveParams,
         details: await instance.status(),
       }
 
@@ -113,19 +151,59 @@ export default {
         },
       })
     }
-    catch (error) {
+    catch (error: any) {
       console.error('Error in runWorkflow:', error)
       // 清理可能殘留的鎖定狀態
       await env.HACKER_NEWS_KV.delete(runningCheckKey).catch(() => {})
       throw error
     }
   },
+  
+  async getScript(request: Request, env: Env) {
+      const url = new URL(request.url)
+      const today = url.searchParams.get('today')
+      const variant = url.searchParams.get('variant') || url.searchParams.get('type') || 'hacker-news'
+      
+      const runEnv = env.WORKER_ENV || 'production'
+      
+      // Calculate date if not provided
+      let displayDate = today
+      if (!displayDate) {
+         // Default to Taipei time if not provided, consistent with workflow
+         const now = new Date()
+         const timezoneOffset = 8 // Hardcoded default +8 for simplicity in viewer
+         const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
+         displayDate = localTime.toISOString().split('T')[0]
+      }
+      
+      const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+      const scriptKey = `script:${runEnv}:${normalizedVariant}:${displayDate}`
+      
+      const data = await env.HACKER_NEWS_KV.get(scriptKey)
+      
+      if (!data) {
+          return new Response(JSON.stringify({ error: 'Script not found', key: scriptKey }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' }
+          })
+      }
+      
+      return new Response(data, {
+          headers: { 'Content-Type': 'application/json' }
+      })
+  },
+
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url)
 
     // Handle workflow trigger endpoint
     if (url.pathname === '/workflow' || request.method === 'POST') {
       return this.runWorkflow(request, env, ctx)
+    }
+    
+    // Handle script preview endpoint
+    if (url.pathname === '/script') {
+        return this.getScript(request, env)
     }
 
     if (url.pathname === '/audio') {
@@ -138,6 +216,24 @@ export default {
     return Response.redirect('https://daily-podcast.oobwei.workers.dev/')
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const CRON_SCRIPT = "30 0 * * *"
+    const CRON_AUDIO = "45 0 * * *" // 15 minutes later
+
+    console.info('scheduled event', event.cron)
+
+    if (event.cron === CRON_AUDIO) {
+        console.info('Triggering Audio Phase via Cron')
+        // We construct a synthetic request to reuse the runWorkflow logic which handles params parsing nicely
+        const req = new Request('https://worker/workflow', { 
+            method: 'POST', 
+            body: JSON.stringify({ phase: 'audio' }),
+            headers: { 'Content-Type': 'application/json' }
+        })
+        return this.runWorkflow(req, env, ctx)
+    }
+
+    // Default to Script Phase for CRON_SCRIPT
+    console.info('Triggering Script Phase via Cron')
     return this.runWorkflow(event, env, ctx)
   },
 }

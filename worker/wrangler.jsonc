@@ -19,7 +19,8 @@
   },
   "triggers": {
     "crons": [
-      "30 0 * * *"
+      "30 0 * * *",
+      "45 0 * * *"
     ]
   },
   "keep_vars": true,
@@ -30,7 +31,12 @@
     {
       "name": "daily-podcast-workflow",
       "binding": "HACKER_NEWS_WORKFLOW",
-      "class_name": "HackerNewsWorkflow"
+      "class_name": "PodcastScriptWorkflow"
+    },
+    {
+      "name": "daily-podcast-audio-workflow",
+      "binding": "HACKER_NEWS_AUDIO_WORKFLOW",
+      "class_name": "PodcastAudioWorkflow"
     }
   ],
   "kv_namespaces": [
