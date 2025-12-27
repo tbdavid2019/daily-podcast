@@ -4,7 +4,7 @@ import markdownit from 'markdown-it'
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
-import { getPastDays } from '@/lib/utils'
+import { getPastDays, mapScriptToArticle } from '@/lib/utils'
 
 const md = markdownit()
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
@@ -46,10 +46,19 @@ export async function GET() {
   })
 
   const { env } = await getCloudflareContext({ async: true })
-  const runEnv = env.NEXTJS_ENV
+  const runEnv = env.NEXTJS_ENV || 'production'
+  const variant = 'hacker-news'
   const pastDays = getPastDays(rssDays, 8)
   const posts = (await Promise.all(
     pastDays.map(async (day) => {
+      // Try fetching new script format first
+      const scriptKey = `script:${runEnv}:${variant}:${day}`
+      const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
+      
+      if (scriptData) {
+        return mapScriptToArticle(scriptData, runEnv, variant)
+      }
+
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')
       return post as unknown as Article
     }),
@@ -58,7 +67,7 @@ export async function GET() {
   for (const post of posts) {
     const audioInfo = await env.HACKER_NEWS_R2.head(post.audio)
 
-    const links = post.stories.map(s => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
+    const links = post.stories.map((s: any) => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
     const linkContent = `<p><b>相关链接：</b></p><ul>${links}</ul>`
     const blogContentHtml = md.render(post.blogContent || '')
     const finalContent = `<div>${blogContentHtml}<hr/>${linkContent}</div>`

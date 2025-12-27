@@ -150,7 +150,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     }
 
     // 3. Process in batches
-    const BATCH_SIZE = 10
+    // Increase batch size to reduce total workflow steps. 
+    // Cloudflare limits subrequests per step, so 20 is safe (limit is 50).
+    const BATCH_SIZE = 20
     const batchKeys: string[] = []
 
     for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {

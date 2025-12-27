@@ -4,6 +4,7 @@ import { keepDays } from '@/config'
 import { getPastDays } from '@/lib/utils'
 
 import { Pagination } from '@/components/pagination'
+import { mapScriptToArticle } from '@/lib/utils'
 
 export const revalidate = 600
 const PAGE_SIZE = 6
@@ -16,7 +17,8 @@ interface HomeProps {
 
 export default async function Home({ searchParams }: HomeProps) {
   const { env } = await getCloudflareContext({ async: true })
-  const runEnv = env.NEXTJS_ENV
+  const runEnv = env.NEXTJS_ENV || 'production'
+  const variant = 'hacker-news'
   
   // Parse page number
   const currentPage = Number(searchParams?.page) || 1
@@ -33,6 +35,15 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const posts = (await Promise.all(
     currentDays.map(async (day) => {
+      // Try fetching new script format first
+      const scriptKey = `script:${runEnv}:${variant}:${day}`
+      const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
+      
+      if (scriptData) {
+        return mapScriptToArticle(scriptData, runEnv, variant)
+      }
+
+      // Fallback to old content format
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')
       return post as unknown as Article
     }),
