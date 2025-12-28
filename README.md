@@ -198,12 +198,19 @@ const getStoryLimits = () => {
 - **配置參數**:
   ```typescript
   const REDDIT_CONFIG = {
-    API_LIMIT: 15,              // Reddit API 每次請求的文章數量上限
-    PER_SUBREDDIT: 3,           // 每個 subreddit 實際使用的文章數量
-    FINAL_TOP_STORIES: 10,      // 最終返回的熱門文章數量
+    API_LIMIT: 10,              // 每次請求抓取 10 篇候選文章
+    FINAL_TOP_STORIES: 6,       // 最終選取 6 篇文章
     MIN_UPVOTES: 50,            // 最低 upvotes 門檻
   }
   ```
+- **抓取邏輯 (Round Robin)**:
+  1. 從 6 個版面 (programming, webdev, ML, artificial, startups, technology) 各抓取 10 篇候選文章。
+  2. 嚴格過濾：排除置頂 (stickied)、管理員發文 (distinguished)、被移除文章及自述文 (self-posts)。
+  3. **輪流選取**：
+     - 第一輪：從每個版面選出第 1 名。
+     - 第二輪：從每個版面選出第 2 名。
+     - 以此類推，直到湊滿 6 篇。
+  4. **優點**：確保 `r/technology` 等大版面不會因為讚數高而霸佔所有名額，保障內容多樣性。
 
 ### 📊 雙層限制機制
 

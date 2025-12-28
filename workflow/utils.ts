@@ -680,31 +680,29 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
 
   // Reddit 抓取設定 - 統一管理所有數量參數
   const REDDIT_CONFIG = {
-    API_LIMIT: 15, // Reddit API 每次請求的文章數量上限（增加以獲取更多選擇）
-    PER_SUBREDDIT: 3, // 每個 subreddit 實際使用的文章數量（從 2 增加到 3）
-    FINAL_TOP_STORIES: 10, // 最終返回的熱門文章數量（從 5 增加到 10）
+    API_LIMIT: 10, // 每次請求抓少一點，我們只需要頭幾名
+    FINAL_TOP_STORIES: 6, // 最終總共要幾篇 (依照使用者需求 5~6 篇)
     MIN_UPVOTES: 50, // 最低 upvotes 門檻
   }
 
   // 選擇科技相關的熱門 subreddits
+  // 調整順序：將較為專業/硬技術的版面放在前面，確保它們優先入選
   const subreddits = [
-    'technology',
     'programming',
     'webdev',
     'MachineLearning',
     'artificial',
     'startups',
+    'technology', // 放在最後，作為補充
   ]
 
-  const allStories: Story[] = []
+  const storiesBySubreddit: Record<string, Story[]> = {}
 
   for (const subreddit of subreddits) {
     try {
       const url = `https://www.reddit.com/r/${subreddit}/hot/.json?limit=${REDDIT_CONFIG.API_LIMIT}`
-
       console.info(`Fetching from r/${subreddit}...`)
 
-      // Reddit API 不需要 Jina/Firecrawl，直接使用 JSON API
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
@@ -722,14 +720,13 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
       const stories: Story[] = posts
         .filter((post: any) => {
           const postData = post.data
-          // 過濾掉置頂帖、廣告和被刪除的帖子
-          return !postData.stickied
-            && !postData.is_self
-            && !postData.removed_by_category
+          return !postData.stickied // 排除置頂
+            && !postData.is_self // 盡量排除純文字討論，優先選有連結的文章 (視需求而定，若想要討論串可移除此行)
+            && !postData.distinguished // 排除管理員發文
+            && !postData.removed_by_category // 排除被移除的
             && postData.url
             && postData.ups > REDDIT_CONFIG.MIN_UPVOTES
         })
-        .slice(0, REDDIT_CONFIG.PER_SUBREDDIT)
         .map((post: any) => {
           const postData = post.data
           return {
@@ -744,19 +741,48 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
           }
         })
 
-      allStories.push(...stories)
-      console.info(`Fetched ${stories.length} stories from r/${subreddit}`)
+      if (stories.length > 0) {
+        // 雖然 Reddit 預設就是熱門排序，但保險起見還是該版面內排一次
+        storiesBySubreddit[subreddit] = stories.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
+        console.info(`Fetched ${stories.length} candidates from r/${subreddit}`)
+      }
     }
     catch (error) {
       console.error(`Error fetching r/${subreddit}:`, error)
     }
   }
 
-  // 按 upvotes 排序，取前 N 個
-  const topStories = allStories
-    .sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
-    .slice(0, REDDIT_CONFIG.FINAL_TOP_STORIES)
+  // 實作 Round Robin (輪詢) 選擇機制
+  // 第一輪：各版面第1名
+  // 第二輪：各版面第2名
+  // 直到湊滿數量
+  const selectedStories: Story[] = []
+  let round = 0
+  let hasMoreStories = true
 
-  console.info('Reddit stories processed:', topStories.length)
-  return topStories
+  while (selectedStories.length < REDDIT_CONFIG.FINAL_TOP_STORIES && hasMoreStories) {
+    hasMoreStories = false
+    
+    for (const subreddit of subreddits) {
+      if (selectedStories.length >= REDDIT_CONFIG.FINAL_TOP_STORIES) break
+      
+      const stories = storiesBySubreddit[subreddit]
+      if (stories && stories[round]) {
+        selectedStories.push(stories[round])
+        hasMoreStories = true // 還有故事可以選，繼續下一輪
+      }
+    }
+    round++
+  }
+
+  console.info('Reddit stories processed (Round Robin):', selectedStories.length)
+  // 列印選出的來源分佈，方便觀察
+  const distribution = selectedStories.reduce((acc, story) => {
+    const sub = story.title.match(/\(r\/(.*?)\)/)?.[1] || 'unknown'
+    acc[sub] = (acc[sub] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  console.info('Reddit source distribution:', distribution)
+
+  return selectedStories
 }
