@@ -1,6 +1,6 @@
 # RSS Feed 修復說明
 
-> 📖 **文檔導航**: [← 返回主文檔](./README.md) | [配置指南](docs/CONFIG-GUIDE.md) | [安全指南](./SECURITY.md)
+> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [配置指南](./CONFIG-GUIDE.md) | [安全指南](./SECURITY.md)
 
 本文檔說明 RSS Feed 的修復過程，包括 Byte-range 支援和 Podcast namespace 的實施。
 

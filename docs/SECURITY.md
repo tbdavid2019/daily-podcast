@@ -1,6 +1,6 @@
 # 🔒 安全指南
 
-> 📖 **文檔導航**: [← 返回主文檔](./README.md) | [配置指南](docs/CONFIG-GUIDE.md) | [RSS 修復指南](docs/RSS-FIX-GUIDE.md)
+> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [配置指南](./CONFIG-GUIDE.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
 
 本文檔提供完整的安全指南，包括 Worker URL 保護、API 密鑰管理、認證機制實施等內容。
 

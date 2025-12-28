@@ -1,6 +1,6 @@
 # 配置使用指南
 
-> 📖 **文檔導航**: [← 返回主文檔](./README.md) | [安全指南](./SECURITY.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
+> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [安全指南](./SECURITY.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
 
 本文檔提供詳細的配置說明，包括天數限制、環境變數、域名對應等內容。
 

@@ -6,7 +6,7 @@
 
 ### 📖 核心文檔
 
-#### [README.md](./README.md) - 專案主文檔
+#### [README.md](../README.md) - 專案主文檔
 **適合對象**: 所有使用者
 
 **內容概覽**:
@@ -25,7 +25,7 @@
 
 ### ⚙️ 配置與設定
 
-#### [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置使用指南
+#### [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置使用指南
 **適合對象**: 部署與維護者
 
 **內容概覽**:
@@ -111,7 +111,7 @@
 
 ### 📝 更新記錄
 
-#### [CHANGELOG-新聞來源擴充.md](docs/CHANGELOG-新聞來源擴充.md) - 版本更新記錄
+#### [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本更新記錄
 **適合對象**: 開發者、貢獻者
 
 **內容概覽**:
@@ -129,12 +129,12 @@
 ### 我想...
 
 #### 🚀 開始使用專案
-1. 閱讀 [README.md](./README.md) 的「快速開始」章節
+1. 閱讀 [README.md](../README.md) 的「快速開始」章節
 2. 按照步驟安裝依賴和設定環境變數
 3. 參考「部署檢查清單」確保一切就緒
 
 #### ⚙️ 修改配置
-1. 查看 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md)
+1. 查看 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md)
 2. 找到對應的配置項（天數限制、環境變數等）
 3. 按照說明修改並重新部署
 
@@ -149,9 +149,9 @@
 3. 按照修復步驟操作
 
 #### ❓ 解決問題
-1. 先查看 [README.md](./README.md) 的「常見問題」
+1. 先查看 [README.md](../README.md) 的「常見問題」
 2. 再查看對應主題的專門文檔
-3. 檢查 [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) 的「常見錯誤」章節
+3. 檢查 [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) 的「常見錯誤」章節
 
 ---
 
@@ -185,29 +185,29 @@ README.md (主入口)
 
 ### 👶 新手使用者
 按以下順序閱讀：
-1. [README.md](./README.md) - 了解專案
-2. [README.md](./README.md) 快速開始 - 部署應用
-3. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置調整
+1. [README.md](../README.md) - 了解專案
+2. [README.md](../README.md) 快速開始 - 部署應用
+3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置調整
 4. [SECURITY.md](./SECURITY.md) - 保護應用
 
 ### 👨‍💻 開發者
 重點閱讀：
-1. [README.md](./README.md) - 技術架構
-2. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 配置系統
+1. [README.md](../README.md) - 技術架構
+2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置系統
 3. [SECURITY.md](./SECURITY.md) - 安全最佳實踐
-4. [CHANGELOG-新聞來源擴充.md](docs/CHANGELOG-新聞來源擴充.md) - 版本歷史
+4. [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本歷史
 
 ### 🎙️ 播客製作者
 重點閱讀：
-1. [README.md](./README.md) - 專案功能
+1. [README.md](../README.md) - 專案功能
 2. [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) - RSS 優化
-3. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 內容配置
+3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 內容配置
 
 ### 🛡️ 系統管理員
 重點閱讀：
 1. [SECURITY.md](./SECURITY.md) - 全面安全指南
-2. [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) - 環境配置
-3. [README.md](./README.md) - 部署檢查清單
+2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 環境配置
+3. [README.md](../README.md) - 部署檢查清單
 
 ---
 
@@ -229,4 +229,5 @@ README.md (主入口)
 
 ---
 
-**📖 開始閱讀**: [返回 README.md](./README.md)
+**📖 開始閱讀**: [返回 README.md](../README.md)
+
