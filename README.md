@@ -47,6 +47,23 @@
 
 ---
 
+
+## 🔄 Workflow 與 YouTube 運作機制
+
+### 你自己的 Workflow 排程（生產者）：
+這是你在 Cloudflare 上設定的 Cron Triggers。
+- **排程 1 (Script)**：時間到了就跑 `workflow/index.ts`，產出 KV 文稿。
+- **排程 2 (Audio)**：時間到了就跑 `workflow/audio.ts`，產出 R2 mp3。
+（這就是「拆兩個階段做」的設計）
+
+### YouTube 的「排程」（消費者）：
+- YouTube 不知道你的 Workflow 幾點跑完。
+- YouTube 自己的機器人（Crawler）有它自己的時間表，它會定期來訪問你的網址 `https://你的網域/rss.xml`。
+
+> **保護機制說明**：為了避免 YouTube 在音檔還沒好時就抓取導致報錯，系統已在前端 (`rss.xml`) 加入檢查：只有當 **R2 音檔確實存在** 時，該集數才會顯示在 RSS 中。
+
+---
+
 ## 🚀 快速開始 (Quick Start)
 
 ### 1. 準備工作

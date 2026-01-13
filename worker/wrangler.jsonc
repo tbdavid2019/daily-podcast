@@ -20,7 +20,7 @@
   "triggers": {
     "crons": [
       "30 0 * * *",
-      "45 0 * * *"
+      "39 0 * * *"
     ]
   },
   "keep_vars": true,

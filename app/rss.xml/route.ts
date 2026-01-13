@@ -66,6 +66,12 @@ export async function GET() {
 
   for (const post of posts) {
     const audioInfo = await env.HACKER_NEWS_R2.head(post.audio)
+    
+    // 如果音檔還沒上傳完成，暫時不顯示在 RSS 中，避免 YouTube 抓取失敗
+    if (!audioInfo) {
+      console.log(`Audio not ready for ${post.title}, skipping`)
+      continue
+    }
 
     const links = post.stories.map((s: any) => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
     const linkContent = `<p><b>相关链接：</b></p><ul>${links}</ul>`
