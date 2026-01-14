@@ -17,6 +17,7 @@ interface Env extends CloudflareEnv {
   WORKER_ENV?: string
   HACKER_NEWS_KV: KVNamespace
   HACKER_NEWS_WORKFLOW: Workflow
+  HACKER_NEWS_AUDIO_WORKFLOW: Workflow
   // 新增時區配置
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
@@ -488,6 +489,17 @@ ${fullContentString}
             expirationTtl: 60 * 60 * 24 * 7 // Keep for 1 week
         })
         console.info(`✅ Script saved to KV: ${scriptKey}`)
+    })
+
+    // Trigger Audio Workflow
+    await step.do('trigger audio workflow', retryConfig, async () => {
+        const audioParams: WorkflowParams = {
+            today: displayDate,
+            variant: variant,
+            phase: 'audio'
+        }
+        console.info('Triggering Audio Workflow from Script Workflow', audioParams)
+        await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
     })
 
     return scriptData

@@ -216,24 +216,7 @@ export default {
     return Response.redirect('https://daily-podcast.oobwei.workers.dev/')
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    const CRON_SCRIPT = "30 0 * * *"
-    const CRON_AUDIO = "45 0 * * *" // 15 minutes later
-
     console.info('scheduled event', event.cron)
-
-    if (event.cron === CRON_AUDIO) {
-        console.info('Triggering Audio Phase via Cron')
-        // We construct a synthetic request to reuse the runWorkflow logic which handles params parsing nicely
-        const req = new Request('https://worker/workflow', { 
-            method: 'POST', 
-            body: JSON.stringify({ phase: 'audio' }),
-            headers: { 'Content-Type': 'application/json' }
-        })
-        return this.runWorkflow(req, env, ctx)
-    }
-
-    // Default to Script Phase for CRON_SCRIPT
-    console.info('Triggering Script Phase via Cron')
     return this.runWorkflow(event, env, ctx)
   },
 }
