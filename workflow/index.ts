@@ -200,9 +200,12 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       const limits: Record<string, number> = {
         'hacker-news': isWeekend ? 6 : 5,
         'reddit': isWeekend ? 6 : 5,
-        'github-trending': dayOfWeek === 1 ? 2 : 0,
-        'product-hunt': dayOfWeek === 2 ? 2 : 0,
-        'dev-to': dayOfWeek >= 3 && dayOfWeek <= 5 ? 3 : 0,
+        // 增加頻率：週一、週四抓 GitHub
+        'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0, 
+        // 增加頻率：週二、週五抓 Product Hunt
+        'product-hunt': (dayOfWeek === 2 || dayOfWeek === 5) ? 2 : 0,
+        // 週三維持 Dev.to
+        'dev-to': dayOfWeek === 3 ? 3 : 0,
       }
 
       if (!storyBudget) {

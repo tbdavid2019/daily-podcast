@@ -34,27 +34,36 @@
 
 ## 📅 內容排程
 
-為了內容多樣性與系統效率，採用動態排程抓取：
+為了內容多樣性與系統效率，採用動態排程抓取與隨機化機制：
 
 | 星期 | 固定來源 (每日) | 輪替來源 (特色內容) | 總篇數 (約) |
 |------|----------------|---------------------|------------|
 | **週一** | Hacker News (5), Reddit (5) | 🚀 GitHub Trending (2) | 12 篇 |
 | **週二** | Hacker News (5), Reddit (5) | 🏆 Product Hunt (2) | 12 篇 |
-| **週三-週五** | Hacker News (5), Reddit (5) | 💻 Dev.to (3) | 13 篇 |
+| **週三** | Hacker News (5), Reddit (5) | 💻 Dev.to (3) | 13 篇 |
+| **週四** | Hacker News (5), Reddit (5) | 🚀 GitHub Trending (2) | 12 篇 |
+| **週五** | Hacker News (5), Reddit (5) | 🏆 Product Hunt (2) | 12 篇 |
 | **週末** | Hacker News (6), Reddit (6) | - | 12 篇 |
 
-> **Reddit 選文機制優化**：系統會掃描 `technology`, `programming`, `webdev`, `AI`, `startups` 等 6 個版面，每個版面**輪流**選出最佳文章，確保不會被大版面壟斷。
+### 🎲 隨機化選文機制
+- **Reddit**: 採用 `Hot` / `Rising` / `Top` 三種排序**隨機切換**，避免連續幾天因為熱門文章霸榜而重複抓取。
+- **GitHub Trending**: 從 **Top 10** 熱門專案中**隨機挑選**，增加不同專案的曝光機會。
+- **Product Hunt**: 從 **Top 10** 熱門產品中**隨機挑選**，不會只介紹第一名。
 
 ---
 
+## 🔄 自動化 Workflow 機制
 
-## 🔄 Workflow 與 YouTube 運作機制
+### Workflow 自動串接
+系統採用「文稿生成 -> 自動觸發語音」的設計：
+1. **排程觸發 (Cron)**：每天固定時間 (00:30) 觸發 `PodcastScriptWorkflow`。
+2. **文稿生成**：抓取新聞、整理摘要、生成逐字稿，並存入 KV。
+3. **自動接續**：文稿生成完畢後，**自動呼叫** `PodcastAudioWorkflow`。
+4. **語音生成**：根據逐字稿產出 MP3 並上傳至 R2。
 
-### 你自己的 Workflow 排程（生產者）：
-這是你在 Cloudflare 上設定的 Cron Triggers。
-- **排程 1 (Script)**：時間到了就跑 `workflow/index.ts`，產出 KV 文稿。
-- **排程 2 (Audio)**：時間到了就跑 `workflow/audio.ts`，產出 R2 mp3。
-（這就是「拆兩個階段做」的設計）
+這種設計確保了：
+- **不用擔心時間差**：不需要預估文稿要跑多久，完成後自然會接續語音生成。
+- **節省資源**：如果文稿生成失敗（例如爬蟲掛了），就不會觸發語音生成，避免浪費 TTS 資源。
 
 ### YouTube 的「排程」（消費者）：
 - YouTube 不知道你的 Workflow 幾點跑完。

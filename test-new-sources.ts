@@ -1,7 +1,7 @@
 // 測試新增的新聞來源爬蟲功能
 // 這個文件用於本地測試，確保新的爬蟲函數運作正常
 
-import { getAllStories, getDevToStories, getGitHubTrendingStories, getProductHuntStories } from './workflow/utils.ts'
+import { getAllStories, getDevToStories, getGitHubTrendingStories, getProductHuntStories } from './workflow/utils'
 
 async function testNewSources() {
   console.log('🚀 測試新的新聞來源...\n')

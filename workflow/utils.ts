@@ -371,7 +371,12 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
     }
   }).get().filter(Boolean) as Story[]
 
-  return stories.slice(0, GITHUB_CONFIG.MAX_REPOS)
+  // 隨機從前 10 名中挑選
+  const pool = stories.slice(0, 10)
+  const shuffled = pool.sort(() => 0.5 - Math.random())
+
+  console.info(`[GitHub] Selected ${GITHUB_CONFIG.MAX_REPOS} stories randomly from top ${pool.length}`)
+  return shuffled.slice(0, GITHUB_CONFIG.MAX_REPOS)
 }
 
 export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
@@ -381,6 +386,64 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
   const PRODUCT_HUNT_CONFIG = {
     MAX_PRODUCTS: 5, // 最多返回的產品數量
     REMOVE_RANKING: true, // 是否移除標題中的排名編號
+  }
+
+  // 優先使用 RSS Feed (更穩定)
+  try {
+    const rssUrl = 'https://www.producthunt.com/feed'
+    console.info('[Product Hunt] Fetching RSS from:', rssUrl)
+    
+    const response = await fetch(rssUrl, {
+      headers: {
+        'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
+      }
+    })
+    
+    if (response.ok) {
+      const rssText = await response.text()
+      const $ = cheerio.load(rssText, { xmlMode: true })
+      const entries = $('entry')
+      
+      console.info('[Product Hunt] Found RSS entries:', entries.length)
+      
+      const rssStories: Story[] = entries.map((i: number, el: any) => {
+        const $el = $(el)
+        const title = $el.find('title').text().trim()
+        const link = $el.find('link').attr('href')
+        const content = $el.find('content').text()
+        const id = $el.find('id').text()
+        
+        if (!title || !link) return null
+
+        // 從 content 中嘗試提取描述 (通常是一段 HTML)
+        const $content = cheerio.load(content)
+        const description = $content.text().trim().substring(0, 200)
+
+        return {
+          id: id.split('/').pop() || `ph-rss-${i}`,
+          title,
+          url: link,
+          source: 'product-hunt' as const,
+          sourceUrl: link,
+          description,
+        }
+      }).get().filter(Boolean) as Story[]
+
+      console.info(`[Product Hunt] RSS returned ${rssStories.length} valid stories`)
+      
+      if (rssStories.length > 0) {
+        // 隨機從前 10 名中挑選
+        const pool = rssStories.slice(0, 10)
+        const shuffled = pool.sort(() => 0.5 - Math.random())
+        
+        console.info(`[Product Hunt RSS] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
+        return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
+      }
+    } else {
+        console.warn(`[Product Hunt] RSS Error ${response.status}: ${response.statusText}`)
+    }
+  } catch (error) {
+    console.warn('[Product Hunt] RSS Fetch failed, falling back to scraping:', error)
   }
 
   const url = 'https://www.producthunt.com'
@@ -451,7 +514,13 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
   }).get().filter(Boolean) as Story[]
 
   console.info('Product Hunt stories processed:', stories.length)
-  return stories.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
+  
+  // 隨機從前 10 名中挑選
+  const pool = stories.slice(0, 10)
+  const shuffled = pool.sort(() => 0.5 - Math.random())
+  
+  console.info(`[Product Hunt Web] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
+  return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
 }
 
 export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
@@ -698,10 +767,18 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
 
   const storiesBySubreddit: Record<string, Story[]> = {}
 
+  // 隨機選擇排序方式，避免連續幾天抓到一樣的熱門文章
+  const sortMethods = ['hot', 'rising', 'top']
+  const selectedSort = sortMethods[Math.floor(Math.random() * sortMethods.length)]
+  const timeQuery = selectedSort === 'top' ? '&t=day' : ''
+  
+  console.info(`[Reddit] Fetching stories with sort: ${selectedSort}${timeQuery}`)
+
   for (const subreddit of subreddits) {
     try {
-      const url = `https://www.reddit.com/r/${subreddit}/hot/.json?limit=${REDDIT_CONFIG.API_LIMIT}`
-      console.info(`Fetching from r/${subreddit}...`)
+      // 建構 URL
+      const url = `https://www.reddit.com/r/${subreddit}/${selectedSort}/.json?limit=${REDDIT_CONFIG.API_LIMIT}${timeQuery}`
+      console.info(`Fetching from r/${subreddit} (${selectedSort})...`)
 
       const response = await fetch(url, {
         headers: {
