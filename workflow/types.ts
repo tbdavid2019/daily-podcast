@@ -12,6 +12,7 @@ export interface PodcastDialogueLine {
 }
 
 export interface PodcastScriptResponse {
+  title?: string
   dialogue: PodcastDialogueLine[]
 }
 
@@ -35,6 +36,7 @@ export interface Story {
 }
 
 export interface GeneratedScriptData {
+  title?: string
   dialogue: PodcastDialogueLine[]
   blogContent: string
   introContent: string

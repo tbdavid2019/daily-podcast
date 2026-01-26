@@ -32,8 +32,22 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
         ? data.dialogue.map((line: any) => `${line.speaker}: ${line.text}`).join('\n\n')
         : data.dialogue
 
+    // Use the generated title if available (new format), otherwise fallback to constructed title
+    let finalTitle = data.title
+
+    if (!finalTitle) {
+      const storyTitles = (data.stories || [])
+          .slice(0, 3)
+          .map((s: any) => s.title)
+          .join(' | ')
+      
+      finalTitle = storyTitles 
+          ? `David888 Daily ${data.displayDate} | ${storyTitles}`
+          : `David888 Daily ${data.displayDate}`
+    }
+
     return {
-        title: `David888 Daily ${data.displayDate}`, // Default title
+        title: finalTitle,
         date: data.displayDate,
         updatedAt: Date.now(), // Use current time or retrieval time
         introContent: data.introContent,

@@ -26,6 +26,8 @@
 
 ## 🌟 核心特色
 
+- ⚡️ **驚悚標題生成**：AI 自動生成符合 SEO 與點擊率的「震驚體」標題 (Clickbait Title)，提升傳播力。
+- 💰 **AdSense 整合**：內建 PC 雙側邊欄 (Sidebar) 與 Mobile 列表廣告穿插機制。
 - 🤖 **多源聚合**：Hacker News, Reddit, GitHub, Product Hunt, Dev.to
 - 🧠 **AI 智慧摘要**：自動生成繁體中文摘要與講稿 (OpenAI / Gemini)
 - 🎙️ **語音合成**：Edge TTS / OpenAI TTS / Minimax 多種選擇

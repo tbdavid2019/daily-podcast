@@ -5,14 +5,16 @@ import { getPastDays } from '@/lib/utils'
 
 import { Pagination } from '@/components/pagination'
 import { mapScriptToArticle } from '@/lib/utils'
+import { GoogleAd } from '@/components/google-ad'
+import React from 'react'
 
 export const revalidate = 600
 const PAGE_SIZE = 6
 
 interface HomeProps {
-  searchParams: {
+  searchParams: Promise<{
     page?: string
-  }
+  }>
 }
 
 export default async function Home({ searchParams }: HomeProps) {
@@ -20,8 +22,9 @@ export default async function Home({ searchParams }: HomeProps) {
   const runEnv = env.NEXTJS_ENV || 'production'
   const variant = 'hacker-news'
   
+  const resolvedSearchParams = await searchParams
   // Parse page number
-  const currentPage = Number(searchParams?.page) || 1
+  const currentPage = Number(resolvedSearchParams?.page) || 1
   
   // 使用台北時區（UTC+8）來匹配後端的 KV key 生成邏輯
   const allPastDays = getPastDays(keepDays, 8)
@@ -47,17 +50,24 @@ export default async function Home({ searchParams }: HomeProps) {
       const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')
       return post as unknown as Article
     }),
-  )).filter(Boolean)
+  )).filter(Boolean) as Article[]
 
   return (
     <>
-      {posts.map(post => (
-        <ArticleCard
-          key={post.date}
-          article={post}
-          staticHost={env.NEXT_STATIC_HOST}
-          showSummary
-        />
+      {posts.map((post, index) => (
+        <React.Fragment key={post.date}>
+          <ArticleCard
+            article={post}
+            staticHost={env.NEXT_STATIC_HOST}
+            showSummary
+          />
+          {(index + 1) % 2 === 0 && (
+             <div className="my-8 w-full flex flex-col items-center">
+                 <div className="text-xs text-gray-400 mb-2">Advertisement</div>
+                 <GoogleAd slot="7008136098" className="w-full flex justify-center" />
+             </div>
+          )}
+        </React.Fragment>
       ))}
       
       <Pagination 

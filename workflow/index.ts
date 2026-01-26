@@ -198,8 +198,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const getStoryLimits = () => {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const limits: Record<string, number> = {
-        'hacker-news': isWeekend ? 6 : 5,
-        'reddit': isWeekend ? 6 : 5,
+        'hacker-news': 7,
+        'reddit': 3,
         // 增加頻率：週一、週四抓 GitHub
         'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0, 
         // 增加頻率：週二、週五抓 Product Hunt
@@ -216,6 +216,35 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const storyLimits = getStoryLimits()
 
+    const getRecentDates = (baseDate: string, days: number) => {
+      const base = new Date(`${baseDate}T00:00:00Z`)
+      return Array.from({ length: days }, (_, index) => {
+        const date = new Date(base)
+        date.setUTCDate(date.getUTCDate() - (index + 1))
+        return date.toISOString().split('T')[0]
+      })
+    }
+
+    const recentDates = getRecentDates(displayDate, 7)
+    const recentScripts = await Promise.all(
+      recentDates.map((date) => this.env.HACKER_NEWS_KV.get(`script:${runEnv}:${variant}:${date}`, 'json')),
+    )
+
+    const excludeRedditIds = new Set<string>()
+    for (const scriptData of recentScripts) {
+      const stories = (scriptData as GeneratedScriptData | null)?.stories || []
+      for (const story of stories) {
+        if (story?.source === 'reddit' && story.id) {
+          excludeRedditIds.add(story.id)
+        }
+      }
+    }
+
+    console.info('Reddit dedup window', {
+      days: recentDates.length,
+      excludedCount: excludeRedditIds.size,
+    })
+
     console.info('Source limits based on schedule:', {
       ...storyLimits,
       budget: storyBudget ?? 'none',
@@ -223,7 +252,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     })
 
     const stories = await step.do(`get all stories ${fetchDate}`, retryConfig, async () => {
-      const allStories = await getAllStories(fetchDate, this.env, { limits: storyLimits })
+      const allStories = await getAllStories(fetchDate, this.env, {
+        limits: storyLimits,
+        excludeRedditIds,
+      })
 
       if (!allStories.length) {
         throw new Error('no stories found')
@@ -418,6 +450,7 @@ ${fullContentString}
         maxTokens: scriptMaxTokens,
         maxRetries: 3,
         schema: z.object({
+          title: z.string().optional(),
           dialogue: z.array(z.object({
             speaker: z.enum(['男', '女']),
             text: z.string().min(1),
@@ -428,6 +461,7 @@ ${fullContentString}
       console.info('generate podcast script success', {
         usage,
         finishReason,
+        title: object.title,
         dialogueLength: object.dialogue.length,
       })
 
@@ -440,13 +474,13 @@ ${fullContentString}
         return { speaker: speaker as PodcastDialogueLine['speaker'], text }
       })
 
-      return { dialogue: sanitizedDialogue } as PodcastScriptResponse
+      return { title: object.title, dialogue: sanitizedDialogue } as PodcastScriptResponse
     })
 
     console.info('podcast script line count', podcastScript.dialogue.length)
 
     await step.sleep('pause before blog content', breakTime)
-
+    
     const blogContent = await step.do('create blog content', retryConfig, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const { text, usage, finishReason } = await generateText({
@@ -478,6 +512,7 @@ ${fullContentString}
 
     // Prepare complete data object
     const scriptData: GeneratedScriptData = {
+      title: podcastScript.title,
       dialogue: podcastScript.dialogue,
       blogContent,
       introContent,

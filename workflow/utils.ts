@@ -4,6 +4,7 @@ import * as cheerio from 'cheerio'
 type StorySource = NonNullable<Story['source']>
 interface StoryFetchOptions {
   limits?: Partial<Record<StorySource, number>>
+  excludeRedditIds?: Set<string>
 }
 
 async function getContentFromJina(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, JINA_KEY?: string) {
@@ -243,6 +244,94 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     }
 
     console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
+
+      return [
+        story.title ? `<title>${story.title}</title>` : '',
+        articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+        commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
+      ].filter(Boolean).join('\n\n---\n\n')
+  }
+  else if (story.source === 'reddit') {
+    console.info('[Reddit] Fetching article and comments')
+
+    let article = ''
+    try {
+      console.info('[Reddit] Trying Jina for article:', story.url)
+      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+      if (!article || article.trim().length < 50) {
+        throw new Error('Jina returned empty or too short content')
+      }
+      console.info(`[Reddit] Jina success - article length: ${article.length}`)
+    }
+    catch (jinaError) {
+      console.warn(`[Reddit] Jina failed for article: ${jinaError}`)
+      try {
+        console.info('[Reddit] Trying Firecrawl for article:', story.url)
+        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
+        if (!article || article.trim().length < 50) {
+          throw new Error('Firecrawl returned empty or too short content')
+        }
+        console.info(`[Reddit] Firecrawl success - article length: ${article.length}`)
+      }
+      catch (firecrawlError) {
+        console.error(`[Reddit] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
+        article = ''
+      }
+    }
+
+    let comments = ''
+    const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
+    if (sourceUrl) {
+      try {
+        const commentsUrl = `${sourceUrl}.json?sort=top&limit=30`
+        console.info('[Reddit] Fetching comments JSON:', commentsUrl)
+        const response = await fetch(commentsUrl, {
+          headers: {
+            'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`comments fetch failed: ${response.status}`)
+        }
+        const json = await response.json() as any
+        const commentListing = Array.isArray(json) ? json[1]?.data?.children || [] : []
+        const commentLines = commentListing
+          .filter((item: any) => item?.kind === 't1' && item?.data?.body)
+          .map((item: any) => {
+            const body = item.data?.body || ''
+            const score = item.data?.score
+            const sanitizedBody = body.replace(/\s+/g, ' ').trim()
+            if (!sanitizedBody) return null
+            if (typeof score === 'number') {
+              return `- (${score}) ${sanitizedBody}`
+            }
+            return `- ${sanitizedBody}`
+          })
+          .filter(Boolean)
+          .slice(0, 20)
+
+        comments = commentLines.join('\n')
+        if (comments.trim().length < 30) {
+          throw new Error('Comments content too short')
+        }
+        console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
+      }
+      catch (commentsError) {
+        console.warn(`[Reddit] Failed to fetch comments: ${commentsError}`)
+        comments = ''
+      }
+    }
+
+    const articleLength = article.trim().length
+    const commentsLength = comments.trim().length
+
+    if (articleLength + commentsLength < 50) {
+      console.error(`[Reddit] ⚠️ SKIP: Combined article/comments content too short for "${story.title}"`)
+      console.error(`[Reddit] URL: ${story.url}`)
+      return ''
+    }
+
+    console.info(`[Reddit] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
@@ -662,7 +751,7 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
 }
 
 export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: StoryFetchOptions = {}) {
-  const { limits = {} } = options
+  const { limits = {}, excludeRedditIds } = options
 
   console.info('Starting to fetch stories from all sources...', { limits })
 
@@ -704,7 +793,7 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
         })
       : Promise.resolve([]),
     'reddit': shouldFetchSource('reddit')
-      ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }, { excludeRedditIds }).catch((err) => {
           console.error('Failed to get Reddit stories:', err)
           return []
         })
@@ -744,14 +833,17 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
   ]
 }
 
-export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: { excludeRedditIds?: Set<string> } = {}) {
   console.info('Fetching Reddit stories...')
+
+  const { excludeRedditIds } = options
 
   // Reddit 抓取設定 - 統一管理所有數量參數
   const REDDIT_CONFIG = {
     API_LIMIT: 10, // 每次請求抓少一點，我們只需要頭幾名
     FINAL_TOP_STORIES: 6, // 最終總共要幾篇 (依照使用者需求 5~6 篇)
     MIN_UPVOTES: 50, // 最低 upvotes 門檻
+    TOP_PER_SUBREDDIT: 3, // 每個版面保留前幾名，避免太隨機
   }
 
   // 選擇科技相關的熱門 subreddits
@@ -764,6 +856,33 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
     'startups',
     'technology', // 放在最後，作為補充
   ]
+
+  const politicalKeywords = [
+    'trump',
+    'donald trump',
+    'biden',
+    'white house',
+    '共和黨',
+    '民主黨',
+    '川普',
+    '特朗普',
+    '拜登',
+    '白宮',
+    'gop',
+    'maga',
+    'election',
+    '選舉',
+    '大選',
+    'congress',
+    'senate',
+    'house speaker',
+    'impeachment',
+  ]
+
+  const isPoliticalPost = (title: string, url: string) => {
+    const haystack = `${title} ${url}`.toLowerCase()
+    return politicalKeywords.some(keyword => haystack.includes(keyword.toLowerCase()))
+  }
 
   const storiesBySubreddit: Record<string, Story[]> = {}
 
@@ -797,12 +916,16 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
       const stories: Story[] = posts
         .filter((post: any) => {
           const postData = post.data
+          const title = postData.title || ''
+          const url = postData.url || ''
           return !postData.stickied // 排除置頂
             && !postData.is_self // 盡量排除純文字討論，優先選有連結的文章 (視需求而定，若想要討論串可移除此行)
             && !postData.distinguished // 排除管理員發文
             && !postData.removed_by_category // 排除被移除的
-            && postData.url
+            && url
             && postData.ups > REDDIT_CONFIG.MIN_UPVOTES
+            && !isPoliticalPost(title, url)
+            && !(excludeRedditIds?.has(postData.id))
         })
         .map((post: any) => {
           const postData = post.data
@@ -829,33 +952,21 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
     }
   }
 
-  // 實作 Round Robin (輪詢) 選擇機制
-  // 第一輪：各版面第1名
-  // 第二輪：各版面第2名
-  // 直到湊滿數量
-  const selectedStories: Story[] = []
-  let round = 0
-  let hasMoreStories = true
-
-  while (selectedStories.length < REDDIT_CONFIG.FINAL_TOP_STORIES && hasMoreStories) {
-    hasMoreStories = false
-    
-    for (const subreddit of subreddits) {
-      if (selectedStories.length >= REDDIT_CONFIG.FINAL_TOP_STORIES) break
-      
-      const stories = storiesBySubreddit[subreddit]
-      if (stories && stories[round]) {
-        selectedStories.push(stories[round])
-        hasMoreStories = true // 還有故事可以選，繼續下一輪
-      }
-    }
-    round++
+  const storyPool = subreddits.flatMap(subreddit =>
+    (storiesBySubreddit[subreddit] || []).slice(0, REDDIT_CONFIG.TOP_PER_SUBREDDIT),
+  )
+  for (let i = storyPool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[storyPool[i], storyPool[j]] = [storyPool[j], storyPool[i]]
   }
 
-  console.info('Reddit stories processed (Round Robin):', selectedStories.length)
+  const selectedStories = storyPool.slice(0, REDDIT_CONFIG.FINAL_TOP_STORIES)
+
+  console.info('Reddit stories processed (Randomized):', selectedStories.length)
   // 列印選出的來源分佈，方便觀察
   const distribution = selectedStories.reduce((acc, story) => {
-    const sub = story.title.match(/\(r\/(.*?)\)/)?.[1] || 'unknown'
+    const title = story.title || ''
+    const sub = title.match(/\(r\/(.*?)\)/)?.[1] || 'unknown'
     acc[sub] = (acc[sub] || 0) + 1
     return acc
   }, {} as Record<string, number>)

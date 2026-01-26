@@ -9,7 +9,6 @@ declare namespace Cloudflare {
 	interface Env {
 		HACKER_NEWS_KV: KVNamespace;
 		NEXT_PUBLIC_BASE_URL: "https://podcast.david888.com";
-		NEXT_STATIC_HOST: string;
 		NEXT_CACHE_DO_QUEUE: DurableObjectNamespace<import("./.open-next/worker").DOQueueHandler>;
 		NEXT_TAG_CACHE_DO_SHARDED: DurableObjectNamespace<import("./.open-next/worker").DOShardedTagCache>;
 		NEXT_CACHE_DO_PURGE: DurableObjectNamespace<import("./.open-next/worker").BucketCachePurge>;

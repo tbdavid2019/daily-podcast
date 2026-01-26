@@ -16,7 +16,7 @@ const ensureDescriptionLength = (value: string) => {
   return `${value.slice(0, MAX_DESCRIPTION_LENGTH - 3).trimEnd()}...`
 }
 
-export const revalidate = 3600
+export const revalidate = 600
 
 export async function GET() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
