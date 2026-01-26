@@ -10,6 +10,16 @@
 
 ---
 
+## 🆕 最近更新
+
+- **Reddit 去重機制**：新增跨天排除（讀取近 7 天已播清單），避免熱門貼文連續出現。
+- **Reddit 討論串**：改抓取 Reddit comments JSON，摘要與腳本可讀到社群觀點。
+- **Reddit 選題機制**：每版保留前 K 名後再隨機抽樣，降低重複又保留熱門度。
+- **內容過濾**：新增政治相關關鍵字過濾。
+- **排程比例**：Hacker News 7 篇、Reddit 3 篇。
+
+---
+
 ## 📚 文檔導航
 
 本專案功能豐富，為保持文檔清晰，詳細說明已拆分：
@@ -31,7 +41,7 @@
 - 🤖 **多源聚合**：Hacker News, Reddit, GitHub, Product Hunt, Dev.to
 - 🧠 **AI 智慧摘要**：自動生成繁體中文摘要與講稿 (OpenAI / Gemini)
 - 🎙️ **語音合成**：Edge TTS / OpenAI TTS / Minimax 多種選擇
-- 🔄 **Round Robin 選文**：Reddit 採用輪詢機制，確保內容多樣性，不被單一來源洗版
+- 🎯 **Reddit 熱門隨機化**：每版保留前 K 名後再隨機抽樣，避免熱門貼文長期霸榜
 - ☁️ **全雲端運行**：部署於 Cloudflare Workers，無需自建伺服器
 
 ## 📅 內容排程
@@ -40,15 +50,15 @@
 
 | 星期 | 固定來源 (每日) | 輪替來源 (特色內容) | 總篇數 (約) |
 |------|----------------|---------------------|------------|
-| **週一** | Hacker News (5), Reddit (5) | 🚀 GitHub Trending (2) | 12 篇 |
-| **週二** | Hacker News (5), Reddit (5) | 🏆 Product Hunt (2) | 12 篇 |
-| **週三** | Hacker News (5), Reddit (5) | 💻 Dev.to (3) | 13 篇 |
-| **週四** | Hacker News (5), Reddit (5) | 🚀 GitHub Trending (2) | 12 篇 |
-| **週五** | Hacker News (5), Reddit (5) | 🏆 Product Hunt (2) | 12 篇 |
-| **週末** | Hacker News (6), Reddit (6) | - | 12 篇 |
+| **週一** | Hacker News (7), Reddit (3) | 🚀 GitHub Trending (2) | 12 篇 |
+| **週二** | Hacker News (7), Reddit (3) | 🏆 Product Hunt (2) | 12 篇 |
+| **週三** | Hacker News (7), Reddit (3) | 💻 Dev.to (3) | 13 篇 |
+| **週四** | Hacker News (7), Reddit (3) | 🚀 GitHub Trending (2) | 12 篇 |
+| **週五** | Hacker News (7), Reddit (3) | 🏆 Product Hunt (2) | 12 篇 |
+| **週末** | Hacker News (7), Reddit (3) | - | 10 篇 |
 
 ### 🎲 隨機化選文機制
-- **Reddit**: 採用 `Hot` / `Rising` / `Top` 三種排序**隨機切換**，避免連續幾天因為熱門文章霸榜而重複抓取。
+- **Reddit**: 每版保留前 K 名後再隨機抽樣，並套用近 7 天去重，避免熱門貼文連續霸榜。
 - **GitHub Trending**: 從 **Top 10** 熱門專案中**隨機挑選**，增加不同專案的曝光機會。
 - **Product Hunt**: 從 **Top 10** 熱門產品中**隨機挑選**，不會只介紹第一名。
 
