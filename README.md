@@ -12,11 +12,14 @@
 
 ## 🆕 最近更新
 
+- **Force 重新生成**：啟用 force 參數時會清除 script/content/story-contents 的 KV 快取，確保重跑會重新產生新標題與內容。
 - **Reddit 去重機制**：新增跨天排除（讀取近 7 天已播清單），避免熱門貼文連續出現。
 - **Reddit 討論串**：改抓取 Reddit comments JSON，摘要與腳本可讀到社群觀點。
 - **Reddit 選題機制**：每版保留前 K 名後再隨機抽樣，降低重複又保留熱門度。
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
+- **爬蟲熔斷機制**：針對 Jina / Firecrawl 增加錯誤計數熔斷機制。當連續 2 次遇到 402 (Payment Required) 或 429 (Too Many Requests) 錯誤時，自動暫停後續請求，避免大量無效 subrequest 導致 Workflow 崩潰。
+- **自建 Jina Reader 支援**：支援配置多個自建 Jina Reader 節點（Primary/Secondary），優先使用自建節點以節省額度並提高穩定性。
 
 ---
 
@@ -116,6 +119,13 @@ pnpm run deploy:worker
 
 # 2. 部署前端 (Web)
 pnpm run deploy
+```
+
+### 5. 開發與測試
+日誌
+```bash
+npx wrangler tail
+npx wrangler tail daily-podcast-worker
 ```
 
 ---

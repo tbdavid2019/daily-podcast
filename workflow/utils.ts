@@ -7,12 +7,32 @@ interface StoryFetchOptions {
   excludeRedditIds?: Set<string>
 }
 
+
+const breakerState = {
+  jinaFailures: 0,
+  firecrawlFailures: 0,
+}
+
+const BREAKER_THRESHOLD = 2
+
+const SELF_HOSTED_JINA_NODES = [
+  'http://dns.aicreate360.com:8083', // Primary
+  'http://git.glsoft.ai:8083',       // Secondary
+]
+
 async function getContentFromJina(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, JINA_KEY?: string) {
+  if (breakerState.jinaFailures >= BREAKER_THRESHOLD) {
+    console.warn('Jina circuit breaker open - skipping request')
+    return ''
+  }
+
   const jinaHeaders: HeadersInit = {
     'X-Retain-Images': 'none',
     'X-Return-Format': format,
   }
 
+  // Self-hosted likely doesn't need auth, but keeping logic just in case user passes it for a reason
+  // or if they switch back to official endpoint later.
   if (JINA_KEY) {
     jinaHeaders.Authorization = `Bearer ${JINA_KEY}`
   }
@@ -26,20 +46,49 @@ async function getContentFromJina(url: string, format: 'html' | 'markdown', sele
   }
 
   console.info('get content from jina', url)
-  const response = await fetch(`https://r.jina.ai/${url}`, {
-    headers: jinaHeaders,
-  })
-  if (response.ok) {
-    const text = await response.text()
-    return text
+
+  // Try nodes in order
+  for (const node of SELF_HOSTED_JINA_NODES) {
+    try {
+      const targetUrl = `${node}/${url}`
+      console.info(`Trying Jina node: ${node}`)
+      
+      // Use a timeout for self-hosted nodes to fail fast
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+
+      const response = await fetch(targetUrl, {
+        headers: jinaHeaders,
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        breakerState.jinaFailures = 0 // Reset on success
+        const text = await response.text()
+        return text
+      }
+      
+      console.warn(`Jina node ${node} failed: ${response.statusText}`)
+      // Don't break immediately on 4xx/5xx from one node, try next one
+    } catch (error) {
+      console.warn(`Jina node ${node} error:`, error)
+    }
   }
-  else {
-    console.error(`get content from jina failed: ${response.statusText} ${url}`)
-    return ''
-  }
+
+  // If all nodes failed
+  console.error(`All Jina nodes failed for ${url}`)
+  breakerState.jinaFailures++
+  return ''
 }
 
 async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, FIRECRAWL_KEY?: string) {
+  if (breakerState.firecrawlFailures >= BREAKER_THRESHOLD) {
+    console.warn('Firecrawl circuit breaker open - skipping request')
+    return ''
+  }
+
   const firecrawlHeaders: HeadersInit = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${FIRECRAWL_KEY}`,
@@ -57,14 +106,21 @@ async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown',
       exclude_tags: selector?.exclude ? [selector.exclude] : undefined,
     }),
   })
-  const result = await response.json() as { success: boolean, data: Record<string, string> }
-  if (result.success) {
-    return result.data[format] || ''
+  
+  if (response.ok) {
+    breakerState.firecrawlFailures = 0 // Reset on success
+    const result = await response.json() as { success: boolean, data: Record<string, string> }
+    if (result.success) {
+      return result.data[format] || ''
+    }
   }
-  else {
-    console.error(`get content from firecrawl failed: ${response.statusText} ${url}`)
-    return ''
+  
+  console.error(`get content from firecrawl failed: ${response.statusText} ${url}`)
+  if (response.status === 402 || response.status === 429) {
+    breakerState.firecrawlFailures++
+    console.warn(`Firecrawl failure count: ${breakerState.firecrawlFailures}`)
   }
+  return ''
 }
 
 export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {

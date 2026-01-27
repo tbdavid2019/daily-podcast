@@ -36,6 +36,36 @@ const retryConfig: WorkflowStepConfig = {
   timeout: '3 minutes',
 }
 
+function createSubrequestLogger() {
+  let count = 0
+  const logSubrequest = (kind: string, details: Record<string, unknown>, force = false) => {
+    count += 1
+    if (force || kind !== 'fetch' || count <= 20 || count % 10 === 0) {
+      console.info('subrequest', { count, kind, ...details })
+    }
+  }
+  const wrapFetch = (originalFetch: typeof fetch) => async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof Request
+        ? input.url
+        : String(input)
+    const method = init?.method || (input instanceof Request ? input.method : 'GET')
+    logSubrequest('fetch', { method, url })
+    return originalFetch(input, init)
+  }
+  const checkpoint = (label: string) => {
+    console.info('subrequest checkpoint', { label, count })
+  }
+  const logKv = (action: 'get' | 'put' | 'delete' | 'list' | 'getWithMetadata', key?: string) => {
+    const detail: Record<string, unknown> = {}
+    if (key)
+      detail.key = key
+    logSubrequest(`kv.${action}`, detail, true)
+  }
+  return { wrapFetch, checkpoint, logKv, getCount: () => count }
+}
+
 // 每輪 workflow 的故事與音訊配置限制
 const SOURCE_PRIORITY: readonly string[] = [
   'hacker-news',
@@ -95,6 +125,28 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     console.info('trigged event: PodcastScriptWorkflow', event)
 
+    const subrequestLogger = createSubrequestLogger()
+    const originalFetch = globalThis.fetch.bind(globalThis)
+    globalThis.fetch = subrequestLogger.wrapFetch(originalFetch)
+    subrequestLogger.checkpoint('workflow start')
+
+    const kvGet = async <T = string | null>(key: string, type?: 'text' | 'json' | 'arrayBuffer' | 'stream') => {
+      subrequestLogger.logKv('get', key)
+      return this.env.HACKER_NEWS_KV.get(key, type as any) as Promise<T | null>
+    }
+    const kvPut = async (key: string, value: string | ArrayBuffer | ArrayBufferView | ReadableStream, options?: KVNamespacePutOptions) => {
+      subrequestLogger.logKv('put', key)
+      return this.env.HACKER_NEWS_KV.put(key, value, options)
+    }
+    const kvDelete = async (key: string) => {
+      subrequestLogger.logKv('delete', key)
+      return this.env.HACKER_NEWS_KV.delete(key)
+    }
+    const kvList = async (prefix: string, cursor?: string) => {
+      subrequestLogger.logKv('list', prefix)
+      return this.env.HACKER_NEWS_KV.list({ prefix, cursor })
+    }
+
     const runEnv = this.env.WORKER_ENV || 'production'
     const params = event.payload || {}
     const force = Boolean(params.force)
@@ -145,9 +197,27 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // New Script Key: script:{env}:{variant}:{date}
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
 
+    if (force) {
+      await step.do('force clear script cache', retryConfig, async () => {
+        await kvDelete(scriptKey)
+        await kvDelete(rawContentKey)
+
+        const prefix = `${rawContentKey}:story-contents:`
+        let cursor: string | undefined
+        do {
+          const listResult = await kvList(prefix, cursor)
+          if (listResult.keys.length) {
+            await Promise.all(listResult.keys.map((entry) => kvDelete(entry.name)))
+          }
+          cursor = listResult.list_complete ? undefined : listResult.cursor
+        } while (cursor)
+      })
+      subrequestLogger.checkpoint('after force clear script cache')
+    }
+
     // Check if script already exists to prevent duplicate processing
     const existingScript = await step.do('check existing script', retryConfig, async () => {
-      const existing = await this.env.HACKER_NEWS_KV.get(scriptKey)
+      const existing = await kvGet(scriptKey)
       if (existing) {
         console.info('Script already exists for date:', displayDate, 'Key:', scriptKey)
         return JSON.parse(existing) as GeneratedScriptData
@@ -155,8 +225,11 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return null
     })
 
+    subrequestLogger.checkpoint('after check existing script')
+
     if (existingScript && !force) {
       console.info('Skipping workflow - script already exists for date:', displayDate)
+      subrequestLogger.checkpoint('skip existing script')
       return existingScript
     }
 
@@ -227,7 +300,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const recentDates = getRecentDates(displayDate, 7)
     const recentScripts = await Promise.all(
-      recentDates.map((date) => this.env.HACKER_NEWS_KV.get(`script:${runEnv}:${variant}:${date}`, 'json')),
+      recentDates.map((date) => kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${date}`, 'json')),
     )
 
     const excludeRedditIds = new Set<string>()
@@ -263,6 +336,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return allStories as Story[]
     })
 
+    subrequestLogger.checkpoint('after get all stories')
+
     const storiesPerSource = stories.reduce<Record<string, number>>((acc, story) => {
       const source = story.source || 'unknown'
       acc[source] = (acc[source] || 0) + 1
@@ -286,8 +361,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       const stepName = `get ${source} story contents`
       const cacheKey = `${rawContentKey}:story-contents:${source}`
 
+      subrequestLogger.checkpoint(`before ${stepName}`)
       const contentsForSource = await step.do(stepName, retryConfig, async () => {
-        const cached = await this.env.HACKER_NEWS_KV.get(cacheKey)
+        const cached = await kvGet(cacheKey)
         if (cached) {
           try {
             const parsed = JSON.parse(cached) as Array<{ id: string, title: string, content: string, source?: string }>
@@ -330,7 +406,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
         if (contents.length > 0) {
           try {
-            await this.env.HACKER_NEWS_KV.put(cacheKey, JSON.stringify(contents), { expirationTtl: 60 * 60 * 24 })
+            await kvPut(cacheKey, JSON.stringify(contents), { expirationTtl: 60 * 60 * 24 })
             console.info(`cached story contents for ${source}`, { count: contents.length })
           }
           catch (error) {
@@ -340,6 +416,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
         return contents
       })
+
+      subrequestLogger.checkpoint(`after ${stepName}`)
 
       allStoryContents.push(...contentsForSource)
     }
@@ -403,6 +481,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       
       return summaries
     })
+
+    subrequestLogger.checkpoint('after summarize all stories')
 
     const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
@@ -477,6 +557,8 @@ ${fullContentString}
       return { title: object.title, dialogue: sanitizedDialogue } as PodcastScriptResponse
     })
 
+    subrequestLogger.checkpoint('after generate podcast script')
+
     console.info('podcast script line count', podcastScript.dialogue.length)
 
     await step.sleep('pause before blog content', breakTime)
@@ -494,6 +576,8 @@ ${fullContentString}
       return text
     })
 
+    subrequestLogger.checkpoint('after create blog content')
+
     await step.sleep('pause before intro content', breakTime)
 
     const introContent = await step.do('create intro content', retryConfig, async () => {
@@ -510,6 +594,8 @@ ${fullContentString}
       return text
     })
 
+    subrequestLogger.checkpoint('after create intro content')
+
     // Prepare complete data object
     const scriptData: GeneratedScriptData = {
       title: podcastScript.title,
@@ -523,11 +609,13 @@ ${fullContentString}
 
     // Save to KV
     await step.do('save script to kv', retryConfig, async () => {
-        await this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData), {
+        await kvPut(scriptKey, JSON.stringify(scriptData), {
             expirationTtl: 60 * 60 * 24 * 7 // Keep for 1 week
         })
         console.info(`✅ Script saved to KV: ${scriptKey}`)
     })
+
+    subrequestLogger.checkpoint('after save script to kv')
 
     // Trigger Audio Workflow
     await step.do('trigger audio workflow', retryConfig, async () => {
@@ -539,6 +627,8 @@ ${fullContentString}
         console.info('Triggering Audio Workflow from Script Workflow', audioParams)
         await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
     })
+
+    subrequestLogger.checkpoint('after trigger audio workflow')
 
     return scriptData
   }

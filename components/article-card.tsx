@@ -48,9 +48,9 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
           {showSummary && <p className="text-base py-4 text-zinc-500 font-normal">{summary}</p>}
         </CardTitle>
       </CardHeader>
-      <CardContent className="h-32">
+      <CardContent className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b">
         <AudioPlayer
-          className="w-full"
+          className="w-full py-4"
           style={{ '--media-primary-color': '#18181b', '--media-secondary-color': '#f2f2f3', '--media-accent-color': '#18181b' } as React.CSSProperties}
         >
           <audio
