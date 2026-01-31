@@ -904,13 +904,14 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
 
   // 選擇科技相關的熱門 subreddits
   // 調整順序：將較為專業/硬技術的版面放在前面，確保它們優先入選
+  // 選擇含金量高的技術討論版 (High Signal Technical Subreddits)
+  // 替換掉原本容易有政治口水或太淺的版面
   const subreddits = [
-    'programming',
-    'webdev',
-    'MachineLearning',
-    'artificial',
-    'startups',
-    'technology', // 放在最後，作為補充
+    'LocalLLaMA',        // AI/LLM 最前線，深度夠
+    'coding',            // 專注程式設計，無水文
+    'netsec',            // 網路安全 Hacker News 等級
+    'sysadmin',          // 系統管理實務
+    'dataengineering',   // 數據架構深度討論
   ]
 
   const politicalKeywords = [

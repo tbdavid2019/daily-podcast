@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **Reddit 來源優化**：全面替換來源為高含金量技術版面 (LocalLLaMA, coding, netsec, sysadmin, dataengineering)，移除政治相關與淺層討論版。
 - **Force 重新生成**：啟用 force 參數時會清除 script/content/story-contents 的 KV 快取，確保重跑會重新產生新標題與內容。
 - **Reddit 去重機制**：新增跨天排除（讀取近 7 天已播清單），避免熱門貼文連續出現。
 - **Reddit 討論串**：改抓取 Reddit comments JSON，摘要與腳本可讀到社群觀點。
