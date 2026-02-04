@@ -16,7 +16,7 @@ const breakerState = {
 const BREAKER_THRESHOLD = 2
 
 const SELF_HOSTED_JINA_NODES = [
-  'http://dns.aicreate360.com:8083', // Primary
+  'https://create360.ai', // Primary
   'http://git.glsoft.ai:8083',       // Secondary
 ]
 
