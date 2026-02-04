@@ -311,70 +311,88 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     console.info('[Reddit] Fetching article and comments')
 
     let article = ''
-    try {
-      console.info('[Reddit] Trying Jina for article:', story.url)
-      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
-      if (!article || article.trim().length < 50) {
-        throw new Error('Jina returned empty or too short content')
-      }
-      console.info(`[Reddit] Jina success - article length: ${article.length}`)
-    }
-    catch (jinaError) {
-      console.warn(`[Reddit] Jina failed for article: ${jinaError}`)
-      try {
-        console.info('[Reddit] Trying Firecrawl for article:', story.url)
-        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
-        if (!article || article.trim().length < 50) {
-          throw new Error('Firecrawl returned empty or too short content')
-        }
-        console.info(`[Reddit] Firecrawl success - article length: ${article.length}`)
-      }
-      catch (firecrawlError) {
-        console.error(`[Reddit] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
-        article = ''
-      }
-    }
-
     let comments = ''
+    let isSelfPost = false
+
+    // 1. 嘗試透過 JSON API 獲取內容 (如果是 Self Post) 與評論
+    // 這是比 Jina 更清晰的資料來源，特別是針對純文字討論
     const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
+    
     if (sourceUrl) {
       try {
-        const commentsUrl = `${sourceUrl}.json?sort=top&limit=30`
-        console.info('[Reddit] Fetching comments JSON:', commentsUrl)
-        const response = await fetch(commentsUrl, {
+        const redditJsonUrl = `${sourceUrl}.json?sort=top&limit=30`
+        console.info('[Reddit] Fetching JSON:', redditJsonUrl)
+        
+        const response = await fetch(redditJsonUrl, {
           headers: {
             'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
           },
         })
-        if (!response.ok) {
-          throw new Error(`comments fetch failed: ${response.status}`)
-        }
-        const json = await response.json() as any
-        const commentListing = Array.isArray(json) ? json[1]?.data?.children || [] : []
-        const commentLines = commentListing
-          .filter((item: any) => item?.kind === 't1' && item?.data?.body)
-          .map((item: any) => {
-            const body = item.data?.body || ''
-            const score = item.data?.score
-            const sanitizedBody = body.replace(/\s+/g, ' ').trim()
-            if (!sanitizedBody) return null
-            if (typeof score === 'number') {
-              return `- (${score}) ${sanitizedBody}`
+        
+        if (response.ok) {
+          const json = await response.json() as any
+          
+          // 處理文章本體 (Self Text)
+          const postData = Array.isArray(json) ? json[0]?.data?.children?.[0]?.data : null
+          if (postData) {
+            if (postData.is_self && postData.selftext) {
+              article = postData.selftext
+              isSelfPost = true
+              console.info(`[Reddit] Used selftext from JSON - length: ${article.length}`)
             }
-            return `- ${sanitizedBody}`
-          })
-          .filter(Boolean)
-          .slice(0, 20)
+          }
 
-        comments = commentLines.join('\n')
-        if (comments.trim().length < 30) {
-          throw new Error('Comments content too short')
+          // 處理評論
+          const commentListing = Array.isArray(json) ? json[1]?.data?.children || [] : []
+          const commentLines = commentListing
+            .filter((item: any) => item?.kind === 't1' && item?.data?.body)
+            .map((item: any) => {
+              const body = item.data?.body || ''
+              const score = item.data?.score
+              const sanitizedBody = body.replace(/\s+/g, ' ').trim()
+              if (!sanitizedBody) return null
+              if (typeof score === 'number') {
+                return `- (${score}) ${sanitizedBody}`
+              }
+              return `- ${sanitizedBody}`
+            })
+            .filter(Boolean)
+            .slice(0, 20)
+
+          comments = commentLines.join('\n')
+          if (comments.trim().length > 0) {
+             console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
+          }
         }
-        console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
+      } catch (error) {
+         console.warn(`[Reddit] JSON fetch failed: ${error}`)
       }
-      catch (commentsError) {
-        console.warn(`[Reddit] Failed to fetch comments: ${commentsError}`)
-        comments = ''
+    }
+
+    // 2. 如果 JSON 沒抓到文章內容 (例如是連結貼文，或 JSON 失敗)，則使用 Jina 抓取外部連結
+    if (!article && !isSelfPost && story.url) {
+      try {
+        console.info('[Reddit] Trying Jina for article:', story.url)
+        article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+        if (!article || article.trim().length < 50) {
+          throw new Error('Jina returned empty or too short content')
+        }
+        console.info(`[Reddit] Jina success - article length: ${article.length}`)
+      }
+      catch (jinaError) {
+        console.warn(`[Reddit] Jina failed for article: ${jinaError}`)
+        try {
+          console.info('[Reddit] Trying Firecrawl for article:', story.url)
+          article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
+          if (!article || article.trim().length < 50) {
+            throw new Error('Firecrawl returned empty or too short content')
+          }
+          console.info(`[Reddit] Firecrawl success - article length: ${article.length}`)
+        }
+        catch (firecrawlError) {
+          console.error(`[Reddit] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
+          article = ''
+        }
       }
     }
 
