@@ -23,6 +23,10 @@
     ]
   },
   "keep_vars": true,
+  // TTS 語速配置：1.0=正常, 1.3=快30%(預設), 1.5=快50%, 範圍 0.25-4.0
+  "vars": {
+    "AUDIO_SPEED": "1.3"
+  },
   "browser": {
     "binding": "BROWSER"
   },

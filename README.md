@@ -12,6 +12,8 @@
 
 ## 🆕 最近更新
 
+- **🎙️ OpenAI TTS 語速調整 (2026-02-05)**：新增 OpenAI TTS 的 `speed` 參數支援，預設語速調整為 **1.3 倍**（快 30%），大幅縮短播放時間。這讓文稿可以更長、內容更豐富，同時保持合理的播放時長。可透過 `AUDIO_SPEED` 環境變數自訂（範圍 0.25-4.0，建議 1.0-1.5）。
+- **🔧 Reddit Self Post 修復 (2026-02-05)**：移除了 `!postData.is_self` 過濾條件，解決 Reddit 返回 0 篇文章的問題。之前的邏輯會過濾掉所有純文字討論貼文，導致 r/sysadmin (10/10) 和 r/dataengineering (9/10) 的文章幾乎全部被排除。現在 self posts 可以透過 JSON API 正確提取 selftext 內容，大幅增加 Reddit 來源的文章數量與討論深度。
 - **Reddit 來源優化**：全面替換來源為高含金量技術版面 (LocalLLaMA, coding, netsec, sysadmin, dataengineering)，移除政治相關與淺層討論版。
 - **Force 重新生成**：啟用 force 參數時會清除 script/content/story-contents 的 KV 快取，確保重跑會重新產生新標題與內容。
 - **Reddit 去重機制**：新增跨天排除（讀取近 7 天已播清單），避免熱門貼文連續出現。

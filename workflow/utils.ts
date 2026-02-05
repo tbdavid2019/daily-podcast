@@ -994,7 +994,6 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
           const title = postData.title || ''
           const url = postData.url || ''
           return !postData.stickied // 排除置頂
-            && !postData.is_self // 盡量排除純文字討論，優先選有連結的文章 (視需求而定，若想要討論串可移除此行)
             && !postData.distinguished // 排除管理員發文
             && !postData.removed_by_category // 排除被移除的
             && url

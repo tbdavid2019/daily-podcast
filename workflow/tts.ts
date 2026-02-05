@@ -85,6 +85,7 @@ async function openaiTTS(text: string, gender: string, env: Env) {
     model,
     voice,
     input: text,
+    speed: Number(env.AUDIO_SPEED || 1.3), // 語速調整：1.0=正常, 1.3=快30%
   }
 
   if (env.OPENAI_TTS_INSTRUCTIONS) {
