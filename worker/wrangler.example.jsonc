@@ -1,0 +1,83 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "daily-podcast-worker",
+  "main": "./index.ts",
+  "compatibility_date": "2025-04-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "minify": true,
+  "assets": {
+    "directory": "./static"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": [
+      "30 0 * * *"
+    ]
+  },
+  "keep_vars": true,
+  "vars": {
+    // --- TTS Configuration (Gemini is default) ---
+    "TTS_PROVIDER": "gemini", // Options: gemini, openai, minimax, edge
+    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
+    "GEMINI_TTS_API_KEY": "Paste_Your_Gemini_API_Key_Here",
+
+    // --- Other Services ---
+    "HACKER_NEWS_WORKER_URL": "https://podcast.yourdomain.com",
+    "OPENAI_API_KEY": "Paste_Your_OpenAI_API_Key_Here",
+    "OPENAI_BASE_URL": "https://api.openai.com/v1", // or gemini proxy
+    "OPENAI_MAX_COMPLETION_TOKENS": "1000000",
+    "OPENAI_MAX_TOKENS": "1000000",
+    "OPENAI_MODEL": "gpt-4o",
+    "OPENAI_THINKING_MODEL": "gpt-4o",
+    
+    // OpenAI TTS Settings
+    "OPENAI_TTS_API_KEY": "Paste_Your_OpenAI_API_Key_Here",
+    "OPENAI_TTS_BASE_URL": "https://api.openai.com/v1",
+    "OPENAI_TTS_INSTRUCTIONS": "請使用自然親切和活潑愉快的語氣。",
+    "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
+    
+    "WORKER_ENV": "production",
+    
+    // --- Common Audio Settings ---
+    "AUDIO_SPEED": "1.3" // 1.0 = normal, 1.3 = faster
+    
+    // --- Voice Customization (Optional Overrides) ---
+    // "MAN_VOICE_ID": "Fenrir", // Gemini: Fenrir, OpenAI: onyx, Edge: zh-TW-YunJheNeural
+    // "WOMAN_VOICE_ID": "Leda"  // Gemini: Leda, OpenAI: nova, Edge: zh-TW-HsiaoChenNeural
+  },
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "workflows": [
+    {
+      "name": "daily-podcast-workflow",
+      "binding": "HACKER_NEWS_WORKFLOW",
+      "class_name": "PodcastScriptWorkflow"
+    },
+    {
+      "name": "daily-podcast-audio-workflow",
+      "binding": "HACKER_NEWS_AUDIO_WORKFLOW",
+      "class_name": "PodcastAudioWorkflow"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "HACKER_NEWS_KV",
+      "id": "eb092f9e71ec4c09afa31ffacf9beb40"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "HACKER_NEWS_R2",
+      "bucket_name": "hacker-news"
+    }
+  ]
+}

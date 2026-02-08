@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
-import synthesize from './tts'
+import synthesize, { pcmToWav } from './tts'
 import type { GeneratedScriptData, WorkflowParams } from './types'
 
 interface Env extends CloudflareEnv {
@@ -19,6 +19,9 @@ interface Env extends CloudflareEnv {
   // 新增時區配置
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
+  // Gemini TTS
+  GEMINI_TTS_API_KEY?: string
+  GEMINI_TTS_MODEL?: string
 }
 
 const retryConfig: WorkflowStepConfig = {
@@ -30,7 +33,7 @@ const retryConfig: WorkflowStepConfig = {
   timeout: '3 minutes',
 }
 
-const MAX_TTS_SEGMENT_CHARS = 260
+const MAX_TTS_SEGMENT_CHARS = 400
 const TTS_RETRY_LIMIT = 3
 const TTS_RETRY_BASE_DELAY_MS = 500
 const TTS_RATE_LIMIT_DELAY_MS = 400
@@ -86,6 +89,53 @@ function chunkDialogueText(text: string, maxChars = MAX_TTS_SEGMENT_CHARS) {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+/**
+ * Combines multiple audio buffers into one.
+ * Handles WAV format specifically by stripping headers and concatenating PCM data.
+ * For other formats (like MP3), it performs simple concatenation.
+ */
+function combineAudioBuffers(buffers: Uint8Array[], isWav: boolean): Uint8Array {
+  if (buffers.length === 0) return new Uint8Array(0)
+
+  if (isWav) {
+    // WAV concatenation: Strip 44-byte header from each, concat PCM, then wrapper with new header
+    // 1. Calculate total PCM length
+    let totalPcmLength = 0
+    const pcmParts: Uint8Array[] = []
+
+    for (const buffer of buffers) {
+      if (buffer.byteLength > 44) {
+        // Strip 44-byte WAV header
+        const pcmPart = buffer.subarray(44)
+        pcmParts.push(pcmPart)
+        totalPcmLength += pcmPart.byteLength
+      }
+    }
+
+    // 2. Concatenate PCM data
+    const combinedPcm = new Uint8Array(totalPcmLength)
+    let offset = 0
+    for (const part of pcmParts) {
+      combinedPcm.set(part, offset)
+      offset += part.byteLength
+    }
+
+    // 3. Create new WAV file with correct header
+    // pcmToWav returns ArrayBuffer, convert to Uint8Array
+    return new Uint8Array(pcmToWav(combinedPcm))
+  } else {
+    // Simple concatenation for MP3
+    const totalLength = buffers.reduce((total, buffer) => total + buffer.byteLength, 0)
+    const combined = new Uint8Array(totalLength)
+    let offset = 0
+    for (const buffer of buffers) {
+      combined.set(buffer, offset)
+      offset += buffer.byteLength
+    }
+    return combined
+  }
+}
+
 export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     console.info('trigged event: PodcastAudioWorkflow', event)
@@ -96,6 +146,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     // Handle variant/type mapping
     let variant = params.variant || params.type || 'hacker-news'
     if (variant === 'main') variant = 'hacker-news'
+
+    // Check if using Gemini TTS (which outputs WAV)
+    const isGeminiTTS = this.env.TTS_PROVIDER === 'gemini'
 
     // 時區處理邏輯
     const now = new Date()
@@ -109,17 +162,14 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
     
     // Output R2 Key
-    // Backward compatibility: if variant is hacker-news, use old path format if needed, 
-    // but typically we want: {date}/{env}/{variant}-{date}.mp3
-    // Old logic: `${displayDate.replaceAll('-', '/')}/${runEnv}/hacker-news-${displayDate}.mp3`
-    // Since variant defaults to hacker-news, this matches perfectly.
     const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
 
     console.info('Audio Generation Config:', {
       variant,
       displayDate,
       scriptKey,
-      podcastKey
+      podcastKey,
+      isGeminiTTS
     })
 
     // 1. Load Script from KV
@@ -152,7 +202,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     // 3. Process in batches
     // Increase batch size to reduce total workflow steps. 
     // Cloudflare limits subrequests per step, so 20 is safe (limit is 50).
-    const BATCH_SIZE = 20
+    const BATCH_SIZE = 5
     const batchKeys: string[] = []
 
     for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {
@@ -197,17 +247,11 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         }
 
         // Combine batch
-        const totalLength = segmentBuffers.reduce((total, buffer) => total + buffer.byteLength, 0)
-        const combined = new Uint8Array(totalLength)
-        let offset = 0
-        for (const buffer of segmentBuffers) {
-          combined.set(buffer, offset)
-          offset += buffer.byteLength
-        }
+        const combined = combineAudioBuffers(segmentBuffers, isGeminiTTS)
 
         // Upload batch to R2 (Temp)
         const key = `${displayDate.replaceAll('-', '/')}/${runEnv}/temp/${variant}-batch-${batchIndex}-${Date.now()}.mp3`
-        await this.env.HACKER_NEWS_R2.put(key, combined.buffer)
+        await this.env.HACKER_NEWS_R2.put(key, combined.buffer as ArrayBuffer)
         return key
       })
 
@@ -226,13 +270,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         buffers.push(new Uint8Array(arrayBuffer))
       }
 
-      const totalLength = buffers.reduce((total, buffer) => total + buffer.byteLength, 0)
-      const combined = new Uint8Array(totalLength)
-      let offset = 0
-      for (const buffer of buffers) {
-        combined.set(buffer, offset)
-        offset += buffer.byteLength
-      }
+      const combined = combineAudioBuffers(buffers, isGeminiTTS)
 
       await this.env.HACKER_NEWS_R2.put(podcastKey, combined.buffer)
 
@@ -241,7 +279,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
       return {
         segmentCount: allSegments.length,
-        totalLength,
+        totalLength: combined.byteLength,
       }
     })
 

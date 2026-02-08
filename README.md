@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🗣️ Edge TTS 台灣優化 (2026-02-05)**：預設 Edge TTS 聲線已從中國普通話切換為 **台灣繁體中文聲線**，採用最自然的 `zh-TW-HsiaoChenNeural` (女聲/曉臻) 與 `zh-TW-YunJheNeural` (男聲/雲哲)。生成的 Podcast 將擁有道地的台灣口音，聽感更親切自然。此功能為免費且預設啟用，無需額外設定。
 - **🎙️ OpenAI TTS 語速調整 (2026-02-05)**：新增 OpenAI TTS 的 `speed` 參數支援，預設語速調整為 **1.3 倍**（快 30%），大幅縮短播放時間。這讓文稿可以更長、內容更豐富，同時保持合理的播放時長。可透過 `AUDIO_SPEED` 環境變數自訂（範圍 0.25-4.0，建議 1.0-1.5）。
 - **🔧 Reddit Self Post 修復 (2026-02-05)**：移除了 `!postData.is_self` 過濾條件，解決 Reddit 返回 0 篇文章的問題。之前的邏輯會過濾掉所有純文字討論貼文，導致 r/sysadmin (10/10) 和 r/dataengineering (9/10) 的文章幾乎全部被排除。現在 self posts 可以透過 JSON API 正確提取 selftext 內容，大幅增加 Reddit 來源的文章數量與討論深度。
 - **Reddit 來源優化**：全面替換來源為高含金量技術版面 (LocalLLaMA, coding, netsec, sysadmin, dataengineering)，移除政治相關與淺層討論版。
@@ -22,6 +23,8 @@
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
 - **爬蟲熔斷機制**：針對 Jina / Firecrawl 增加錯誤計數熔斷機制。當連續 2 次遇到 402 (Payment Required) 或 429 (Too Many Requests) 錯誤時，自動暫停後續請求，避免大量無效 subrequest 導致 Workflow 崩潰。
+- **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用高品質的 **Fenrir (男)** 與 **Leda (女)** 聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需配置 `GEMINI_TTS_API_KEY`。此功能提供更自然的語音合成效果，且可作為 OpenAI TTS 的替代方案。
+- **TTS 故障自動轉移 (Fallback) (2026-02-08)**：實作 TTS 容錯機制。當主選的 TTS 服務商（如 Gemini/OpenAI）發生錯誤時，系統會自動降級並切換至免費的 **Edge TTS** 繼續生成，確保 Podcast 每日更新不中斷。
 - **自建 Jina Reader 支援**：支援配置多個自建 Jina Reader 節點（Primary/Secondary），優先使用自建節點以節省額度並提高穩定性。
 
 ---
@@ -113,6 +116,13 @@ pnpm install
 ```
 *依據提示輸入 API Key 與相關設定即可。*
 
+或者，您可以手動複製範例設定檔：
+
+```bash
+cp worker/wrangler.example.jsonc worker/wrangler.jsonc
+# 然後編輯 worker/wrangler.jsonc 填入您的 API Key
+```
+
 ### 4. 部署到 Cloudflare
 設定完成後，只需兩行指令即可部署：
 
@@ -138,6 +148,38 @@ npx wrangler tail daily-podcast-worker
 關於 **天數限制 (Keep Days)**、**詳細環境變數說明**、**自訂排程邏輯** 等進階設定，請務必閱讀：
 
 👉 **[詳細配置指南 (CONFIG-GUIDE.md)](docs/CONFIG-GUIDE.md)**
+
+---
+
+## 🎧 語音合成設定 (TTS Configuration)
+
+本專案支援多種 TTS 服務商，透過設定環境變數 `TTS_PROVIDER` 切換：
+
+| 服務商 (Provider) | 設定值 (`TTS_PROVIDER`) | 必填變數 (Required Vars) | 說明 |
+| :--- | :--- | :--- | :--- |
+| **Gemini** (推薦) | `gemini` | `GEMINI_TTS_API_KEY` | 使用 Google Gemini 2.5 Flash 生成高品質中文語音 (Fenrir/Leda)。 |
+| **OpenAI** | `openai` | `OPENAI_TTS_API_KEY` (或 `OPENAI_API_KEY`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
+| **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_KEY` | 使用 Minimax 語音模型。 |
+| **Edge TTS** (預設) | `edge` (或留空) | 無 | 使用微軟免費 Edge TTS，台灣腔調優化 (zh-TW-HsiaoChenNeural)。 |
+
+### Gemini TTS 設定範例
+
+若要使用 Gemini TTS，請在 `wrangler.jsonc` 或環境變數中設定：
+
+```jsonc
+{
+  "vars": {
+    "TTS_PROVIDER": "gemini",
+    "GEMINI_TTS_API_KEY": "你的_Google_AI_Studio_API_Key",
+    // 預設使用 gemini-2.5-flash-preview-tts，可選
+    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts" 
+  }
+}
+```
+
+### 🛡️ 自動故障轉移 (Fallback Mechanism)
+
+若配置的付費 TTS 服務商（如 `gemini`, `openai`, `minimax`）發生錯誤（例如額度用盡、API 異常或網路問題），系統會自動捕捉錯誤並**降級切換至免費的 Edge TTS**，確保 Podcast 音檔能順利生成，不會因為單一服務商故障而中斷流程。
 
 ---
 
