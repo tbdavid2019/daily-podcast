@@ -69,8 +69,8 @@ async function geminiTTS(text: string, gender: string, env: Env) {
   const model = env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  // Fenrir (Male) / Leda (Female)
-  const voiceName = gender === '男' ? 'Fenrir' : 'Leda';
+  // Fenrir (Male) / Leda (Female) - Defaulting to Puck for male as requested
+  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Puck') : (env.WOMAN_VOICE_ID || 'Leda');
 
   const payload = {
     contents: [{ parts: [{ text }] }],

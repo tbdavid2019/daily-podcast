@@ -172,10 +172,24 @@ npx wrangler tail daily-podcast-worker
     "TTS_PROVIDER": "gemini",
     "GEMINI_TTS_API_KEY": "你的_Google_AI_Studio_API_Key",
     // 預設使用 gemini-2.5-flash-preview-tts，可選
-    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts" 
+    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
+    // 自訂 Gemini 音色 (可選)
+    "MAN_VOICE_ID": "Puck",   // 男聲預設為 Puck (更渾厚)
+    "WOMAN_VOICE_ID": "Leda"  // 女聲預設為 Leda
   }
 }
 ```
+
+### 🗣️ 音色對照表 (Voice ID)
+
+| 提供商 | 性別 | ID (預設) | 其他可用選項 |
+| :--- | :--- | :--- | :--- |
+| **Gemini** | 男 (Male) | `Puck` | `Fenrir` (舊預設), `Zephyr`, `Charon` |
+| **Gemini** | 女 (Female) | `Leda` | `Kore`, `Aoede` |
+| **Edge** | 男 (Male) | `zh-TW-YunJheNeural` | `zh-CN-YunxiNeural`, `en-US-ChristopherNeural` |
+| **Edge** | 女 (Female) | `zh-TW-HsiaoChenNeural` | `zh-CN-XiaoxiaoNeural`, `en-US-JennyNeural` |
+| **OpenAI** | 男 (Male) | `onyx` | `echo`, `fable` |
+| **OpenAI** | 女 (Female) | `nova` | `alloy`, `shimmer` |
 
 ### 🛡️ 自動故障轉移 (Fallback Mechanism)
 
