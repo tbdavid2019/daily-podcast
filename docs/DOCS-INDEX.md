@@ -122,6 +122,18 @@
 
 **何時閱讀**: 想了解專案演進、查看新功能、追蹤 bug 修復
 
+#### [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - RSS 日期排序修正記錄
+**適合對象**: 播客維護者、RSS Feed 維護者、開發者
+
+**內容概覽**:
+- 📅 RSS 排序問題根因
+- 🛠️ `pubDate` 與 `enclosure` 穩定化修正
+- 🔧 Workflow `generatedAt` 補強
+- ☁️ Cloudflare 部署紀錄
+- ✅ 驗證建議與後續改善方向
+
+**何時閱讀**: Pocket Casts 等客戶端排序異常、排查 RSS 更新判定、追蹤本次修正內容
+
 ---
 
 ## 🎯 快速查找指南
@@ -147,6 +159,11 @@
 1. 參考 [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md)
 2. 使用驗證器檢查問題
 3. 按照修復步驟操作
+
+#### 🗓️ 排查 RSS 日期排序
+1. 參考 [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md)
+2. 檢查 RSS item 的 `pubDate` 是否穩定
+3. 手動 refresh 播客 App 驗證排序結果
 
 #### ❓ 解決問題
 1. 先查看 [README.md](../README.md) 的「常見問題」
@@ -175,8 +192,11 @@ README.md (主入口)
     │       ├─ Podcast namespace
     │       └─ 驗證方法
     │
-    └─► CHANGELOG-新聞來源擴充.md (更新記錄)
-            └─ 版本歷史
+    ├─► CHANGELOG-新聞來源擴充.md (更新記錄)
+    │       └─ 版本歷史
+    │
+    └─► CHANGELOG-RSS-排序修正.md (RSS 排序修正)
+            └─ 日期排序與部署紀錄
 ```
 
 ---
@@ -196,12 +216,14 @@ README.md (主入口)
 2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置系統
 3. [SECURITY.md](./SECURITY.md) - 安全最佳實踐
 4. [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本歷史
+5. [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - RSS 排序修正
 
 ### 🎙️ 播客製作者
 重點閱讀：
 1. [README.md](../README.md) - 專案功能
 2. [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) - RSS 優化
 3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 內容配置
+4. [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - 排序異常排查
 
 ### 🛡️ 系統管理員
 重點閱讀：
@@ -230,4 +252,3 @@ README.md (主入口)
 ---
 
 **📖 開始閱讀**: [返回 README.md](../README.md)
-
