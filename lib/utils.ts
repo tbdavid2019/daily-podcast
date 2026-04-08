@@ -8,6 +8,14 @@ export function cn(...inputs: ClassValue[]) {
 
 const ONE_DAY = 24 * 60 * 60 * 1000
 
+export function getArticleTimestamp(articleDate: string, fallback?: number) {
+  if (typeof fallback === 'number' && Number.isFinite(fallback)) {
+    return fallback
+  }
+
+  const parsed = Date.parse(`${articleDate}T00:00:00+08:00`)
+  return Number.isNaN(parsed) ? Date.now() : parsed
+}
 
 export function getPastDays(days: number, timezoneOffset: number = 8) {
   return Array.from({ length: days }, (_, index) => {
@@ -50,7 +58,7 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
     return {
         title: finalTitle,
         date: data.displayDate,
-        updatedAt: Date.now(), // Use current time or retrieval time
+        updatedAt: getArticleTimestamp(data.displayDate, data.generatedAt),
         introContent: data.introContent,
         blogContent: data.blogContent,
         podcastContent: podcastContent,

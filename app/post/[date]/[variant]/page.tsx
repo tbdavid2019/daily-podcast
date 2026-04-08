@@ -3,34 +3,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { notFound } from 'next/navigation'
 import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
+import { mapScriptToArticle } from '@/lib/utils'
 
 export const revalidate = 3600
-
-// Helper to map new script data to Article interface
-function mapScriptToArticle(data: any, date: string, runEnv: string, variant: string): any {
-    if (!data) return null;
-    
-    // Construct audio path based on new workflow convention
-    // Path: {yyyy}/{mm}/{dd}/{env}/{variant}-{date}.mp3
-    const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
-
-    // Format dialogue as string for the frontend
-    const podcastContent = Array.isArray(data.dialogue) 
-        ? data.dialogue.map((line: any) => `${line.speaker}: ${line.text}`).join('\n\n')
-        : data.dialogue
-
-    return {
-        title: `David888 Daily ${data.displayDate} (${variant})`, 
-        date: data.displayDate,
-        updatedAt: Date.now(),
-        introContent: data.introContent,
-        blogContent: data.blogContent,
-        podcastContent: podcastContent,
-        stories: data.stories || [],
-        audio: audioPath,
-        variant: variant
-    }
-}
 
 // 生成页面的元数据
 export async function generateMetadata({ params }: { params: Promise<{ date: string, variant: string }> }): Promise<Metadata> {
@@ -46,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
   let post: any = null
   
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, date, runEnv, variant)
+      post = mapScriptToArticle(scriptData, runEnv, variant)
   }
 
   if (!post) {
@@ -90,7 +65,7 @@ export default async function PostVariantPage({ params }: { params: Promise<{ da
   let post: any = null
   
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, date, runEnv, variant)
+      post = mapScriptToArticle(scriptData, runEnv, variant)
   }
 
   if (!post) {

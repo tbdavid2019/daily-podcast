@@ -4,7 +4,7 @@ import markdownit from 'markdown-it'
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
-import { getPastDays, mapScriptToArticle } from '@/lib/utils'
+import { getArticleTimestamp, getPastDays, mapScriptToArticle } from '@/lib/utils'
 
 const md = markdownit()
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
@@ -79,6 +79,7 @@ export async function GET() {
     const finalContent = `<div>${blogContentHtml}<hr/>${linkContent}</div>`
 
     const description = ensureDescriptionLength(post.introContent || post.podcastContent || '')
+    const updatedAt = getArticleTimestamp(post.date, post.updatedAt)
 
     feed.addItem({
       title: post.title || '',
@@ -86,9 +87,9 @@ export async function GET() {
       content: finalContent,
       url: `${baseUrl}/post/${post.date}`,
       guid: `${baseUrl}/post/${post.date}`,
-      date: new Date(post.updatedAt || post.date),
+      date: new Date(updatedAt),
       enclosure: {
-        url: `${env.NEXT_STATIC_HOST}/${post.audio}?t=${post.updatedAt}`,
+        url: `${env.NEXT_STATIC_HOST}/${post.audio}?t=${updatedAt}`,
         type: 'audio/mpeg',
         size: audioInfo?.size,
       },

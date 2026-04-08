@@ -605,6 +605,7 @@ ${fullContentString}
       stories: stories as Story[],
       storySummaries,
       displayDate,
+      generatedAt: Date.now(),
     }
 
     // Save to KV

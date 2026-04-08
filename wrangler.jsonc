@@ -5,6 +5,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "daily-podcast",
+  "account_id": "379570860738dd1757ba7f67ef2bdffe",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-04-12",
   "compatibility_flags": [

@@ -43,4 +43,5 @@ export interface GeneratedScriptData {
   stories: Story[]
   storySummaries: string[]
   displayDate: string
+  generatedAt?: number
 }
