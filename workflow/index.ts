@@ -625,8 +625,20 @@ ${fullContentString}
             variant: variant,
             phase: 'audio'
         }
+        // 寫入 KV 鎖，與 worker/index.ts runWorkflow 使用相同的 key 格式，防止重複觸發
+        const audioParamsKey = JSON.stringify({ variant, phase: 'audio', today: displayDate })
+        const audioRunningKey = `workflow:running:${audioParamsKey}`
+        const existingAudioRun = await this.env.HACKER_NEWS_KV.get(audioRunningKey)
+        if (existingAudioRun) {
+            console.warn('Audio workflow already running, skipping duplicate trigger', JSON.parse(existingAudioRun))
+            return
+        }
         console.info('Triggering Audio Workflow from Script Workflow', audioParams)
-        await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
+        const audioInstance = await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
+        await this.env.HACKER_NEWS_KV.put(audioRunningKey, JSON.stringify({
+            id: audioInstance.id,
+            params: audioParams,
+        }), { expirationTtl: 300 }) // 5 分鐘後過期
     })
 
     subrequestLogger.checkpoint('after trigger audio workflow')

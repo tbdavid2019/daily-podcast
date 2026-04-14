@@ -197,7 +197,7 @@ export default {
     const url = new URL(request.url)
 
     // Handle workflow trigger endpoint
-    if (url.pathname === '/workflow' || request.method === 'POST') {
+    if (url.pathname === '/workflow' && request.method === 'POST') {
       return this.runWorkflow(request, env, ctx)
     }
     

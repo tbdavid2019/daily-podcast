@@ -134,6 +134,17 @@
 
 **何時閱讀**: Pocket Casts 等客戶端排序異常、排查 RSS 更新判定、追蹤本次修正內容
 
+#### [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md) - TTS 引擎與 Workflow 穩定性修復記錄
+**適合對象**: 部署與維護者、開發者
+
+**內容概覽**:
+- 🎤 TTS 引擎模型代碼校正
+- 🔐 API Key 安全更新紀錄
+- 🔁 Workflow 重複觸發機制修復 (KV Lock)
+- 🌐 API 路由精確化修正
+
+**何時閱讀**: 遇到 TTS 合成錯誤、Workflow 重複執行問題、或更新 API Key 配置時
+
 ---
 
 ## 🎯 快速查找指南
@@ -165,6 +176,11 @@
 2. 檢查 RSS item 的 `pubDate` 是否穩定
 3. 手動 refresh 播客 App 驗證排序結果
 
+#### 🎤 排查 TTS 或 Workflow 啟動問題
+1. 參考 [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md)
+2. 檢查 `wrangler.jsonc` 中的模型代碼與 API Key
+3. 驗證 KV 鎖定機制與路由設定
+
 #### ❓ 解決問題
 1. 先查看 [README.md](../README.md) 的「常見問題」
 2. 再查看對應主題的專門文檔
@@ -195,8 +211,11 @@ README.md (主入口)
     ├─► CHANGELOG-新聞來源擴充.md (更新記錄)
     │       └─ 版本歷史
     │
-    └─► CHANGELOG-RSS-排序修正.md (RSS 排序修正)
-            └─ 日期排序與部署紀錄
+    ├─► CHANGELOG-RSS-排序修正.md (RSS 排序修正)
+    │       └─ 日期排序與部署紀錄
+    │
+    └─► CHANGELOG-TTS-與-Workflow-修正.md (TTS 與 Workflow 修正)
+            └─ TTS 引擎與 Workflow 穩定性
 ```
 
 ---
@@ -217,6 +236,7 @@ README.md (主入口)
 3. [SECURITY.md](./SECURITY.md) - 安全最佳實踐
 4. [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本歷史
 5. [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - RSS 排序修正
+6. [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md) - TTS 與 Workflow 修正
 
 ### 🎙️ 播客製作者
 重點閱讀：
