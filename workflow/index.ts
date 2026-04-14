@@ -559,7 +559,19 @@ ${fullContentString}
 
     subrequestLogger.checkpoint('after generate podcast script')
 
-    console.info('podcast script line count', podcastScript.dialogue.length)
+    if (!podcastScript.title || podcastScript.title.length < 5) {
+      console.info('Title missing or too short, triggering dedicated beautification step')
+      podcastScript.title = await step.do('beautify missing title', retryConfig, async () => {
+        const { text } = await generateText({
+          model: openai(this.env.OPENAI_MODEL!),
+          system: `你是 ${podcastTitle} 的總編輯。請為今天的播客內容生成一個極具吸引力、驚悚且符合 SEO 的標題。\n格式："[日期] [驚悚標題1]、[驚悚標題2]"。\n例如："2026-01-17 網路大崩潰前兆？X 平台無預警死機、手機輻射正在殺死我們？"`,
+          prompt: `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
+        })
+        return text.trim().replace(/^"|"$/g, '')
+      })
+    }
+
+    console.info('podcast script line count', podcastScript.dialogue.length, 'title:', podcastScript.title)
 
     await step.sleep('pause before blog content', breakTime)
     

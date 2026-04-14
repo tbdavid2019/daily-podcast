@@ -51,8 +51,8 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
           .join(' | ')
       
       finalTitle = storyTitles 
-          ? `David888 Daily ${data.displayDate} | ${storyTitles}`
-          : `David888 Daily ${data.displayDate}`
+          ? `[備用標題] ${data.displayDate} | ${storyTitles}`
+          : `[備用標題] ${data.displayDate}`
     }
 
     return {
