@@ -46,6 +46,12 @@ export const metadata: Metadata = {
   themeColor: '#111827',
 }
 
+import { Inter } from 'next/font/google'
+import { BingBackground } from '@/components/bing-background'
+import { BgToggle } from '@/components/bg-toggle'
+
+const inter = Inter({ subsets: ['latin'] })
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -54,7 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className="antialiased"
+        className={`${inter.className} antialiased`}
       >
         <Script
           id="adsbygoogle-init"
@@ -64,7 +70,10 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
 
-        <div className="flex justify-center min-h-screen">
+        <BingBackground />
+        <BgToggle />
+
+        <div className="flex justify-center min-h-screen relative">
             {/* Left Sidebar - PC Only */}
             <aside className="hidden xl:block w-[160px] sticky top-4 h-fit pt-20 mr-4">
                 <div className="text-xs text-center text-gray-400 mb-2">Advertisement</div>
@@ -72,29 +81,29 @@ export default function RootLayout({
             </aside>
 
             {/* Main Content */}
-            <div className="w-full max-w-3xl flex-shrink-0">
+            <div className="w-full max-w-3xl flex-shrink-0 z-10">
                 <header className="max-w-3xl mx-auto p-4 py-8">
                   <div className="flex items-center justify-start">
-                    <Link href="/" title="Home">
-                      <h1 className="text-2xl font-bold text-zinc-800">{podcastTitle}</h1>
+                    <Link href="/" title="Home" className="hover:opacity-80 transition-opacity">
+                      <h1 className="text-3xl font-black tracking-tight text-zinc-900 drop-shadow-sm">{podcastTitle}</h1>
                     </Link>
                     <a
                       href="/rss.xml"
-                      className="text-orange-500 hover:text-orange-700 transition-colors ml-2"
+                      className="text-orange-500 hover:text-orange-600 transition-all hover:scale-110 ml-3"
                       title="RSS Feed"
                     >
-                      <Rss className="w-6 h-6 font-bold" />
+                      <Rss className="w-7 h-7 font-bold" />
                     </a>
                   </div>
-                  <p className="text-md text-gray-500 my-4">{podcastDescription}</p>
+                  <p className="text-lg text-gray-600/80 mt-4 leading-relaxed max-w-2xl font-medium">{podcastDescription}</p>
                 </header>
                 <main className="max-w-3xl mx-auto px-4">
-                  <div className="max-w-3xl mx-auto">
+                  <div className="max-w-3xl mx-auto space-y-6">
                     {children}
                   </div>
                 </main>
-                <footer className="max-w-3xl mx-auto p-4 py-8">
-                  <div className="text-sm text-gray-500">
+                <footer className="max-w-3xl mx-auto p-4 py-12 border-t mt-12 border-zinc-200/50">
+                  <div className="text-sm text-gray-400 font-medium">
                     Not affiliated with, endorsed by, or associated with Hacker News.
                     &quot;Hacker News&quot; is a registered trademark of Y Combinator.
                   </div>

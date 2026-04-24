@@ -73,6 +73,28 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-500;
   }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/40 backdrop-blur-md border border-white/20 shadow-lg;
+  }
+  .glass-dark {
+    @apply bg-zinc-900/40 backdrop-blur-md border border-white/10 shadow-lg;
+  }
+}
+
+@keyframes zoom-out {
+  from {
+    transform: scale(1.1);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.animate-zoom-out {
+  animation: zoom-out 20s ease-out forwards;
 }

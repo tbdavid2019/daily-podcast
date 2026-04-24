@@ -143,7 +143,15 @@
 - 🔁 Workflow 重複觸發機制修復 (KV Lock)
 - 🌐 API 路由精確化修正
 
-**何時閱讀**: 遇到 TTS 合成錯誤、Workflow 重複執行問題、或更新 API Key 配置時
+#### [CHANGELOG-Bing背景與Bento視覺優化.md](./CHANGELOG-Bing背景與Bento視覺優化.md) - 背景動畫與視覺升級記錄
+**適合對象**: 前端開發者、UI/UX 設計感興趣者
+
+**內容概覽**:
+- 🖼️ Bing 動態背景實作（Ken Burns 效果）
+- 🔘 右上角切換開關與 localStorage 持久化
+- ✨ Bento 風格視覺優化（毛玻璃、Inter 字體）
+
+**何時閱讀**: 想了解如何實現高質感的背景動畫，或需要參考 Bento 設計風格實作時。
 
 ---
 
@@ -214,8 +222,11 @@ README.md (主入口)
     ├─► CHANGELOG-RSS-排序修正.md (RSS 排序修正)
     │       └─ 日期排序與部署紀錄
     │
-    └─► CHANGELOG-TTS-與-Workflow-修正.md (TTS 與 Workflow 修正)
-            └─ TTS 引擎與 Workflow 穩定性
+    ├─► CHANGELOG-TTS-與-Workflow-修正.md (TTS 與 Workflow 修正)
+    │       └─ TTS 引擎與 Workflow 穩定性
+    │
+    └─► CHANGELOG-Bing背景與Bento視覺優化.md (視覺優化)
+            └─ 背景動畫與 Bento 風格實作
 ```
 
 ---
