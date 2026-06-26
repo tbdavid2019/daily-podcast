@@ -7,7 +7,6 @@ interface StoryFetchOptions {
   excludeRedditIds?: Set<string>
 }
 
-
 const breakerState = {
   jinaFailures: 0,
   firecrawlFailures: 0,
@@ -17,7 +16,8 @@ const BREAKER_THRESHOLD = 2
 
 const SELF_HOSTED_JINA_NODES = [
   'https://create360.ai', // Primary
-  'http://git.glsoft.ai:8083',       // Secondary
+  'http://git.glsoft.ai:8083', // Secondary
+  'http://60.248.142.126:8083', // Fallback
 ]
 
 async function getContentFromJina(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, JINA_KEY?: string) {
@@ -52,16 +52,16 @@ async function getContentFromJina(url: string, format: 'html' | 'markdown', sele
     try {
       const targetUrl = `${node}/${url}`
       console.info(`Trying Jina node: ${node}`)
-      
+
       // Use a timeout for self-hosted nodes to fail fast
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
 
       const response = await fetch(targetUrl, {
         headers: jinaHeaders,
-        signal: controller.signal
+        signal: controller.signal,
       })
-      
+
       clearTimeout(timeoutId)
 
       if (response.ok) {
@@ -69,10 +69,11 @@ async function getContentFromJina(url: string, format: 'html' | 'markdown', sele
         const text = await response.text()
         return text
       }
-      
+
       console.warn(`Jina node ${node} failed: ${response.statusText}`)
       // Don't break immediately on 4xx/5xx from one node, try next one
-    } catch (error) {
+    }
+    catch (error) {
       console.warn(`Jina node ${node} error:`, error)
     }
   }
@@ -106,7 +107,7 @@ async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown',
       exclude_tags: selector?.exclude ? [selector.exclude] : undefined,
     }),
   })
-  
+
   if (response.ok) {
     breakerState.firecrawlFailures = 0 // Reset on success
     const result = await response.json() as { success: boolean, data: Record<string, string> }
@@ -114,7 +115,7 @@ async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown',
       return result.data[format] || ''
     }
   }
-  
+
   console.error(`get content from firecrawl failed: ${response.statusText} ${url}`)
   if (response.status === 402 || response.status === 429) {
     breakerState.firecrawlFailures++
@@ -301,11 +302,11 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
 
     console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
 
-      return [
-        story.title ? `<title>${story.title}</title>` : '',
-        articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
-        commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
-      ].filter(Boolean).join('\n\n---\n\n')
+    return [
+      story.title ? `<title>${story.title}</title>` : '',
+      articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+      commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
+    ].filter(Boolean).join('\n\n---\n\n')
   }
   else if (story.source === 'reddit') {
     console.info('[Reddit] Fetching article and comments')
@@ -317,21 +318,21 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     // 1. 嘗試透過 JSON API 獲取內容 (如果是 Self Post) 與評論
     // 這是比 Jina 更清晰的資料來源，特別是針對純文字討論
     const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
-    
+
     if (sourceUrl) {
       try {
         const redditJsonUrl = `${sourceUrl}.json?sort=top&limit=30`
         console.info('[Reddit] Fetching JSON:', redditJsonUrl)
-        
+
         const response = await fetch(redditJsonUrl, {
           headers: {
             'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
           },
         })
-        
+
         if (response.ok) {
           const json = await response.json() as any
-          
+
           // 處理文章本體 (Self Text)
           const postData = Array.isArray(json) ? json[0]?.data?.children?.[0]?.data : null
           if (postData) {
@@ -350,7 +351,8 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
               const body = item.data?.body || ''
               const score = item.data?.score
               const sanitizedBody = body.replace(/\s+/g, ' ').trim()
-              if (!sanitizedBody) return null
+              if (!sanitizedBody)
+                return null
               if (typeof score === 'number') {
                 return `- (${score}) ${sanitizedBody}`
               }
@@ -361,11 +363,12 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
 
           comments = commentLines.join('\n')
           if (comments.trim().length > 0) {
-             console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
+            console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
           }
         }
-      } catch (error) {
-         console.warn(`[Reddit] JSON fetch failed: ${error}`)
+      }
+      catch (error) {
+        console.warn(`[Reddit] JSON fetch failed: ${error}`)
       }
     }
 
@@ -555,28 +558,29 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
   try {
     const rssUrl = 'https://www.producthunt.com/feed'
     console.info('[Product Hunt] Fetching RSS from:', rssUrl)
-    
+
     const response = await fetch(rssUrl, {
       headers: {
         'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
-      }
+      },
     })
-    
+
     if (response.ok) {
       const rssText = await response.text()
       const $ = cheerio.load(rssText, { xmlMode: true })
       const entries = $('entry')
-      
+
       console.info('[Product Hunt] Found RSS entries:', entries.length)
-      
+
       const rssStories: Story[] = entries.map((i: number, el: any) => {
         const $el = $(el)
         const title = $el.find('title').text().trim()
         const link = $el.find('link').attr('href')
         const content = $el.find('content').text()
         const id = $el.find('id').text()
-        
-        if (!title || !link) return null
+
+        if (!title || !link)
+          return null
 
         // 從 content 中嘗試提取描述 (通常是一段 HTML)
         const $content = cheerio.load(content)
@@ -593,19 +597,21 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
       }).get().filter(Boolean) as Story[]
 
       console.info(`[Product Hunt] RSS returned ${rssStories.length} valid stories`)
-      
+
       if (rssStories.length > 0) {
         // 隨機從前 10 名中挑選
         const pool = rssStories.slice(0, 10)
         const shuffled = pool.sort(() => 0.5 - Math.random())
-        
+
         console.info(`[Product Hunt RSS] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
         return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
       }
-    } else {
-        console.warn(`[Product Hunt] RSS Error ${response.status}: ${response.statusText}`)
     }
-  } catch (error) {
+    else {
+      console.warn(`[Product Hunt] RSS Error ${response.status}: ${response.statusText}`)
+    }
+  }
+  catch (error) {
     console.warn('[Product Hunt] RSS Fetch failed, falling back to scraping:', error)
   }
 
@@ -677,11 +683,11 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
   }).get().filter(Boolean) as Story[]
 
   console.info('Product Hunt stories processed:', stories.length)
-  
+
   // 隨機從前 10 名中挑選
   const pool = stories.slice(0, 10)
   const shuffled = pool.sort(() => 0.5 - Math.random())
-  
+
   console.info(`[Product Hunt Web] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
   return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
 }
@@ -715,36 +721,38 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
   try {
     const rssUrl = 'https://dev.to/feed'
     console.info('[Dev.to] Fetching RSS from:', rssUrl)
-    
+
     const response = await fetch(rssUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
-      }
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      },
     })
-    
+
     if (!response.ok) {
-       throw new Error(`RSS Error ${response.status}: ${response.statusText}`)
+      throw new Error(`RSS Error ${response.status}: ${response.statusText}`)
     }
 
     const rssText = await response.text()
-    
+
     const $ = cheerio.load(rssText, { xmlMode: true })
     const items = $('item')
-    
+
     console.info('[Dev.to] Found RSS items:', items.length)
-    
+
     const rssStories: Story[] = items.map((i: number, el: any) => {
-      if (i >= DEV_TO_CONFIG.MAX_ARTICLES * 2) return null // Optimization
-      
+      if (i >= DEV_TO_CONFIG.MAX_ARTICLES * 2)
+        return null // Optimization
+
       const $item = $(el)
       const title = $item.find('title').text()
       const link = $item.find('link').text()
       const author = $item.find('dc\\:creator').text() || $item.find('creator').text()
       // Use categories as description/tags
       const categories = $item.find('category').map((_: number, c: any) => $(c).text()).get().join(', ')
-      
-      if (!title || !link) return null
+
+      if (!title || !link)
+        return null
 
       // Filter logic
       if (DEV_TO_CONFIG.ENABLE_FILTER) {
@@ -753,7 +761,8 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
         const shouldFilter = DEV_TO_CONFIG.FILTER_KEYWORDS.some(keyword =>
           titleLower.includes(keyword) || descLower.includes(keyword),
         )
-        if (shouldFilter) return null
+        if (shouldFilter)
+          return null
       }
 
       return {
@@ -767,11 +776,12 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
     }).get().filter(Boolean) as Story[]
 
     console.info(`[Dev.to] RSS returned ${rssStories.length} valid stories`)
-    
+
     if (rssStories.length > 0) {
       return rssStories.slice(0, DEV_TO_CONFIG.MAX_ARTICLES)
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.warn('[Dev.to] RSS Fetch failed, falling back to scraping:', error)
   }
 
@@ -925,11 +935,11 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
   // 選擇含金量高的技術討論版 (High Signal Technical Subreddits)
   // 替換掉原本容易有政治口水或太淺的版面
   const subreddits = [
-    'LocalLLaMA',        // AI/LLM 最前線，深度夠
-    'coding',            // 專注程式設計，無水文
-    'netsec',            // 網路安全 Hacker News 等級
-    'sysadmin',          // 系統管理實務
-    'dataengineering',   // 數據架構深度討論
+    'LocalLLaMA', // AI/LLM 最前線，深度夠
+    'coding', // 專注程式設計，無水文
+    'netsec', // 網路安全 Hacker News 等級
+    'sysadmin', // 系統管理實務
+    'dataengineering', // 數據架構深度討論
   ]
 
   const politicalKeywords = [
@@ -965,7 +975,7 @@ export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FI
   const sortMethods = ['hot', 'rising', 'top']
   const selectedSort = sortMethods[Math.floor(Math.random() * sortMethods.length)]
   const timeQuery = selectedSort === 'top' ? '&t=day' : ''
-  
+
   console.info(`[Reddit] Fetching stories with sort: ${selectedSort}${timeQuery}`)
 
   for (const subreddit of subreddits) {
