@@ -17,11 +17,11 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
 
   const scriptKey = `script:${runEnv}:${variant}:${date}`
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-  
+
   let post: any = null
-  
+
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, runEnv, variant)
+    post = mapScriptToArticle(scriptData, runEnv, variant)
   }
 
   if (!post) {
@@ -63,9 +63,9 @@ export default async function PostVariantPage({ params }: { params: Promise<{ da
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
 
   let post: any = null
-  
+
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, runEnv, variant)
+    post = mapScriptToArticle(scriptData, runEnv, variant)
   }
 
   if (!post) {

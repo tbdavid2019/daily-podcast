@@ -1,11 +1,11 @@
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
+import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
 import { podcastTitle } from '@/config'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
-import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { getAllStories, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
@@ -151,12 +151,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const runEnv = this.env.WORKER_ENV || 'production'
     const params = event.payload || {}
     const force = Boolean(params.force)
-    
+
     // Handle variant/type mapping
     // type is an alias for variant (e.g. type='main' -> variant='hacker-news')
     let variant = params.variant || params.type || 'hacker-news'
-    if (variant === 'main') variant = 'hacker-news'
-    
+    if (variant === 'main')
+      variant = 'hacker-news'
+
     // 目前只支援 hacker-news，未來可擴充其他頻道邏輯
     if (variant !== 'hacker-news') {
       console.warn(`Variant ${variant} is not fully implemented yet, defaulting to logic for hacker-news but saving with variant key.`)
@@ -167,11 +168,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     // 時區處理邏輯 - 支援配置化時區
     const now = new Date()
-    const utcToday = now.toISOString().split('T')[0] // UTC 今天
-
     // 從環境變數讀取時區配置，預設為台北時間（UTC+8）
     const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
-    const timezoneName = this.env.TIMEZONE_NAME || 'Asia/Taipei'
 
     // 計算指定時區的時間
     const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
@@ -208,7 +206,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         do {
           const listResult = await kvList(prefix, cursor)
           if (listResult.keys.length) {
-            await Promise.all(listResult.keys.map((entry) => kvDelete(entry.name)))
+            await Promise.all(listResult.keys.map(entry => kvDelete(entry.name)))
           }
           cursor = listResult.list_complete ? undefined : listResult.cursor
         } while (cursor)
@@ -270,12 +268,11 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       : undefined
 
     const getStoryLimits = () => {
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const limits: Record<string, number> = {
         'hacker-news': 7,
         'reddit': 3,
         // 增加頻率：週一、週四抓 GitHub
-        'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0, 
+        'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0,
         // 增加頻率：週二、週五抓 Product Hunt
         'product-hunt': (dayOfWeek === 2 || dayOfWeek === 5) ? 2 : 0,
         // 週三維持 Dev.to
@@ -301,7 +298,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const recentDates = getRecentDates(displayDate, 7)
     const recentScripts = await Promise.all(
-      recentDates.map((date) => kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${date}`, 'json')),
+      recentDates.map(date => kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${date}`, 'json')),
     )
 
     const excludeRedditIds = new Set<string>()
@@ -464,22 +461,23 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         const storyTitles = allStoryContents.map(s => s.title)
         let foundByTitle = false
         for (let i = 0; i < storyTitles.length && !foundByTitle; i++) {
-           if (text.includes(storyTitles[i])) {
-              foundByTitle = true
-              // Simple split by title if found (simplified for brevity)
-           }
+          if (text.includes(storyTitles[i])) {
+            foundByTitle = true
+            // Simple split by title if found (simplified for brevity)
+          }
         }
-        
+
         if (!foundByTitle) {
           const textParts = text.split('---').filter(part => part.trim())
           if (textParts.length > 1) {
-               textParts.forEach(p => summaries.push(`<story>${p.trim()}</story>`))
-          } else {
-               summaries.push(`<story>${text}</story>`)
+            textParts.forEach(p => summaries.push(`<story>${p.trim()}</story>`))
+          }
+          else {
+            summaries.push(`<story>${text}</story>`)
           }
         }
       }
-      
+
       return summaries
     })
 
@@ -487,7 +485,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
-      const storiesPerTurn = 2.5 
+      const storiesPerTurn = 2.5
       const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 5
       const minTurns = Math.max(8, Math.ceil(stories.length / 3))
       const maxTurns = Math.min(35, Math.ceil(stories.length * 2))
@@ -575,7 +573,7 @@ ${fullContentString}
     console.info('podcast script line count', podcastScript.dialogue.length, 'title:', podcastScript.title)
 
     await step.sleep('pause before blog content', breakTime)
-    
+
     const blogContent = await step.do('create blog content', retryConfig, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const { text, usage, finishReason } = await generateText({
@@ -596,7 +594,7 @@ ${fullContentString}
     const introContent = await step.do('create intro content', retryConfig, async () => {
       const podcastDialogueLines = podcastScript.dialogue.map(line => `${line.speaker}：${line.text}`)
       const podcastContent = podcastDialogueLines.join('\n')
-      
+
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_MODEL!),
         system: introPrompt,
@@ -623,35 +621,35 @@ ${fullContentString}
 
     // Save to KV
     await step.do('save script to kv', retryConfig, async () => {
-        await kvPut(scriptKey, JSON.stringify(scriptData), {
-            expirationTtl: 60 * 60 * 24 * 7 // Keep for 1 week
-        })
-        console.info(`✅ Script saved to KV: ${scriptKey}`)
+      await kvPut(scriptKey, JSON.stringify(scriptData), {
+        expirationTtl: 60 * 60 * 24 * 7, // Keep for 1 week
+      })
+      console.info(`✅ Script saved to KV: ${scriptKey}`)
     })
 
     subrequestLogger.checkpoint('after save script to kv')
 
     // Trigger Audio Workflow
     await step.do('trigger audio workflow', retryConfig, async () => {
-        const audioParams: WorkflowParams = {
-            today: displayDate,
-            variant: variant,
-            phase: 'audio'
-        }
-        // 寫入 KV 鎖，與 worker/index.ts runWorkflow 使用相同的 key 格式，防止重複觸發
-        const audioParamsKey = JSON.stringify({ variant, phase: 'audio', today: displayDate })
-        const audioRunningKey = `workflow:running:${audioParamsKey}`
-        const existingAudioRun = await this.env.HACKER_NEWS_KV.get(audioRunningKey)
-        if (existingAudioRun) {
-            console.warn('Audio workflow already running, skipping duplicate trigger', JSON.parse(existingAudioRun))
-            return
-        }
-        console.info('Triggering Audio Workflow from Script Workflow', audioParams)
-        const audioInstance = await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
-        await this.env.HACKER_NEWS_KV.put(audioRunningKey, JSON.stringify({
-            id: audioInstance.id,
-            params: audioParams,
-        }), { expirationTtl: 300 }) // 5 分鐘後過期
+      const audioParams: WorkflowParams = {
+        today: displayDate,
+        variant,
+        phase: 'audio',
+      }
+      // 寫入 KV 鎖，與 worker/index.ts runWorkflow 使用相同的 key 格式，防止重複觸發
+      const audioParamsKey = JSON.stringify({ variant, phase: 'audio', today: displayDate })
+      const audioRunningKey = `workflow:running:${audioParamsKey}`
+      const existingAudioRun = await this.env.HACKER_NEWS_KV.get(audioRunningKey)
+      if (existingAudioRun) {
+        console.warn('Audio workflow already running, skipping duplicate trigger', JSON.parse(existingAudioRun))
+        return
+      }
+      console.info('Triggering Audio Workflow from Script Workflow', audioParams)
+      const audioInstance = await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
+      await this.env.HACKER_NEWS_KV.put(audioRunningKey, JSON.stringify({
+        id: audioInstance.id,
+        params: audioParams,
+      }), { expirationTtl: 300 }) // 5 分鐘後過期
     })
 
     subrequestLogger.checkpoint('after trigger audio workflow')

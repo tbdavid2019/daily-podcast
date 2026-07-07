@@ -10,9 +10,11 @@ const md = markdownit()
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
 const MAX_DESCRIPTION_LENGTH = 3800
 
-const ensureDescriptionLength = (value: string) => {
-  if (!value) return value
-  if (value.length <= MAX_DESCRIPTION_LENGTH) return value
+function ensureDescriptionLength(value: string) {
+  if (!value)
+    return value
+  if (value.length <= MAX_DESCRIPTION_LENGTH)
+    return value
   return `${value.slice(0, MAX_DESCRIPTION_LENGTH - 3).trimEnd()}...`
 }
 
@@ -54,7 +56,7 @@ export async function GET() {
       // Try fetching new script format first
       const scriptKey = `script:${runEnv}:${variant}:${day}`
       const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-      
+
       if (scriptData) {
         return mapScriptToArticle(scriptData, runEnv, variant)
       }
@@ -66,10 +68,10 @@ export async function GET() {
 
   for (const post of posts) {
     const audioInfo = await env.HACKER_NEWS_R2.head(post.audio)
-    
+
     // 如果音檔還沒上傳完成，暫時不顯示在 RSS 中，避免 YouTube 抓取失敗
     if (!audioInfo) {
-      console.log(`Audio not ready for ${post.title}, skipping`)
+      console.warn(`Audio not ready for ${post.title}, skipping`)
       continue
     }
 

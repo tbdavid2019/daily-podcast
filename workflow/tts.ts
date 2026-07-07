@@ -22,101 +22,101 @@ interface Env extends CloudflareEnv {
 
 function writeString(view: DataView, offset: number, string: string) {
   for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i));
+    view.setUint8(offset + i, string.charCodeAt(i))
   }
 }
 
 export function pcmToWav(pcmData: Uint8Array, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): ArrayBuffer {
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = pcmData.byteLength;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8
+  const blockAlign = (numChannels * bitsPerSample) / 8
+  const dataSize = pcmData.byteLength
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
 
   // RIFF chunk descriptor
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(view, 8, 'WAVE');
+  writeString(view, 0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeString(view, 8, 'WAVE')
 
   // fmt sub-chunk
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
+  writeString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true) // Subchunk1Size (16 for PCM)
+  view.setUint16(20, 1, true) // AudioFormat (1 for PCM)
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, byteRate, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bitsPerSample, true)
 
   // data sub-chunk
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataSize, true);
+  writeString(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
 
   // Write PCM data
-  const pcmView = new Uint8Array(buffer, 44);
-  pcmView.set(pcmData);
+  const pcmView = new Uint8Array(buffer, 44)
+  pcmView.set(pcmData)
 
-  return buffer;
+  return buffer
 }
 
 async function geminiTTS(text: string, gender: string, env: Env) {
-  const apiKey = env.GEMINI_TTS_API_KEY;
+  const apiKey = env.GEMINI_TTS_API_KEY
   if (!apiKey) {
-    throw new Error('Gemini TTS API key is missing (GEMINI_TTS_API_KEY)');
+    throw new Error('Gemini TTS API key is missing (GEMINI_TTS_API_KEY)')
   }
 
   // Use the model specified by user or fallback to standard flash
-  const model = env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const model = env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts'
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
   // Fenrir (Male) / Leda (Female) - Defaulting to Puck for male as requested
-  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Puck') : (env.WOMAN_VOICE_ID || 'Leda');
+  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Puck') : (env.WOMAN_VOICE_ID || 'Leda')
 
   const payload = {
     contents: [{ parts: [{ text }] }],
     generationConfig: {
-      responseModalities: ["AUDIO"],
+      responseModalities: ['AUDIO'],
       speechConfig: {
         voiceConfig: {
           prebuiltVoiceConfig: {
-            voiceName
-          }
-        }
-      }
-    }
-  };
+            voiceName,
+          },
+        },
+      },
+    },
+  }
 
   const res = await fetch(`${url}?key=${apiKey}`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload)
-  });
+    body: JSON.stringify(payload),
+  })
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch Gemini TTS audio: ${res.status} ${res.statusText} ${errorText}`);
+    const errorText = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch Gemini TTS audio: ${res.status} ${res.statusText} ${errorText}`)
   }
 
-  const data = await res.json() as any;
-  const base64Audio = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const data = await res.json() as any
+  const base64Audio = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data
 
   if (!base64Audio) {
-    throw new Error('Gemini TTS response missing audio data');
+    throw new Error('Gemini TTS response missing audio data')
   }
 
-  const binaryString = atob(base64Audio);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
+  const binaryString = atob(base64Audio)
+  const len = binaryString.length
+  const bytes = new Uint8Array(len)
   for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+    bytes[i] = binaryString.charCodeAt(i)
   }
 
   // API returns raw PCM (s16le, 24kHz, mono). Convert to WAV.
-  const wavBuffer = pcmToWav(bytes, 24000, 1, 16);
+  const wavBuffer = pcmToWav(bytes, 24000, 1, 16)
 
-  return new Blob([wavBuffer], { type: 'audio/wav' });
+  return new Blob([wavBuffer], { type: 'audio/wav' })
 }
 
 async function edgeTTS(text: string, gender: string, env: Env) {
@@ -212,29 +212,34 @@ async function openaiTTS(text: string, gender: string, env: Env) {
 }
 
 export default async function (text: string, gender: string, env: Env) {
-  let result: Blob | Promise<Blob>;
+  let result: Blob | Promise<Blob>
 
   try {
     if (env.TTS_PROVIDER === 'openai') {
-      result = await openaiTTS(text, gender, env);
-    } else if (env.TTS_PROVIDER === 'minimax') {
-      result = await minimaxTTS(text, gender, env);
-    } else if (env.TTS_PROVIDER === 'gemini') {
-      result = await geminiTTS(text, gender, env);
-    } else {
-      result = await edgeTTS(text, gender, env);
+      result = await openaiTTS(text, gender, env)
     }
-    return result;
-  } catch (error) {
+    else if (env.TTS_PROVIDER === 'minimax') {
+      result = await minimaxTTS(text, gender, env)
+    }
+    else if (env.TTS_PROVIDER === 'gemini') {
+      result = await geminiTTS(text, gender, env)
+    }
+    else {
+      result = await edgeTTS(text, gender, env)
+    }
+    return result
+  }
+  catch (error) {
     if (env.TTS_PROVIDER !== 'edge') {
-      console.warn(`TTS provider ${env.TTS_PROVIDER} failed, falling back to edge-tts`, error);
+      console.warn(`TTS provider ${env.TTS_PROVIDER} failed, falling back to edge-tts`, error)
       try {
-        return await edgeTTS(text, gender, env);
-      } catch (fallbackError) {
-        console.error('Fallback edge-tts also failed', fallbackError);
-        throw error; // Throw original error if fallback fails too
+        return await edgeTTS(text, gender, env)
+      }
+      catch (fallbackError) {
+        console.error('Fallback edge-tts also failed', fallbackError)
+        throw error // Throw original error if fallback fails too
       }
     }
-    throw error;
+    throw error
   }
 }

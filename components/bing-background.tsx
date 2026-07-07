@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export function BingBackground() {
@@ -13,7 +13,8 @@ export function BingBackground() {
     const saved = localStorage.getItem('bing-bg-enabled')
     if (saved !== null) {
       setIsEnabled(saved === 'true')
-    } else {
+    }
+    else {
       localStorage.setItem('bing-bg-enabled', 'true')
     }
 
@@ -32,11 +33,13 @@ export function BingBackground() {
         if (matches && matches.length > 0) {
           const randomUrl = matches[Math.floor(Math.random() * matches.length)]
           setImageUrl(randomUrl)
-        } else {
+        }
+        else {
           // Fallback
           setImageUrl('https://cn.bing.com/th?id=OHR.HathawayCottage_EN-US1795877015_UHD.jpg')
         }
-      } catch (error) {
+      }
+      catch (error) {
         console.error('Failed to fetch Bing wallpaper list:', error)
         setImageUrl('https://cn.bing.com/th?id=OHR.HathawayCottage_EN-US1795877015_UHD.jpg')
       }
@@ -47,21 +50,22 @@ export function BingBackground() {
     return () => window.removeEventListener('bing-bg-toggle', handleToggle)
   }, [])
 
-  if (!isEnabled) return null
+  if (!isEnabled)
+    return null
 
   return (
-    <div 
+    <div
       className={cn(
-        "fixed inset-0 -z-50 overflow-hidden transition-opacity duration-1000 ease-in-out",
-        isLoaded ? "opacity-100" : "opacity-0"
+        'fixed inset-0 -z-50 overflow-hidden transition-opacity duration-1000 ease-in-out',
+        isLoaded ? 'opacity-100' : 'opacity-0',
       )}
     >
       <img
         src={imageUrl}
         alt="Bing Wallpaper"
         className={cn(
-          "h-full w-full object-cover",
-          isLoaded && "animate-zoom-out"
+          'h-full w-full object-cover',
+          isLoaded && 'animate-zoom-out',
         )}
         onLoad={() => setIsLoaded(true)}
       />

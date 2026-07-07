@@ -29,41 +29,42 @@ export function getPastDays(days: number, timezoneOffset: number = 8) {
 }
 // Helper to map new script data to Article interface
 export function mapScriptToArticle(data: any, runEnv: string, variant: string = 'hacker-news'): any {
-    if (!data) return null;
-    
-    // Construct audio path based on new workflow convention
-    // Path: {yyyy}/{mm}/{dd}/{env}/{variant}-{date}.mp3
-    // Note: The audio workflow uploads to: `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
-    const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
+  if (!data)
+    return null
 
-    // Format dialogue as string for the frontend
-    const podcastContent = Array.isArray(data.dialogue) 
-        ? data.dialogue.map((line: any) => `${line.speaker}: ${line.text}`).join('\n\n')
-        : data.dialogue
+  // Construct audio path based on new workflow convention
+  // Path: {yyyy}/{mm}/{dd}/{env}/{variant}-{date}.mp3
+  // Note: The audio workflow uploads to: `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
+  const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
 
-    // Use the generated title if available (new format), otherwise fallback to constructed title
-    let finalTitle = data.title
+  // Format dialogue as string for the frontend
+  const podcastContent = Array.isArray(data.dialogue)
+    ? data.dialogue.map((line: any) => `${line.speaker}: ${line.text}`).join('\n\n')
+    : data.dialogue
 
-    if (!finalTitle) {
-      const storyTitles = (data.stories || [])
-          .slice(0, 3)
-          .map((s: any) => s.title)
-          .join(' | ')
-      
-      finalTitle = storyTitles 
-          ? `[備用標題] ${data.displayDate} | ${storyTitles}`
-          : `[備用標題] ${data.displayDate}`
-    }
+  // Use the generated title if available (new format), otherwise fallback to constructed title
+  let finalTitle = data.title
 
-    return {
-        title: finalTitle,
-        date: data.displayDate,
-        updatedAt: getArticleTimestamp(data.displayDate, data.generatedAt),
-        introContent: data.introContent,
-        blogContent: data.blogContent,
-        podcastContent: podcastContent,
-        stories: data.stories || [],
-        audio: audioPath,
-        variant: variant
-    }
+  if (!finalTitle) {
+    const storyTitles = (data.stories || [])
+      .slice(0, 3)
+      .map((s: any) => s.title)
+      .join(' | ')
+
+    finalTitle = storyTitles
+      ? `[備用標題] ${data.displayDate} | ${storyTitles}`
+      : `[備用標題] ${data.displayDate}`
+  }
+
+  return {
+    title: finalTitle,
+    date: data.displayDate,
+    updatedAt: getArticleTimestamp(data.displayDate, data.generatedAt),
+    introContent: data.introContent,
+    blogContent: data.blogContent,
+    podcastContent,
+    stories: data.stories || [],
+    audio: audioPath,
+    variant,
+  }
 }

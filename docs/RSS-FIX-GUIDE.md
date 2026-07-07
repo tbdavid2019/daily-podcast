@@ -25,12 +25,13 @@ RSS feed 驗證器報告了兩個問題：
 const feed = new Podcast({
   // ...其他配置
   customNamespaces: {
-    'podcast': 'https://podcastindex.org/namespace/1.0',
+    podcast: 'https://podcastindex.org/namespace/1.0',
   },
 })
 ```
 
 **效果**：
+
 - RSS feed 現在包含 `xmlns:podcast="https://podcastindex.org/namespace/1.0"`
 - 符合 PSP-1 (Podcast Standards Project Phase 1) 規範
 - 支援現代播客功能（章節、轉錄等）
@@ -44,11 +45,13 @@ const feed = new Podcast({
 #### 主要改進：
 
 1. **檢測 Range Header**
+
    ```typescript
    const range = request.headers.get('range')
    ```
 
 2. **處理 Range 請求**
+
    ```typescript
    if (range) {
      const file = await env.HACKER_NEWS_R2.get(filePath, {
@@ -59,6 +62,7 @@ const feed = new Podcast({
    ```
 
 3. **設定正確的 Headers**
+
    ```typescript
    {
      'Accept-Ranges': 'bytes',
@@ -73,6 +77,7 @@ const feed = new Podcast({
    - `bytes=-1024`（suffix，最後 N 個 bytes）
 
 #### 效果：
+
 - ✅ 播客 App 可以串流播放音頻
 - ✅ 支援快轉/後退功能
 - ✅ 節省頻寬（只下載需要的部分）
@@ -129,10 +134,12 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
 訪問以下網站驗證你的 RSS feed：
 
 - **Cast Feed Validator**: https://castfeedvalidator.com/
+
   - 輸入：`https://podcast.david888.com/rss.xml`
   - 應該通過 Byte-range 和 Namespace 檢查
 
 - **Podbase Validator**: https://podba.se/validate/
+
   - 輸入：`https://podcast.david888.com/rss.xml`
   - 檢查是否符合 Apple Podcasts 規範
 
@@ -143,11 +150,13 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
 ### 4. 在播客 App 中測試
 
 1. **Apple Podcasts**
+
    - 訂閱你的 RSS feed
    - 測試播放、快轉、後退功能
    - 檢查封面圖是否正確顯示
 
 2. **Pocket Casts**
+
    - 搜尋或手動添加 RSS feed
    - 測試串流播放
 
@@ -160,19 +169,21 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
 ### HTTP Range 請求流程
 
 1. **客戶端請求**
+
    ```
    GET /static/audio/2025-10-01.mp3
    Range: bytes=0-1023
    ```
 
 2. **伺服器回應**
+
    ```
    HTTP/1.1 206 Partial Content
    Content-Type: audio/mpeg
    Content-Range: bytes 0-1023/5242880
    Accept-Ranges: bytes
    Content-Length: 1024
-   
+
    [音頻資料的前 1024 bytes]
    ```
 
@@ -188,7 +199,7 @@ Cloudflare R2 原生支援 Range 請求：
 
 ```typescript
 const file = await env.HACKER_NEWS_R2.get(filePath, {
-  range: request.headers,  // 自動解析 Range header
+  range: request.headers, // 自動解析 Range header
 })
 
 // file.range 可能是：
@@ -219,10 +230,12 @@ const file = await env.HACKER_NEWS_R2.get(filePath, {
 ### Byte-range 的優勢
 
 1. **頻寬節省**
+
    - 用戶只下載實際播放的部分
    - 快轉/後退不需重新下載整個檔案
 
 2. **載入速度**
+
    - 播放可以立即開始（不需等待完整下載）
    - 改善用戶體驗
 
@@ -247,10 +260,12 @@ const file = await env.HACKER_NEWS_R2.get(filePath, {
 **症狀**：雖然發送了 Range header，但得到完整檔案
 
 **原因**：
+
 - R2 binding 設定錯誤
 - Worker 路由配置問題
 
 **解決**：
+
 ```bash
 # 檢查 binding
 pnpx wrangler deployments list
@@ -265,11 +280,13 @@ pnpx wrangler deployments list
 **原因**：Content-Range 格式不符合規範
 
 **正確格式**：
+
 ```
 Content-Range: bytes 0-1023/5242880
 ```
 
 **錯誤格式**：
+
 ```
 Content-Range: 0-1023/5242880        ❌ 缺少 "bytes"
 Content-Range: bytes 0-1023          ❌ 缺少總大小
@@ -303,16 +320,19 @@ Content-Range: bytes 0-1023          ❌ 缺少總大小
 可以考慮添加的功能：
 
 1. **章節標記**
+
    ```xml
    <podcast:chapters url="https://example.com/chapters.json"/>
    ```
 
 2. **轉錄文字**
+
    ```xml
    <podcast:transcript url="https://example.com/transcript.srt"/>
    ```
 
 3. **多個音頻格式**
+
    ```xml
    <podcast:alternateEnclosure type="audio/opus">
      <podcast:source uri="https://example.com/episode.opus"/>

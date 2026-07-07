@@ -17,35 +17,47 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
 
   return (
     <div className={cn('flex justify-center gap-4 py-8', className)}>
-      {hasPrev ? (
-        <Link
-          href={`/?page=${currentPage - 1}`}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          &larr; 上一頁
-        </Link>
-      ) : (
-        <span className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-50 border border-gray-300 rounded-md cursor-not-allowed">
-          &larr; 上一頁
-        </span>
-      )}
+      {hasPrev
+        ? (
+            <Link
+              href={`/?page=${currentPage - 1}`}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              &larr; 上一頁
+            </Link>
+          )
+        : (
+            <span className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-50 border border-gray-300 rounded-md cursor-not-allowed">
+              &larr; 上一頁
+            </span>
+          )}
 
       <span className="px-4 py-2 text-sm text-gray-500 flex items-center">
-        第 {currentPage} 頁 / 共 {totalPages} 頁
+        第
+        {' '}
+        {currentPage}
+        {' '}
+        頁 / 共
+        {' '}
+        {totalPages}
+        {' '}
+        頁
       </span>
 
-      {hasNext ? (
-        <Link
-          href={`/?page=${currentPage + 1}`}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          下一頁 &rarr;
-        </Link>
-      ) : (
-        <span className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-50 border border-gray-300 rounded-md cursor-not-allowed">
-          下一頁 &rarr;
-        </span>
-      )}
+      {hasNext
+        ? (
+            <Link
+              href={`/?page=${currentPage + 1}`}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              下一頁 &rarr;
+            </Link>
+          )
+        : (
+            <span className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-50 border border-gray-300 rounded-md cursor-not-allowed">
+              下一頁 &rarr;
+            </span>
+          )}
     </div>
   )
 }

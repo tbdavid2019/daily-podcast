@@ -1,6 +1,7 @@
-export { PodcastScriptWorkflow } from '../workflow/index'
-export { PodcastAudioWorkflow } from '../workflow/audio'
 import type { WorkflowParams } from '../workflow/types'
+
+export { PodcastAudioWorkflow } from '../workflow/audio'
+export { PodcastScriptWorkflow } from '../workflow/index'
 
 interface Env extends CloudflareEnv {
   HACKER_NEWS_WORKFLOW: Workflow
@@ -43,7 +44,7 @@ async function extractParamsFromRequest(request: Request): Promise<WorkflowParam
   if (variantFromQuery) {
     params.variant = variantFromQuery
   }
-  
+
   const phaseFromQuery = url.searchParams.get('phase')?.trim()
   if (phaseFromQuery === 'audio' || phaseFromQuery === 'script') {
     params.phase = phaseFromQuery
@@ -62,10 +63,10 @@ async function extractParamsFromRequest(request: Request): Promise<WorkflowParam
           params.force = body.force
         }
         if (body.variant || body.type) {
-            params.variant = (body.variant || body.type)?.trim()
+          params.variant = (body.variant || body.type)?.trim()
         }
         if (body.phase === 'audio' || body.phase === 'script') {
-            params.phase = body.phase
+          params.phase = body.phase
         }
       }
       catch (error) {
@@ -89,17 +90,17 @@ export default {
 
     // Default params
     const effectiveParams = {
-        variant: 'hacker-news',
-        phase: 'script',
-        ...params
+      variant: 'hacker-news',
+      phase: 'script',
+      ...params,
     }
-    
+
     // Alias handling
     if (params?.type && !params.variant) {
-        effectiveParams.variant = params.type
+      effectiveParams.variant = params.type
     }
     if (effectiveParams.variant === 'main') {
-        effectiveParams.variant = 'hacker-news'
+      effectiveParams.variant = 'hacker-news'
     }
 
     // 檢查是否有相同參數的 workflow 正在執行
@@ -124,13 +125,14 @@ export default {
         })
       }
 
-      let instance;
+      let instance
       if (effectiveParams.phase === 'audio') {
-          console.info('Triggering Audio Workflow', effectiveParams)
-          instance = await env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: effectiveParams })
-      } else {
-          console.info('Triggering Script Workflow', effectiveParams)
-          instance = await env.HACKER_NEWS_WORKFLOW.create({ params: effectiveParams })
+        console.info('Triggering Audio Workflow', effectiveParams)
+        instance = await env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: effectiveParams })
+      }
+      else {
+        console.info('Triggering Script Workflow', effectiveParams)
+        instance = await env.HACKER_NEWS_WORKFLOW.create({ params: effectiveParams })
       }
 
       const instanceDetails = {
@@ -158,39 +160,39 @@ export default {
       throw error
     }
   },
-  
+
   async getScript(request: Request, env: Env) {
-      const url = new URL(request.url)
-      const today = url.searchParams.get('today')
-      const variant = url.searchParams.get('variant') || url.searchParams.get('type') || 'hacker-news'
-      
-      const runEnv = env.WORKER_ENV || 'production'
-      
-      // Calculate date if not provided
-      let displayDate = today
-      if (!displayDate) {
-         // Default to Taipei time if not provided, consistent with workflow
-         const now = new Date()
-         const timezoneOffset = 8 // Hardcoded default +8 for simplicity in viewer
-         const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
-         displayDate = localTime.toISOString().split('T')[0]
-      }
-      
-      const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
-      const scriptKey = `script:${runEnv}:${normalizedVariant}:${displayDate}`
-      
-      const data = await env.HACKER_NEWS_KV.get(scriptKey)
-      
-      if (!data) {
-          return new Response(JSON.stringify({ error: 'Script not found', key: scriptKey }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' }
-          })
-      }
-      
-      return new Response(data, {
-          headers: { 'Content-Type': 'application/json' }
+    const url = new URL(request.url)
+    const today = url.searchParams.get('today')
+    const variant = url.searchParams.get('variant') || url.searchParams.get('type') || 'hacker-news'
+
+    const runEnv = env.WORKER_ENV || 'production'
+
+    // Calculate date if not provided
+    let displayDate = today
+    if (!displayDate) {
+      // Default to Taipei time if not provided, consistent with workflow
+      const now = new Date()
+      const timezoneOffset = 8 // Hardcoded default +8 for simplicity in viewer
+      const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
+      displayDate = localTime.toISOString().split('T')[0]
+    }
+
+    const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+    const scriptKey = `script:${runEnv}:${normalizedVariant}:${displayDate}`
+
+    const data = await env.HACKER_NEWS_KV.get(scriptKey)
+
+    if (!data) {
+      return new Response(JSON.stringify({ error: 'Script not found', key: scriptKey }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
       })
+    }
+
+    return new Response(data, {
+      headers: { 'Content-Type': 'application/json' },
+    })
   },
 
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -200,10 +202,10 @@ export default {
     if (url.pathname === '/workflow' && request.method === 'POST') {
       return this.runWorkflow(request, env, ctx)
     }
-    
+
     // Handle script preview endpoint
     if (url.pathname === '/script') {
-        return this.getScript(request, env)
+      return this.getScript(request, env)
     }
 
     if (url.pathname === '/audio') {

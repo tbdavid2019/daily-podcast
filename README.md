@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🤖 Agent Discovery / robots.txt / Markdown for Agents (2026-07-07)**：新增正式 `robots.txt`（含 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 wildcard 規則）、`Content-Signal`、首頁 `Link` discovery headers、`/.well-known/api-catalog`、`/.well-known/agent-skills/index.json`、`/openapi.json`、`/api/status` 與 `/docs/api`。同時支援首頁與文章頁在 `Accept: text/markdown` 時回傳 Markdown，並已部署至 `https://podcast.david888.com`。詳見 [CHANGELOG-Agent-Discovery-與-robots.txt.md](docs/CHANGELOG-Agent-Discovery-%E8%88%87-robots.txt.md)。
 - **🖼️ Bing 背景與 Bento 視覺優化 (2026-04-24)**：導入了動態 Bing 桌布背景功能，支援從 GitHub 源隨機抓取歷史桌布，並套用平滑的呼吸動畫。同時全面套用 **Bento 設計風格**，引入毛玻璃質感 (`backdrop-blur`)、現代 `Inter` 字體與精緻的間距系統。背景開關預設調整為 **開啟 (ON)**，使用者仍可於右上角手動切換。
 - **🗣️ Edge TTS 台灣優化 (2026-02-05)**：預設 Edge TTS 聲線已從中國普通話切換為 **台灣繁體中文聲線**，採用最自然的 `zh-TW-HsiaoChenNeural` (女聲/曉臻) 與 `zh-TW-YunJheNeural` (男聲/雲哲)。生成的 Podcast 將擁有道地的台灣口音，聽感更親切自然。此功能為免費且預設啟用，無需額外設定。
 - **🎙️ OpenAI TTS 語速調整 (2026-02-05)**：新增 OpenAI TTS 的 `speed` 參數支援，預設語速調整為 **1.3 倍**（快 30%），大幅縮短播放時間。這讓文稿可以更長、內容更豐富，同時保持合理的播放時長。可透過 `AUDIO_SPEED` 環境變數自訂（範圍 0.25-4.0，建議 1.0-1.5）。
@@ -40,6 +41,7 @@
 | [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) | **詳細配置指南** (天數、參數、環境變數) | 部署與維護者 |
 | [SECURITY.md](docs/SECURITY.md) | **安全指南** (認證、密鑰保護) | 系統管理員 |
 | [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md) | **RSS 修復與規範** | 播客開發者 |
+| [CHANGELOG-Agent-Discovery-與-robots.txt.md](docs/CHANGELOG-Agent-Discovery-%E8%88%87-robots.txt.md) | **Agent Discovery / robots / Markdown for Agents 變更紀錄** | 維護者、Agent Readiness 檢查者 |
 | [DOCS-INDEX.md](docs/DOCS-INDEX.md) | **完整文檔索引** | 進階使用者 |
 
 ---
@@ -203,7 +205,7 @@ npx wrangler tail daily-podcast-worker
 本地測試新聞來源抓取邏輯：
 ```bash
 # 測試所有來源 (不消耗 OpenAI額度，僅測試爬蟲)
-npx tsx test-new-sources.mjs
+npx tsx tests/test-new-sources.mjs
 ```
 
 本地啟動開發伺服器：

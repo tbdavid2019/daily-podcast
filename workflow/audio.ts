@@ -1,7 +1,7 @@
-import { WorkflowEntrypoint } from 'cloudflare:workers'
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
-import synthesize, { pcmToWav } from './tts'
 import type { GeneratedScriptData, WorkflowParams } from './types'
+import { WorkflowEntrypoint } from 'cloudflare:workers'
+import synthesize, { pcmToWav } from './tts'
 
 interface Env extends CloudflareEnv {
   WORKER_ENV?: string
@@ -95,7 +95,8 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
  * For other formats (like MP3), it performs simple concatenation.
  */
 function combineAudioBuffers(buffers: Uint8Array[], isWav: boolean): Uint8Array {
-  if (buffers.length === 0) return new Uint8Array(0)
+  if (buffers.length === 0)
+    return new Uint8Array(0)
 
   if (isWav) {
     // WAV concatenation: Strip 44-byte header from each, concat PCM, then wrapper with new header
@@ -123,7 +124,8 @@ function combineAudioBuffers(buffers: Uint8Array[], isWav: boolean): Uint8Array 
     // 3. Create new WAV file with correct header
     // pcmToWav returns ArrayBuffer, convert to Uint8Array
     return new Uint8Array(pcmToWav(combinedPcm))
-  } else {
+  }
+  else {
     // Simple concatenation for MP3
     const totalLength = buffers.reduce((total, buffer) => total + buffer.byteLength, 0)
     const combined = new Uint8Array(totalLength)
@@ -142,10 +144,11 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     const runEnv = this.env.WORKER_ENV || 'production'
     const params = event.payload || {}
-    
+
     // Handle variant/type mapping
     let variant = params.variant || params.type || 'hacker-news'
-    if (variant === 'main') variant = 'hacker-news'
+    if (variant === 'main')
+      variant = 'hacker-news'
 
     // Check if using Gemini TTS (which outputs WAV)
     const isGeminiTTS = this.env.TTS_PROVIDER === 'gemini'
@@ -155,12 +158,12 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
     const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
     const localToday = localTime.toISOString().split('T')[0]
-    
+
     const userSpecifiedDate = params.today
     const displayDate = userSpecifiedDate || localToday
 
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
-    
+
     // Output R2 Key
     const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
 
@@ -169,21 +172,21 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       displayDate,
       scriptKey,
       podcastKey,
-      isGeminiTTS
+      isGeminiTTS,
     })
 
     // 1. Load Script from KV
     const scriptData = await step.do('load script from kv', retryConfig, async () => {
-        const data = await this.env.HACKER_NEWS_KV.get(scriptKey)
-        if (!data) {
-            throw new Error(`Script not found in KV: ${scriptKey}`)
-        }
-        return JSON.parse(data) as GeneratedScriptData
+      const data = await this.env.HACKER_NEWS_KV.get(scriptKey)
+      if (!data) {
+        throw new Error(`Script not found in KV: ${scriptKey}`)
+      }
+      return JSON.parse(data) as GeneratedScriptData
     })
 
     if (!scriptData.dialogue || scriptData.dialogue.length === 0) {
-        console.warn('Dialogue is empty, aborting audio generation')
-        return
+      console.warn('Dialogue is empty, aborting audio generation')
+      return
     }
 
     console.info(`Loaded script with ${scriptData.dialogue.length} lines`)
@@ -192,7 +195,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const allSegments: { text: string, speaker: '男' | '女' }[] = []
     for (const line of scriptData.dialogue) {
       const text = line.text.trim()
-      if (!text) continue
+      if (!text)
+        continue
       const chunks = chunkDialogueText(text)
       for (const chunk of chunks) {
         allSegments.push({ text: chunk, speaker: line.speaker })
@@ -200,7 +204,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     }
 
     // 3. Process in batches
-    // Increase batch size to reduce total workflow steps. 
+    // Increase batch size to reduce total workflow steps.
     // Cloudflare limits subrequests per step, so 20 is safe (limit is 50).
     const BATCH_SIZE = 5
     const batchKeys: string[] = []
@@ -285,9 +289,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     console.info('Audio generation completed successfully', {
       podcastKey,
-      totalBytes: totalLength
+      totalBytes: totalLength,
     })
-    
+
     return { podcastKey, totalLength }
   }
 }

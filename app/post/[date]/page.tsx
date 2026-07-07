@@ -15,17 +15,18 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
 
   // Try new key format first (Script Workflow) - Default to hacker-news variant for now
   // In the future, we might want to support variant selection via URL
-  const variant = 'hacker-news' 
+  const variant = 'hacker-news'
   const scriptKey = `script:${runEnv}:${variant}:${date}`
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-  
+
   let post: any = null
-  
+
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, runEnv, variant)
-  } else {
-      // Fallback to old key format
-      post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
+    post = mapScriptToArticle(scriptData, runEnv, variant)
+  }
+  else {
+    // Fallback to old key format
+    post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
   }
 
   if (!post) {
@@ -67,12 +68,13 @@ export default async function PostPage({ params }: { params: Promise<{ date: str
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
 
   let post: any = null
-  
+
   if (scriptData) {
-      post = mapScriptToArticle(scriptData, runEnv, variant)
-  } else {
-      // Fallback to old key format
-      post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
+    post = mapScriptToArticle(scriptData, runEnv, variant)
+  }
+  else {
+    // Fallback to old key format
+    post = (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as unknown as any
   }
 
   if (!post) {

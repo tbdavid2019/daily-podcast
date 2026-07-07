@@ -1,7 +1,7 @@
 'use client'
+import MarkdownIt from 'markdown-it'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import MarkdownIt from 'markdown-it'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -56,10 +56,10 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
         <div className="px-6 py-2 bg-white/30 backdrop-blur-sm border-y border-zinc-200/30">
           <AudioPlayer
             className="w-full"
-            style={{ 
-              '--media-primary-color': '#18181b', 
-              '--media-secondary-color': 'rgba(242, 242, 243, 0.5)', 
-              '--media-accent-color': '#18181b' 
+            style={{
+              '--media-primary-color': '#18181b',
+              '--media-secondary-color': 'rgba(242, 242, 243, 0.5)',
+              '--media-accent-color': '#18181b',
             } as React.CSSProperties}
           >
             <audio

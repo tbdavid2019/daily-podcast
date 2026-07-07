@@ -18,6 +18,7 @@
 ## 🔐 必須保密的信息
 
 ### 1. Worker URL
+
 ```
 ❌ 不要公開: https://your-worker.workers.dev
 ```
@@ -25,13 +26,15 @@
 **原因**: 任何人知道這個 URL 都可以觸發 workflow 生成播客
 
 **保護方法**:
+
 - 不要在 README、文檔中使用真實 URL
 - 不要在 Git 提交中包含
 - 實施 API 認證（見下方）
 
 ### 2. API 密鑰
+
 ```
-❌ 不要公開: 
+❌ 不要公開:
 - OPENAI_API_KEY
 - JINA_KEY
 - FIRECRAWL_KEY
@@ -39,6 +42,7 @@
 ```
 
 **保護方法**:
+
 - 使用 `wrangler secret put` 存儲
 - 永遠不要提交到 Git
 - 定期輪換密鑰
@@ -70,20 +74,20 @@ pnpx wrangler secret put --cwd worker API_SECRET_TOKEN
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url)
-    
+
     // 只對 workflow 路徑進行認證
     if (url.pathname.startsWith('/workflow')) {
       const authHeader = request.headers.get('Authorization')
       const expectedToken = env.API_SECRET_TOKEN
-      
+
       if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
-        return new Response('Unauthorized', { 
+        return new Response('Unauthorized', {
           status: 401,
           headers: { 'Content-Type': 'text/plain' }
         })
       }
     }
-    
+
     // 繼續處理請求...
   }
 }
@@ -137,20 +141,20 @@ curl -X POST https://your-worker.workers.dev/workflow \
 
 ```typescript
 const ALLOWED_IPS = [
-  '1.2.3.4',      // 你的 IP
-  '5.6.7.8',      // 你的辦公室 IP
+  '1.2.3.4', // 你的 IP
+  '5.6.7.8', // 你的辦公室 IP
 ]
 
 export default {
   async fetch(request: Request, env: Env) {
     const clientIP = request.headers.get('CF-Connecting-IP')
-    
+
     if (url.pathname.startsWith('/workflow')) {
       if (!ALLOWED_IPS.includes(clientIP)) {
         return new Response('Forbidden', { status: 403 })
       }
     }
-    
+
     // 繼續處理...
   }
 }
@@ -164,34 +168,35 @@ export default {
 async function checkRateLimit(env: Env, clientIP: string): Promise<boolean> {
   const key = `rate-limit:${clientIP}`
   const current = await env.HACKER_NEWS_KV.get(key)
-  
+
   if (current) {
     const count = parseInt(current)
-    if (count > 10) {  // 每小時最多 10 次
+    if (count > 10) { // 每小時最多 10 次
       return false
     }
     await env.HACKER_NEWS_KV.put(key, String(count + 1), {
-      expirationTtl: 3600  // 1 小時
+      expirationTtl: 3600 // 1 小時
     })
-  } else {
+  }
+  else {
     await env.HACKER_NEWS_KV.put(key, '1', {
       expirationTtl: 3600
     })
   }
-  
+
   return true
 }
 
 export default {
   async fetch(request: Request, env: Env) {
     const clientIP = request.headers.get('CF-Connecting-IP')
-    
+
     if (url.pathname.startsWith('/workflow')) {
       if (!await checkRateLimit(env, clientIP)) {
         return new Response('Too Many Requests', { status: 429 })
       }
     }
-    
+
     // 繼續處理...
   }
 }
@@ -212,6 +217,7 @@ pnpx wrangler tail --cwd worker
 ### 2. 監控異常模式
 
 注意以下異常：
+
 - ✅ 預期的 Cron 觸發（每日 23:30 UTC）
 - ❌ 非預期時間的大量請求
 - ❌ 來自陌生 IP 的請求
@@ -228,6 +234,7 @@ pnpx wrangler tail --cwd worker
 ### 4. 檢查 API 使用量
 
 定期檢查：
+
 - OpenAI Usage Dashboard
 - Cloudflare Analytics
 - 其他 API 提供商的使用統計
@@ -320,18 +327,22 @@ pnpm run deploy
 ## 💡 最佳實踐
 
 1. **最小權限原則**
+
    - 只給 API 密鑰必要的權限
    - OpenAI: 設定使用限制和預算
 
 2. **分離環境**
+
    - 開發環境使用不同的密鑰
    - 生產環境密鑰更嚴格保護
 
 3. **監控和告警**
+
    - 設定自動告警
    - 定期檢查日誌
 
 4. **文檔安全**
+
    - 使用佔位符替代真實值
    - 明確標註哪些是敏感信息
 

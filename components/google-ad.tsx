@@ -12,21 +12,26 @@ interface GoogleAdProps {
   fullWidthResponsive?: boolean
 }
 
-export function GoogleAd({ 
-  className, 
-  style, 
+declare global {
+  interface Window {
+    adsbygoogle?: unknown[]
+  }
+}
+
+export function GoogleAd({
+  className,
+  style,
   slot = '7008136098', // User provided slot ID
-  format = 'auto', 
+  format = 'auto',
   layoutKey,
   client = 'ca-pub-5210017545918559', // User provided client ID
-  fullWidthResponsive = true 
+  fullWidthResponsive = true,
 }: GoogleAdProps) {
-  
   useEffect(() => {
     try {
-      // @ts-ignore
       (window.adsbygoogle = window.adsbygoogle || []).push({})
-    } catch (e) {
+    }
+    catch (e) {
       console.error('AdSense error', e)
     }
   }, [])
