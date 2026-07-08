@@ -103,8 +103,11 @@ export default function RootLayout({
             </main>
             <footer className="max-w-3xl mx-auto p-4 py-12 border-t mt-12 border-zinc-200/50">
               <div className="text-sm text-gray-400 font-medium">
-                Not affiliated with, endorsed by, or associated with Hacker News.
-                &quot;Hacker News&quot; is a registered trademark of Y Combinator.
+                由
+                {' '}
+                <a href="https://david888.com" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-600 underline transition-colors">david888.com</a>
+                {' '}
+                製作
               </div>
             </footer>
           </div>

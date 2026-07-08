@@ -212,6 +212,17 @@
 
 **何時閱讀**: 想了解如何實現高質感的背景動畫，或需要參考 Bento 設計風格實作時。
 
+#### [CHANGELOG-播放器與RSS優化.md](./CHANGELOG-播放器與RSS優化.md) - 播放器懸浮與 RSS 格式優化記錄
+
+**適合對象**: 播客維護者、前端開發者、RSS 維護者
+
+**內容概覽**:
+
+- 📌 網頁端播放器懸浮固定修復 (`position: sticky` 配合 `overflow-visible` 調整)
+- 📝 頁尾聲明調整與個人主頁連結 (由 `david888.com` 製作)
+- 📻 RSS 格式與描述長度優化 (解決 YouTube Ingestion 5000 字元長度限制警告)
+- 🔗 Podcast 客戶端首行直觀點擊回連網址支援
+
 ---
 
 ## 🎯 快速查找指南
@@ -291,8 +302,11 @@ README.md (主入口)
     ├─► CHANGELOG-TTS-與-Workflow-修正.md (TTS 與 Workflow 修正)
     │       └─ TTS 引擎與 Workflow 穩定性
     │
-    └─► CHANGELOG-Bing背景與Bento視覺優化.md (視覺優化)
-            └─ 背景動畫與 Bento 風格實作
+    ├─► CHANGELOG-Bing背景與Bento視覺優化.md (視覺優化)
+    │       └─ 背景動畫與 Bento 風格實作
+    │
+    └─► CHANGELOG-播放器與RSS優化.md (播放器與 RSS 優化)
+            └─ 播放器懸浮、頁尾更改、RSS 限制與回連
 ```
 
 ---

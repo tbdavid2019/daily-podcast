@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **📌 播放器懸浮固定與 RSS 格式優化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；優化 RSS feed 以置頂回連網址，並藉由限制內文大小，徹底解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG-播放器與RSS優化.md](docs/CHANGELOG-播放器與RSS優化.md)。
 - **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文檔與腳本。詳見 [CHANGELOG-RSS-CORS-與-Cloudflare-部署指令修正.md](docs/CHANGELOG-RSS-CORS-%E8%88%87-Cloudflare-%E9%83%A8%E7%BD%B2%E6%8C%87%E4%BB%A4%E4%BF%AE%E6%AD%A3.md)。
 - **🤖 Agent Discovery / robots.txt / Markdown for Agents (2026-07-07)**：新增正式 `robots.txt`（含 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 wildcard 規則）、`Content-Signal`、首頁 `Link` discovery headers、`/.well-known/api-catalog`、`/.well-known/agent-skills/index.json`、`/openapi.json`、`/api/status` 與 `/docs/api`。同時支援首頁與文章頁在 `Accept: text/markdown` 時回傳 Markdown，並已部署至 `https://podcast.david888.com`。詳見 [CHANGELOG-Agent-Discovery-與-robots.txt.md](docs/CHANGELOG-Agent-Discovery-%E8%88%87-robots.txt.md)。
 - **🖼️ Bing 背景與 Bento 視覺優化 (2026-04-24)**：導入了動態 Bing 桌布背景功能，支援從 GitHub 源隨機抓取歷史桌布，並套用平滑的呼吸動畫。同時全面套用 **Bento 設計風格**，引入毛玻璃質感 (`backdrop-blur`)、現代 `Inter` 字體與精緻的間距系統。背景開關預設調整為 **開啟 (ON)**，使用者仍可於右上角手動切換。
@@ -42,6 +43,7 @@
 | [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) | **詳細配置指南** (天數、參數、環境變數) | 部署與維護者 |
 | [SECURITY.md](docs/SECURITY.md) | **安全指南** (認證、密鑰保護) | 系統管理員 |
 | [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md) | **RSS 修復與規範** | 播客開發者 |
+| [CHANGELOG-播放器與RSS優化.md](docs/CHANGELOG-播放器與RSS優化.md) | **播放器懸浮與 RSS 格式優化記錄** | 播客維護者、前端開發者 |
 | [CHANGELOG-RSS-CORS-與-Cloudflare-部署指令修正.md](docs/CHANGELOG-RSS-CORS-%E8%88%87-Cloudflare-%E9%83%A8%E7%BD%B2%E6%8C%87%E4%BB%A4%E4%BF%AE%E6%AD%A3.md) | **RSS CORS 與部署指令修正紀錄** | 維護者、部署者 |
 | [CHANGELOG-Agent-Discovery-與-robots.txt.md](docs/CHANGELOG-Agent-Discovery-%E8%88%87-robots.txt.md) | **Agent Discovery / robots / Markdown for Agents 變更紀錄** | 維護者、Agent Readiness 檢查者 |
 | [DOCS-INDEX.md](docs/DOCS-INDEX.md) | **完整文檔索引** | 進階使用者 |

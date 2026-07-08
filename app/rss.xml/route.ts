@@ -1,12 +1,11 @@
 import process from 'node:process'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import markdownit from 'markdown-it'
+
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
 import { getArticleTimestamp, getPastDays, mapScriptToArticle } from '@/lib/utils'
 
-const md = markdownit()
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
 const MAX_DESCRIPTION_LENGTH = 3800
 
@@ -90,20 +89,26 @@ export async function GET() {
       continue
     }
 
-    const links = post.stories.map((s: any) => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
-    const linkContent = `<p><b>相关链接：</b></p><ul>${links}</ul>`
-    const blogContentHtml = md.render(post.blogContent || '')
-    const finalContent = `<div>${blogContentHtml}<hr/>${linkContent}</div>`
+    const postUrl = `${baseUrl}/post/${post.date}`
+    const webLinkText = `詳細網頁版與參考連結：${postUrl}`
+    const webLinkHtml = `<p><b>詳細網頁版與參考連結：</b><a href="${postUrl}">${postUrl}</a></p>`
 
-    const description = ensureDescriptionLength(post.introContent || post.podcastContent || '')
+    const introText = post.introContent || (post.podcastContent ? `${post.podcastContent.slice(0, 300)}...` : '')
+    const plainDescription = `${webLinkText}\n\n${introText}`
+    const description = ensureDescriptionLength(plainDescription)
+
+    const introHtml = post.introContent ? `<p>${post.introContent}</p>` : ''
+    const links = post.stories.map((s: any) => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
+    const linkContent = `<p><b>相關連結：</b></p><ul>${links}</ul>`
+    const finalContent = `<div>${webLinkHtml}${introHtml}<hr/>${linkContent}</div>`
     const updatedAt = getArticleTimestamp(post.date, post.updatedAt)
 
     feed.addItem({
       title: post.title || '',
       description,
       content: finalContent,
-      url: `${baseUrl}/post/${post.date}`,
-      guid: `${baseUrl}/post/${post.date}`,
+      url: postUrl,
+      guid: postUrl,
       date: new Date(updatedAt),
       enclosure: {
         url: `${env.NEXT_STATIC_HOST}/${post.audio}?t=${updatedAt}`,

@@ -39,7 +39,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
   return (
-    <Card className="mb-6 overflow-hidden glass border-zinc-200/50 hover:shadow-xl transition-all duration-500 group">
+    <Card className="mb-6 glass border-zinc-200/50 hover:shadow-xl transition-all duration-500 group">
       <CardHeader className="pb-2">
         <CardTitle>
           <Link href={`/post/${article.date}`} title={article.title} className="text-zinc-900 hover:text-zinc-700 transition-colors">
@@ -52,8 +52,8 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-0">
-        <div className="px-6 py-2 bg-white/30 backdrop-blur-sm border-y border-zinc-200/30">
+      <CardContent className="px-0 sticky top-0 z-30 bg-white/90 backdrop-blur-md border-y border-zinc-200/30">
+        <div className="px-6 py-2">
           <AudioPlayer
             className="w-full"
             style={{
@@ -74,7 +74,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
         </div>
       </CardContent>
       {showFooter && (
-        <CardFooter className="flex-col pt-4 bg-zinc-50/20">
+        <CardFooter className="flex-col pt-4 bg-zinc-50/20 rounded-b-lg">
           <Tabs defaultValue="summary" className="w-full">
             <TabsList className="bg-zinc-100/50 p-1">
               <TabsTrigger value="summary" className="font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">總結</TabsTrigger>
