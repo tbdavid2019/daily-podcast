@@ -20,6 +20,21 @@ function ensureDescriptionLength(value: string) {
 
 export const revalidate = 600
 
+const rssHeaders = {
+  'Content-Type': 'application/xml',
+  'Cache-Control': `public, max-age=${revalidate}, s-maxage=${revalidate}`,
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Accept',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: rssHeaders,
+  })
+}
+
 export async function GET() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
 
@@ -99,10 +114,7 @@ export async function GET() {
   }
 
   const response = new NextResponse(feed.buildXml(), {
-    headers: {
-      'Content-Type': 'application/xml',
-      'Cache-Control': `public, max-age=${revalidate}, s-maxage=${revalidate}`,
-    },
+    headers: rssHeaders,
   })
 
   return response

@@ -38,7 +38,7 @@ fi
 
 # 部署 Worker 應用
 echo "🔧 部署 Worker 應用 (後端處理)..."
-pnpm deploy:worker
+pnpm run deploy:worker
 
 if [ $? -eq 0 ]; then
     echo "✅ Worker 應用部署成功"
@@ -51,7 +51,7 @@ echo ""
 
 # 部署 Web 應用
 echo "🌐 部署 Web 應用 (前端界面)..."
-pnpm deploy
+pnpm run deploy
 
 if [ $? -eq 0 ]; then
     echo "✅ Web 應用部署成功"

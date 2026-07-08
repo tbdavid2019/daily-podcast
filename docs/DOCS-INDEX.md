@@ -176,6 +176,19 @@
 
 **何時閱讀**: Pocket Casts 等客戶端排序異常、排查 RSS 更新判定、追蹤本次修正內容
 
+#### [CHANGELOG-RSS-CORS-與-Cloudflare-部署指令修正.md](./CHANGELOG-RSS-CORS-%E8%88%87-Cloudflare-%E9%83%A8%E7%BD%B2%E6%8C%87%E4%BB%A4%E4%BF%AE%E6%AD%A3.md) - RSS CORS 與部署指令修正記錄
+
+**適合對象**: 維護者、部署者、需要前端直接抓 RSS 的整合方
+
+**內容概覽**:
+
+- 🌐 `rss.xml` CORS header 修正
+- ☁️ Cloudflare Web 正確部署指令說明
+- 🛠️ 文檔與部署腳本同步修正
+- ✅ 正式站線上驗證結果
+
+**何時閱讀**: 瀏覽器抓 RSS 遇到 CORS、Cloudflare deploy 指令失效、想確認本次部署修正內容
+
 #### [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md) - TTS 引擎與 Workflow 穩定性修復記錄
 
 **適合對象**: 部署與維護者、開發者
