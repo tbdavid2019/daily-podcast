@@ -1,0 +1,141 @@
+# 更新日誌 (Changelog)
+
+本專案的所有更新歷史紀錄。最新的變更會排在最上方。
+
+---
+
+## [2026-07-08] 播放器懸浮固定與 RSS 格式優化
+
+### 🎯 優化與修復目標
+解決了網頁端播放器無法固定漂浮在最上方的問題、修改了頁尾（Footer）的商標與版權聲明，並優化了 RSS XML 的生成結構，解決了 YouTube Podcast RSS 匯入時因為描述過長而產生的警告訊息，同時也滿足了聽眾在 Apple Podcasts 等客戶端收聽時能夠直觀點擊回連至網站原文章的期待。
+
+### 📝 變更內容
+#### 1. 網頁播放器懸浮固定修復 (`components/article-card.tsx`)
+- **問題**: 之前版本在 `Card` 元件加上了 `overflow-hidden`，這會限制子元素的粘性定位 (`position: sticky`)，導致播放器無法在滾動時固定於最上方。
+- **修復**:
+  - 移除了卡片外層的 `overflow-hidden`。
+  - 將播放器容器 `CardContent` 的樣式設定為 `sticky top-0 z-30 bg-white/90 backdrop-blur-md border-y border-zinc-200/30`。
+  - 在卡片底部 `CardFooter` 元件加上 `rounded-b-lg`，以維持圓角外觀。
+
+#### 2. 頁尾版權聲明調整 (`app/layout.tsx`)
+- **修復**: 移除了原有的 Hacker News 關聯聲明，將頁尾文字修改為：
+  > 由 [david888.com](https://david888.com) 製作
+
+#### 3. RSS 格式與描述長度優化 (`app/rss.xml/route.ts`)
+- **解決 YouTube 描述過長警告**: RSS `description` 優化為 `[回連連結] + [極簡摘要]`，且當無極簡摘要時，只截取前 300 個字元作為預覽，防範 YouTube 5,000 字元長度限制警告。
+- **Apple Podcasts 回連連結支援**: 在 RSS 產生的 `<description>` (純文字) 與 `<content:encoded>` (HTML) 最頂部，置頂顯示 `"詳細網頁版與參考連結：https://podcast.david888.com/post/YYYY-MM-DD"`。
+- **精簡 HTML 內文**: `<content:encoded>` 改為極簡的 `[網頁回連] + [極簡摘要] + [相關連結列表]`，大幅縮減 Feed 體積並防止 YouTube 讀取過長 HTML 出錯。
+- **代碼清理**: 移除了 `app/rss.xml/route.ts` 中不再使用的 `markdown-it` 套件引用。
+
+---
+
+## [2026-07-08] RSS CORS 與 Cloudflare 部署指令修正
+
+### 摘要
+本次修正兩個實際部署問題：
+- `https://podcast.david888.com/rss.xml` 缺少 CORS headers，導致前端瀏覽器直接抓取 RSS 時容易被 CORS 擋住。
+- Cloudflare Web 正式部署若使用 `pnpm deploy`，在 `pnpm@10` 下會被解讀成 workspace deploy 子命令，無法執行 `package.json` 中定義 of deploy script。
+
+### 變更內容
+#### 1. 為 `rss.xml` 補上 CORS headers
+在 `app/rss.xml/route.ts` 補上 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods: GET, HEAD, OPTIONS`、`Access-Control-Allow-Headers: Content-Type, Accept`。同時新增 `OPTIONS` handler。
+#### 2. 釐清正確 Web 部署指令
+將部署指令修正為 `pnpm run deploy`，排除 `pnpm deploy` 的歧義。
+#### 3. 修正文檔與腳本
+同步修正 `README.md`、`deploy-to-cloudflare.sh`、`setup-env-vars.sh` 與 `docs/DOCS-INDEX.md` 中的部署說明。
+
+---
+
+## [2026-07-07] Agent Discovery / robots.txt / Markdown for Agents
+
+### 摘要
+為 `https://podcast.david888.com` 補齊 agent-facing discovery 能力，讓站點能更明確地向搜尋引擎、AI crawler、與自動化 agent 宣告可抓取範圍、API 發現入口、Agent Skills index，以及 Markdown 回應能力。本次也同步修正 lint 範圍。
+
+### 變更內容
+#### 1. 補上標準化 `robots.txt`
+新增根路徑 `robots.txt`，支援 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 `*` 的抓取規則。
+#### 2. 補上 AI content usage preferences
+在 `robots.txt` 新增 `Content-Signal: ai-train=no, search=yes, ai-input=yes`。
+#### 3. 首頁加上 `Link` response headers
+回傳 `api-catalog`、`service-desc`、`service-doc` 與 `status` 關係。
+#### 4. 發佈 API catalog
+新增 `/.well-known/api-catalog`、`/openapi.json`、`/api/status` 與 `/docs/api`。
+#### 5. 發佈 Agent Skills Discovery index
+新增 `/.well-known/agent-skills/index.json` 與 `/.well-known/agent-skills/{slug}`。
+#### 6. 支援 Markdown for Agents
+首頁與文章頁已支援 `Accept: text/markdown`。
+#### 7. lint scope 收斂
+調整 ESLint ignore 規則，排除 `**/*.md` 與 `tests/**/*`。
+
+---
+
+## [2026-04-24] Bing 背景與 Bento 視覺優化
+
+### 概述
+本更新導入了動態 Bing 桌布背景功能，並運用 Bento 設計風格全面優化了前端介面視覺，提升了整體的沉浸感與現代感。
+
+### 新增功能
+#### 1. 動態 Bing 背景
+- **呼吸動畫**：圖片載入後套用平滑淡入與 Ken Burns 效果縮放動畫。
+- **隨機桌布**：載入時隨機從 GitHub 源抓取歷史桌布。
+- **開關控制**：右上角新增切換按鈕，預設為開啟，支援 `localStorage` 偏好記憶。
+#### 2. Bento 視覺風格優化
+- **毛玻璃效果 (Glassmorphism)**：為文章卡片與 UI 組件加入 `backdrop-blur` 與半透明背景。
+- **現代字體**：引入 `Inter` 字體，優化間距與標題層次感，卡片加入柔和邊框與陰影。
+
+---
+
+## [2026-04-14] TTS 引擎與 Workflow 穩定性修復
+
+### 🎯 修復目標
+為解決語音合成 (TTS) 引擎失效、環境變數配置錯誤、工作流程 (Workflow) 重複觸發，以及播客標題偶爾未經過 LLM 美化的問題。
+
+### 📝 主要變更
+#### 1. 標題美化與故障切換 (Fail-safe)
+- **標題自動補位機制 (`workflow/index.ts`)**: 若偵測到標題缺失，會額外發起一個極輕量的 LLM 請求產出 SEO 驚悚標題。
+- **Fallback 標式優化 (`lib/utils.ts`)**: 新增 `[備用標題]` 前綴。
+#### 2. TTS 引擎修復與優化
+- **Gemini TTS 模型代碼校正**: 修正模型代碼為 `gemini-2.5-flash-preview-tts`。
+#### 3. Workflow 穩定性增強
+- **防止重複觸發 Audio Workflow**: 新增 KV 狀態鎖定 (Dedup Lock)，防止 5 分鐘內重複觸發。
+- **API 路由精確化**: 修正 `/workflow` 路由判斷。
+
+---
+
+## [2026-04-08] RSS 日期排序修正
+
+### 摘要
+修正 `https://podcast.david888.com/rss.xml` 在 Pocket Casts 等播客 App 中未依節目日期穩定排序的問題。
+
+### 變更內容
+#### 1. 導入穩定時間戳
+在 `lib/utils.ts` 新增 `getArticleTimestamp()`，優先使用既有穩定時間戳，或回退到節目日期。
+#### 2. RSS 改用穩定日期
+RSS item `date` 與 `enclosure` 的 `?t=` 參數皆改用穩定時間，不再於每次 feed 重建時刷新。
+#### 3. Workflow 寫入 `generatedAt`
+在產生的腳本資料中寫入 `generatedAt: Date.now()`，保有固定生成時間。
+#### 4. 收斂重複 mapping 邏輯
+將文章頁與 RSS 的 `mapScriptToArticle()` 時間格式同步。
+#### 5. 額外調整
+在 `wrangler.jsonc` 補上 `account_id`，防止多帳號部署失敗。
+
+---
+
+## [2025-10-31] 新聞來源擴充實作
+
+### 🎯 新增功能概覽
+為 Hacker News 播客系統新增了三個新的新聞來源：
+1. **GitHub Trending** - 熱門開源專案（使用 DeepWiki 增強內容）
+2. **Product Hunt** - 新產品發布
+3. **Dev.to** - 技術文章 Top 10
+
+### 📝 主要變更
+#### 1. 類型定義更新 (`types/story.d.ts`)
+擴充了 `Story` 介面以支援多種來源（`source`、`sourceUrl`、`description` 等）。
+#### 2. 爬蟲函數 (`workflow/utils.ts`)
+新增 `getGitHubTrendingStories()`（轉換為 DeepWiki URL 並透過 Jina 爬取）、`getProductHuntStories()`（取前 5 產品）、`getDevToStories()`（取前 10 技術文章）與 `getAllStories()`（並行聚合所有來源）。
+#### 3. 內容處理與提示詞更新
+- `getHackerNewsStory()` 根據來源進行不同內容獲取。
+- 更新 `summarizeStoryPrompt` AI 提示詞以處理多種來源類型。
+#### 4. 工作流程整合
+`workflow/index.ts` 從抓取單一 HN 改為執行 `getAllStories()` 聚合。

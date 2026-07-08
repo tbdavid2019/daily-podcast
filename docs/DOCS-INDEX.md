@@ -149,79 +149,15 @@
 
 ### 📝 更新記錄
 
-#### [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本更新記錄
+#### [CHANGELOG.md](../CHANGELOG.md) - 版本更新與修復記錄
 
-**適合對象**: 開發者、貢獻者
-
-**內容概覽**:
-
-- 📅 版本更新歷史
-- ✨ 新功能說明
-- 🐛 Bug 修復記錄
-- 🔧 改進內容
-
-**何時閱讀**: 想了解專案演進、查看新功能、追蹤 bug 修復
-
-#### [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - RSS 日期排序修正記錄
-
-**適合對象**: 播客維護者、RSS Feed 維護者、開發者
+**適合對象**: 所有使用者、開發者、維護者
 
 **內容概覽**:
+- 專案所有版本更新、功能優化與 Bug 修復之完整歷史紀錄。最新變更會列於最上方。
+- 包含最近的播放器懸浮固定修復、RSS 描述長度與網址回連優化、CORS 與部署修正、Agent Discovery 支援等。
 
-- 📅 RSS 排序問題根因
-- 🛠️ `pubDate` 與 `enclosure` 穩定化修正
-- 🔧 Workflow `generatedAt` 補強
-- ☁️ Cloudflare 部署紀錄
-- ✅ 驗證建議與後續改善方向
-
-**何時閱讀**: Pocket Casts 等客戶端排序異常、排查 RSS 更新判定、追蹤本次修正內容
-
-#### [CHANGELOG-RSS-CORS-與-Cloudflare-部署指令修正.md](./CHANGELOG-RSS-CORS-%E8%88%87-Cloudflare-%E9%83%A8%E7%BD%B2%E6%8C%87%E4%BB%A4%E4%BF%AE%E6%AD%A3.md) - RSS CORS 與部署指令修正記錄
-
-**適合對象**: 維護者、部署者、需要前端直接抓 RSS 的整合方
-
-**內容概覽**:
-
-- 🌐 `rss.xml` CORS header 修正
-- ☁️ Cloudflare Web 正確部署指令說明
-- 🛠️ 文檔與部署腳本同步修正
-- ✅ 正式站線上驗證結果
-
-**何時閱讀**: 瀏覽器抓 RSS 遇到 CORS、Cloudflare deploy 指令失效、想確認本次部署修正內容
-
-#### [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md) - TTS 引擎與 Workflow 穩定性修復記錄
-
-**適合對象**: 部署與維護者、開發者
-
-**內容概覽**:
-
-- 🎤 TTS 引擎模型代碼校正
-- 🔐 API Key 安全更新紀錄
-- 🔁 Workflow 重複觸發機制修復 (KV Lock)
-- 🌐 API 路由精確化修正
-
-#### [CHANGELOG-Bing背景與Bento視覺優化.md](./CHANGELOG-Bing背景與Bento視覺優化.md) - 背景動畫與視覺升級記錄
-
-**適合對象**: 前端開發者、UI/UX 設計感興趣者
-
-**內容概覽**:
-
-- 🖼️ Bing 動態背景實作（Ken Burns 效果）
-- 🔘 右上角切換開關與 localStorage 持久化
-- ✨ Bento 風格視覺優化（毛玻璃、Inter 字體）
-
-**何時閱讀**: 想了解如何實現高質感的背景動畫，或需要參考 Bento 設計風格實作時。
-
-#### [CHANGELOG-播放器與RSS優化.md](./CHANGELOG-播放器與RSS優化.md) - 播放器懸浮與 RSS 格式優化記錄
-
-**適合對象**: 播客維護者、前端開發者、RSS 維護者
-
-**內容概覽**:
-
-- 📌 網頁端播放器懸浮固定修復 (`position: sticky` 配合 `overflow-visible` 調整)
-- 📝 頁尾聲明調整與個人主頁連結 (由 `david888.com` 製作)
-- 📻 RSS 格式與描述長度優化 (解決 YouTube Ingestion 5000 字元長度限制警告)
-- 🔗 Podcast 客戶端首行直觀點擊回連網址支援
+**何時閱讀**: 想了解專案演進歷史、查看各版本修正之詳細細節時。
 
 ---
 
@@ -293,20 +229,8 @@ README.md (主入口)
     │       ├─ Podcast namespace
     │       └─ 驗證方法
     │
-    ├─► CHANGELOG-新聞來源擴充.md (更新記錄)
-    │       └─ 版本歷史
-    │
-    ├─► CHANGELOG-RSS-排序修正.md (RSS 排序修正)
-    │       └─ 日期排序與部署紀錄
-    │
-    ├─► CHANGELOG-TTS-與-Workflow-修正.md (TTS 與 Workflow 修正)
-    │       └─ TTS 引擎與 Workflow 穩定性
-    │
-    ├─► CHANGELOG-Bing背景與Bento視覺優化.md (視覺優化)
-    │       └─ 背景動畫與 Bento 風格實作
-    │
-    └─► CHANGELOG-播放器與RSS優化.md (播放器與 RSS 優化)
-            └─ 播放器懸浮、頁尾更改、RSS 限制與回連
+    └─► CHANGELOG.md (更新日誌)
+            └─ 專案完整版本更新與修復歷史記錄
 ```
 
 ---
@@ -329,9 +253,7 @@ README.md (主入口)
 1. [README.md](../README.md) - 技術架構
 2. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 配置系統
 3. [SECURITY.md](./SECURITY.md) - 安全最佳實踐
-4. [CHANGELOG-新聞來源擴充.md](./CHANGELOG-新聞來源擴充.md) - 版本歷史
-5. [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - RSS 排序修正
-6. [CHANGELOG-TTS-與-Workflow-修正.md](./CHANGELOG-TTS-與-Workflow-修正.md) - TTS 與 Workflow 修正
+4. [CHANGELOG.md](../CHANGELOG.md) - 完整更新日誌
 
 ### 🎙️ 播客製作者
 
@@ -340,7 +262,7 @@ README.md (主入口)
 1. [README.md](../README.md) - 專案功能
 2. [RSS-FIX-GUIDE.md](./RSS-FIX-GUIDE.md) - RSS 優化
 3. [CONFIG-GUIDE.md](./CONFIG-GUIDE.md) - 內容配置
-4. [CHANGELOG-RSS-排序修正.md](./CHANGELOG-RSS-排序修正.md) - 排序異常排查
+4. [CHANGELOG.md](../CHANGELOG.md) - 完整更新日誌 (含 RSS 排序/優化說明)
 
 ### 🛡️ 系統管理員
 
