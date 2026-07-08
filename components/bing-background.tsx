@@ -70,7 +70,7 @@ export function BingBackground() {
         onLoad={() => setIsLoaded(true)}
       />
       {/* Overlay to ensure readability */}
-      <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
     </div>
   )
 }
