@@ -81,7 +81,7 @@ export default function RootLayout({
 
           {/* Main Content */}
           <div className="w-full max-w-3xl flex-shrink-0 z-10">
-            <header className="max-w-3xl mx-auto p-4 py-8">
+            <header className="max-w-3xl mx-auto p-4 py-8 glass rounded-xl mb-4">
               <div className="flex items-center justify-start">
                 <Link href="/" title="Home" className="hover:opacity-80 transition-opacity">
                   <h1 className="text-3xl font-black tracking-tight text-zinc-900 drop-shadow-sm">{podcastTitle}</h1>
