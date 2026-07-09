@@ -32,7 +32,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
             </span>
           )}
 
-      <span className="px-4 py-2 text-sm text-gray-500 flex items-center">
+      <span className="px-4 py-2 text-sm text-gray-500 flex items-center glass rounded-md">
         第
         {' '}
         {currentPage}

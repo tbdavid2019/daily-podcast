@@ -101,7 +101,7 @@ export default function RootLayout({
                 {children}
               </div>
             </main>
-            <footer className="max-w-3xl mx-auto p-4 py-12 border-t mt-12 border-zinc-200/50">
+            <footer className="max-w-3xl mx-auto p-4 py-12 border-t mt-12 border-zinc-200/50 glass rounded-xl">
               <div className="text-sm text-gray-400 font-medium">
                 由
                 {' '}
