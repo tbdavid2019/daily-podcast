@@ -11,21 +11,41 @@ import { podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://daily-podcast.oobwei.workers.dev'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://podcast.david888.com'),
   title: podcastTitle,
   description: podcastDescription,
   openGraph: {
     title: podcastTitle,
     description: podcastDescription,
+    url: 'https://podcast.david888.com',
+    siteName: podcastTitle,
     type: 'website',
     locale: 'zh_TW',
+    images: [
+      {
+        url: '/opengraph-image.png',
+        width: 1200,
+        height: 630,
+        alt: podcastTitle,
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: podcastTitle,
     description: podcastDescription,
+    site: '@david888',
+    images: [
+      {
+        url: '/twitter-image.png',
+        width: 1200,
+        height: 630,
+        alt: podcastTitle,
+      },
+    ],
   },
   alternates: {
+    canonical: 'https://podcast.david888.com',
     types: {
       'application/rss+xml': [
         {
@@ -38,6 +58,8 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.ico' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
       { url: '/icon.png', type: 'image/png', sizes: '512x512' },
     ],
     shortcut: ['/favicon.ico'],
@@ -61,6 +83,18 @@ export default function RootLayout({
       <body
         className={`${inter.className} antialiased`}
       >
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              'name': podcastTitle,
+              'description': podcastDescription,
+              'url': 'https://podcast.david888.com',
+            }),
+          }}
+        />
         <Script
           id="adsbygoogle-init"
           async
