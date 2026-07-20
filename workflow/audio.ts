@@ -1,6 +1,14 @@
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
+import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { GeneratedScriptData, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
+import {
+  AUDIO_BATCH_STEP_CONFIG,
+  buildAudioBatchKey,
+  buildAudioSegmentKey,
+  IO_STEP_CONFIG,
+  isAudioCheckpointForInstance,
+  MAX_TTS_SEGMENT_CHARS,
+} from './efficiency'
 import synthesize, { pcmToWav } from './tts'
 
 interface Env extends CloudflareEnv {
@@ -26,18 +34,6 @@ interface Env extends CloudflareEnv {
   GEMINI_TTS_MODEL?: string
 }
 
-const retryConfig: WorkflowStepConfig = {
-  retries: {
-    limit: 5,
-    delay: '10 seconds',
-    backoff: 'exponential',
-  },
-  timeout: '3 minutes',
-}
-
-const MAX_TTS_SEGMENT_CHARS = 400
-const TTS_RETRY_LIMIT = 3
-const TTS_RETRY_BASE_DELAY_MS = 500
 const TTS_RATE_LIMIT_DELAY_MS = 400
 
 function chunkDialogueText(text: string, maxChars = MAX_TTS_SEGMENT_CHARS) {
@@ -156,7 +152,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const isGeminiTTS = this.env.TTS_PROVIDER === 'gemini'
 
     // 時區處理邏輯
-    const now = new Date()
+    const now = new Date(event.timestamp.getTime())
     const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
     const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
     const localToday = localTime.toISOString().split('T')[0]
@@ -178,24 +174,24 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     })
 
     // 1. Load Script from KV
-    const scriptData = await step.do('load script from kv', retryConfig, async () => {
+    const dialogue = await step.do('load script from kv', IO_STEP_CONFIG, async () => {
       const data = await this.env.HACKER_NEWS_KV.get(scriptKey)
       if (!data) {
         throw new Error(`Script not found in KV: ${scriptKey}`)
       }
-      return JSON.parse(data) as GeneratedScriptData
+      return (JSON.parse(data) as GeneratedScriptData).dialogue
     })
 
-    if (!scriptData.dialogue || scriptData.dialogue.length === 0) {
+    if (!dialogue || dialogue.length === 0) {
       console.warn('Dialogue is empty, aborting audio generation')
       return
     }
 
-    console.info(`Loaded script with ${scriptData.dialogue.length} lines`)
+    console.info(`Loaded script with ${dialogue.length} lines`)
 
     // 2. Flatten and chunk all dialogue
     const allSegments: { text: string, speaker: '男' | '女' }[] = []
-    for (const line of scriptData.dialogue) {
+    for (const line of dialogue) {
       const text = line.text.trim()
       if (!text)
         continue
@@ -206,46 +202,51 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     }
 
     // 3. Process in batches
-    // Increase batch size to reduce total workflow steps.
-    // Cloudflare limits subrequests per step, so 20 is safe (limit is 50).
     const BATCH_SIZE = 5
     const batchKeys: string[] = []
+    const segmentCheckpointKeys: string[] = []
 
     for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {
       const batchIndex = Math.floor(i / BATCH_SIZE)
       const batchSegments = allSegments.slice(i, i + BATCH_SIZE)
 
-      // Use a larger timeout for TTS batch processing
-      const batchKey = await step.do(`create audio batch ${batchIndex + 1}`, { ...retryConfig, timeout: '15 minutes' }, async () => {
+      const batchKeyInput = {
+        displayDate,
+        runEnv,
+        variant,
+        instanceId: event.instanceId,
+        batchIndex,
+      }
+      const deterministicBatchKey = buildAudioBatchKey(batchKeyInput)
+      const segmentKeys = batchSegments.map((_, index) =>
+        buildAudioSegmentKey({ ...batchKeyInput, segmentIndex: index }),
+      )
+      segmentCheckpointKeys.push(...segmentKeys)
+
+      const batchKey = await step.do(`create audio batch ${batchIndex + 1}`, AUDIO_BATCH_STEP_CONFIG, async () => {
+        if (await this.env.HACKER_NEWS_R2.head(deterministicBatchKey)) {
+          return deterministicBatchKey
+        }
+
         const segmentBuffers: Uint8Array[] = []
 
         for (const [index, segment] of batchSegments.entries()) {
-          let attempt = 0
-          while (true) {
-            try {
-              const audio = await synthesize(segment.text, segment.speaker, this.env)
-              const arrayBuffer = await audio.arrayBuffer()
-              const typedBuffer = new Uint8Array(arrayBuffer)
-
-              if (!typedBuffer.byteLength) {
-                throw new Error('podcast audio size is 0')
-              }
-
-              segmentBuffers.push(typedBuffer)
-              break
-            }
-            catch (error) {
-              attempt += 1
-              if (attempt >= TTS_RETRY_LIMIT) {
-                console.error('TTS synthesis failed after retries', { batchIndex, index, error })
-                throw error
-              }
-
-              const delay = TTS_RETRY_BASE_DELAY_MS * attempt
-              console.warn('TTS request failed, retrying', { batchIndex, index, attempt, delay })
-              await sleep(delay)
-            }
+          const segmentKey = segmentKeys[index]
+          const checkpoint = await this.env.HACKER_NEWS_R2.get(segmentKey)
+          if (checkpoint) {
+            segmentBuffers.push(new Uint8Array(await checkpoint.arrayBuffer()))
+            continue
           }
+
+          const audio = await synthesize(segment.text, segment.speaker, this.env)
+          const typedBuffer = new Uint8Array(await audio.arrayBuffer())
+          if (!typedBuffer.byteLength) {
+            throw new Error('podcast audio size is 0')
+          }
+
+          await this.env.HACKER_NEWS_R2.put(segmentKey, typedBuffer)
+          segmentBuffers.push(typedBuffer)
+
           // Rate limit between segments
           if (index < batchSegments.length - 1) {
             await sleep(TTS_RATE_LIMIT_DELAY_MS)
@@ -255,17 +256,23 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         // Combine batch
         const combined = combineAudioBuffers(segmentBuffers, isGeminiTTS)
 
-        // Upload batch to R2 (Temp)
-        const key = `${displayDate.replaceAll('-', '/')}/${runEnv}/temp/${variant}-batch-${batchIndex}-${Date.now()}.mp3`
-        await this.env.HACKER_NEWS_R2.put(key, combined)
-        return key
+        await this.env.HACKER_NEWS_R2.put(deterministicBatchKey, combined)
+        return deterministicBatchKey
       })
 
       batchKeys.push(batchKey)
     }
 
     // 4. Merge all batches
-    const { totalLength } = await step.do('merge audio batches', { ...retryConfig, timeout: '10 minutes' }, async () => {
+    const { totalLength } = await step.do('merge audio batches', AUDIO_BATCH_STEP_CONFIG, async () => {
+      const existingAudio = await this.env.HACKER_NEWS_R2.head(podcastKey)
+      if (isAudioCheckpointForInstance(existingAudio, event.instanceId)) {
+        return {
+          segmentCount: allSegments.length,
+          totalLength: existingAudio?.size || 0,
+        }
+      }
+
       const buffers: Uint8Array[] = []
 
       for (const key of batchKeys) {
@@ -278,16 +285,25 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
       const combined = combineAudioBuffers(buffers, isGeminiTTS)
 
-      await this.env.HACKER_NEWS_R2.put(podcastKey, combined)
-
-      // Cleanup temp files
-      await Promise.all(batchKeys.map(key => this.env.HACKER_NEWS_R2.delete(key)))
+      await this.env.HACKER_NEWS_R2.put(podcastKey, combined, {
+        customMetadata: { workflowInstanceId: event.instanceId },
+      })
 
       return {
         segmentCount: allSegments.length,
         totalLength: combined.byteLength,
       }
     })
+
+    try {
+      await step.do('cleanup audio checkpoints', IO_STEP_CONFIG, async () => {
+        await this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys])
+      })
+    }
+    catch (error) {
+      // The final podcast is already durable. Cleanup failure must not mark paid work as failed.
+      console.warn('Failed to cleanup temporary audio checkpoints', { error })
+    }
 
     console.info('Audio generation completed successfully', {
       podcastKey,

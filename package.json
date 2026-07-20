@@ -19,7 +19,7 @@
     "deploy:worker": "wrangler deploy --cwd worker",
     "logs:worker": "wrangler tail --cwd worker",
     "test:workflow-trigger": "node --test tests/trigger-workflow-script.test.mjs",
-    "test:workflow-security": "tsx --test tests/workflow-security.test.ts",
+    "test:workflow-security": "tsx --test tests/workflow-security.test.ts tests/workflow-efficiency.test.ts",
     "test:build-gate": "node --test tests/build-gate.test.mjs tests/normalize-generated-types.test.mjs",
     "tests": "wrangler dev --cwd tests --remote",
     "test:sources": "node tests/test-new-sources.mjs",

@@ -1,4 +1,5 @@
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from 'cloudflare:workers'
+import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
+import type { StoryContentCheckpoint } from './efficiency'
 import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateObject, generateText } from 'ai'
@@ -6,6 +7,23 @@ import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
 import { podcastTitle } from '@/config'
 import { buildChildWorkflowInstanceId, createIdempotentWorkflowInstance } from '@/worker/workflow-security'
+import {
+  AI_SDK_MAX_RETRIES,
+  AI_STEP_CONFIG,
+  buildStoryContentCacheKey,
+  buildStoryContentCheckpointKey,
+  buildStoryContentCheckpointPrefix,
+  CONTENT_FETCH_STEP_CONFIG,
+  getDateDaysBefore,
+  getExcludedRedditIds,
+  IO_STEP_CONFIG,
+  MAX_DIALOGUE_LINE_CHARS,
+  MAX_DIALOGUE_LINES,
+  parseRedditDedupeIndex,
+  parseStoryContentCheckpoint,
+  STORY_CONTENT_CHECKPOINT_ROOT,
+  updateRedditDedupeIndex,
+} from './efficiency'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import { getAllStories, getHackerNewsStory } from './utils'
 
@@ -19,6 +37,7 @@ interface Env extends CloudflareEnv {
   OPENAI_MAX_COMPLETION_TOKENS?: string
   WORKER_ENV?: string
   HACKER_NEWS_KV: KVNamespace
+  HACKER_NEWS_R2: R2Bucket
   HACKER_NEWS_WORKFLOW: Workflow<WorkflowParams>
   HACKER_NEWS_AUDIO_WORKFLOW: Workflow<WorkflowParams>
   // 新增時區配置
@@ -30,43 +49,19 @@ interface Env extends CloudflareEnv {
   FIRECRAWL_KEY?: string
 }
 
-const retryConfig: WorkflowStepConfig = {
-  retries: {
-    limit: 5,
-    delay: '10 seconds',
-    backoff: 'exponential',
-  },
-  timeout: '3 minutes',
-}
-
-function createSubrequestLogger() {
+function createKvRequestLogger() {
   let count = 0
-  const logSubrequest = (kind: string, details: Record<string, unknown>, force = false) => {
-    count += 1
-    if (force || kind !== 'fetch' || count <= 20 || count % 10 === 0) {
-      console.info('subrequest', { count, kind, ...details })
-    }
-  }
-  const wrapFetch = (originalFetch: typeof fetch) => async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof Request
-        ? input.url
-        : String(input)
-    const method = init?.method || (input instanceof Request ? input.method : 'GET')
-    logSubrequest('fetch', { method, url })
-    return originalFetch(input, init)
-  }
   const checkpoint = (label: string) => {
-    console.info('subrequest checkpoint', { label, count })
+    console.info('KV request checkpoint', { label, count })
   }
   const logKv = (action: 'get' | 'put' | 'delete' | 'list' | 'getWithMetadata', key?: string) => {
+    count += 1
     const detail: Record<string, unknown> = {}
     if (key)
       detail.key = key
-    logSubrequest(`kv.${action}`, detail, true)
+    console.info('KV request', { count, action, ...detail })
   }
-  return { wrapFetch, checkpoint, logKv, getCount: () => count }
+  return { checkpoint, logKv }
 }
 
 // 每輪 workflow 的故事與音訊配置限制
@@ -128,25 +123,23 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     console.info('trigged event: PodcastScriptWorkflow', event)
 
-    const subrequestLogger = createSubrequestLogger()
-    const originalFetch = globalThis.fetch.bind(globalThis)
-    globalThis.fetch = subrequestLogger.wrapFetch(originalFetch)
-    subrequestLogger.checkpoint('workflow start')
+    const kvRequestLogger = createKvRequestLogger()
+    kvRequestLogger.checkpoint('workflow start')
 
     const kvGet = async <T = string | null>(key: string, type?: 'text' | 'json' | 'arrayBuffer' | 'stream') => {
-      subrequestLogger.logKv('get', key)
+      kvRequestLogger.logKv('get', key)
       return this.env.HACKER_NEWS_KV.get(key, type as any) as Promise<T | null>
     }
     const kvPut = async (key: string, value: string | ArrayBuffer | ArrayBufferView | ReadableStream, options?: KVNamespacePutOptions) => {
-      subrequestLogger.logKv('put', key)
+      kvRequestLogger.logKv('put', key)
       return this.env.HACKER_NEWS_KV.put(key, value, options)
     }
     const kvDelete = async (key: string) => {
-      subrequestLogger.logKv('delete', key)
+      kvRequestLogger.logKv('delete', key)
       return this.env.HACKER_NEWS_KV.delete(key)
     }
     const kvList = async (prefix: string, cursor?: string) => {
-      subrequestLogger.logKv('list', prefix)
+      kvRequestLogger.logKv('list', prefix)
       return this.env.HACKER_NEWS_KV.list({ prefix, cursor })
     }
 
@@ -169,7 +162,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const breakTime = isDev ? '2 seconds' : '5 seconds'
 
     // 時區處理邏輯 - 支援配置化時區
-    const now = new Date()
+    const now = new Date(event.timestamp.getTime())
     // 從環境變數讀取時區配置，預設為台北時間（UTC+8）
     const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
 
@@ -198,8 +191,29 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // New Script Key: script:{env}:{variant}:{date}
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
 
+    const oldestRetainedCheckpointDate = getDateDaysBefore(localToday, 3)
+    const oldestRetainedCheckpointPrefix = buildStoryContentCheckpointPrefix(oldestRetainedCheckpointDate)
+    try {
+      await step.do(`cleanup story checkpoints before ${oldestRetainedCheckpointDate}`, IO_STEP_CONFIG, async () => {
+        let cursor: string | undefined
+        do {
+          const result = await this.env.HACKER_NEWS_R2.list({ prefix: STORY_CONTENT_CHECKPOINT_ROOT, cursor })
+          const expiredKeys = result.objects
+            .map(object => object.key)
+            .filter(key => key < oldestRetainedCheckpointPrefix)
+          if (expiredKeys.length > 0) {
+            await this.env.HACKER_NEWS_R2.delete(expiredKeys)
+          }
+          cursor = result.truncated ? result.cursor : undefined
+        } while (cursor)
+      })
+    }
+    catch (error) {
+      console.warn('Failed to cleanup expired story checkpoints', { oldestRetainedCheckpointDate, error })
+    }
+
     if (force) {
-      await step.do('force clear script cache', retryConfig, async () => {
+      await step.do('force clear script cache', IO_STEP_CONFIG, async () => {
         await kvDelete(scriptKey)
         await kvDelete(rawContentKey)
 
@@ -213,25 +227,25 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
           cursor = listResult.list_complete ? undefined : listResult.cursor
         } while (cursor)
       })
-      subrequestLogger.checkpoint('after force clear script cache')
+      kvRequestLogger.checkpoint('after force clear script cache')
     }
 
     // Check if script already exists to prevent duplicate processing
-    const existingScript = await step.do('check existing script', retryConfig, async () => {
+    const scriptExists = await step.do('check existing script', IO_STEP_CONFIG, async () => {
       const existing = await kvGet(scriptKey)
       if (existing) {
         console.info('Script already exists for date:', displayDate, 'Key:', scriptKey)
-        return JSON.parse(existing) as GeneratedScriptData
+        return true
       }
-      return null
+      return false
     })
 
-    subrequestLogger.checkpoint('after check existing script')
+    kvRequestLogger.checkpoint('after check existing script')
 
-    if (existingScript && !force) {
+    if (scriptExists && !force) {
       console.info('Skipping workflow - script already exists for date:', displayDate)
-      subrequestLogger.checkpoint('skip existing script')
-      return existingScript
+      kvRequestLogger.checkpoint('skip existing script')
+      return { scriptKey, skipped: true }
     }
 
     const openai = createOpenAI({
@@ -298,23 +312,33 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       })
     }
 
-    const recentDates = getRecentDates(displayDate, 7)
-    const recentScripts = await Promise.all(
-      recentDates.map(date => kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${date}`, 'json')),
-    )
-
-    const excludeRedditIds = new Set<string>()
-    for (const scriptData of recentScripts) {
-      const stories = (scriptData as GeneratedScriptData | null)?.stories || []
-      for (const story of stories) {
-        if (story?.source === 'reddit' && story.id) {
-          excludeRedditIds.add(story.id)
-        }
+    const redditDedupeKey = `dedupe:${runEnv}:${variant}:reddit`
+    const redditDedupeIndex = await step.do('load reddit dedupe index', IO_STEP_CONFIG, async () => {
+      const storedIndex = await kvGet<unknown>(redditDedupeKey, 'json')
+      if (storedIndex) {
+        return parseRedditDedupeIndex(storedIndex)
       }
-    }
+
+      // One-time compatibility path for deployments that predate the compact index.
+      // Future daily runs use one KV read instead of reading seven complete scripts.
+      let rebuiltIndex = parseRedditDedupeIndex(null)
+      const recentDates = getRecentDates(displayDate, 7).reverse()
+      for (const recentDate of recentDates) {
+        const scriptData = await kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${recentDate}`, 'json')
+        const redditIds = (scriptData?.stories || [])
+          .filter(story => story.source === 'reddit' && story.id)
+          .map(story => story.id as string)
+        rebuiltIndex = updateRedditDedupeIndex(rebuiltIndex, recentDate, redditIds)
+      }
+
+      await kvPut(redditDedupeKey, JSON.stringify(rebuiltIndex), { expirationTtl: 60 * 60 * 24 * 14 })
+      return rebuiltIndex
+    })
+
+    const excludeRedditIds = getExcludedRedditIds(redditDedupeIndex, displayDate)
 
     console.info('Reddit dedup window', {
-      days: recentDates.length,
+      days: 7,
       excludedCount: excludeRedditIds.size,
     })
 
@@ -324,7 +348,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       dayOfWeek,
     })
 
-    const stories = await step.do(`get all stories ${fetchDate}`, retryConfig, async () => {
+    const stories = await step.do(`get all stories ${fetchDate}`, CONTENT_FETCH_STEP_CONFIG, async () => {
       const allStories = await getAllStories(fetchDate, this.env, {
         limits: storyLimits,
         excludeRedditIds,
@@ -336,7 +360,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return allStories as Story[]
     })
 
-    subrequestLogger.checkpoint('after get all stories')
+    kvRequestLogger.checkpoint('after get all stories')
 
     const storiesPerSource = stories.reduce<Record<string, number>>((acc, story) => {
       const source = story.source || 'unknown'
@@ -345,87 +369,79 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     }, {})
     console.info('stories per source', storiesPerSource)
 
-    // 分來源獲取文章內容並緩存
-    const storyGroups = stories.reduce<Record<string, Story[]>>((groups, story) => {
-      const source = story.source || 'unknown'
-      if (!groups[source]) {
-        groups[source] = []
-      }
-      groups[source].push(story)
-      return groups
-    }, {})
+    // Fetch one story per durable step so a failure cannot replay every source item.
+    // Large content is checkpointed in strongly-consistent R2; step state stores only keys.
+    const allStoryContents: StoryContentCheckpoint[] = []
 
-    const allStoryContents: Array<{ id: string, title: string, content: string, source?: string }> = []
+    for (const [storyIndex, story] of stories.entries()) {
+      const stepName = `get story content ${storyIndex + 1}`
+      const cacheKey = await buildStoryContentCacheKey(rawContentKey, story)
+      const contentCheckpointKey = buildStoryContentCheckpointKey(cacheKey, event.instanceId)
 
-    for (const [source, sourceStories] of Object.entries(storyGroups)) {
-      const stepName = `get ${source} story contents`
-      const cacheKey = `${rawContentKey}:story-contents:${source}`
+      kvRequestLogger.checkpoint(`before ${stepName}`)
+      const checkpointKey = await step.do(stepName, CONTENT_FETCH_STEP_CONFIG, async () => {
+        if (await this.env.HACKER_NEWS_R2.head(contentCheckpointKey)) {
+          console.info('use R2 story checkpoint', { contentCheckpointKey })
+          return contentCheckpointKey
+        }
 
-      subrequestLogger.checkpoint(`before ${stepName}`)
-      const contentsForSource = await step.do(stepName, retryConfig, async () => {
+        let storyRecord: StoryContentCheckpoint | null = null
         const cached = await kvGet(cacheKey)
         if (cached) {
           try {
-            const parsed = JSON.parse(cached) as Array<{ id: string, title: string, content: string, source?: string }>
-            if (parsed.length === sourceStories.length) {
-              console.info(`use cached story contents for ${source}`)
-              return parsed
+            storyRecord = parseStoryContentCheckpoint(JSON.parse(cached))
+            if (storyRecord) {
+              console.info('use cached story content', { cacheKey })
             }
           }
           catch (error) {
-            console.warn(`failed to parse cached contents for ${source}`, error)
+            console.warn('failed to parse cached story content', { cacheKey, error })
           }
         }
 
-        const contents: Array<{ id: string, title: string, content: string, source?: string }> = []
-
-        for (const story of sourceStories) {
-          try {
-            const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
-
-            // 如果內容為空或太短，跳過這個故事
-            if (!storyContent || storyContent.trim().length < 50) {
-              console.warn(`⚠️ FILTERED OUT: Story "${story.title}" has no content - excluding from podcast`)
-              continue
-            }
-
-            contents.push({
-              id: story.id || '',
-              title: story.title || '',
-              content: storyContent,
-              source: story.source,
-            })
-            console.info(`✅ Story ${story.id} content fetched successfully`)
+        if (!storyRecord) {
+          const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
+          if (!storyContent || storyContent.trim().length < 50) {
+            console.warn(`⚠️ FILTERED OUT: Story "${story.title}" has no content - excluding from podcast`)
+            return null
           }
-          catch (error) {
-            console.error(`❌ Story ${story.id} content failed:`, error)
+
+          storyRecord = {
+            id: story.id || '',
+            title: story.title || '',
+            content: storyContent,
+            source: story.source,
           }
         }
 
-        console.info(`📊 Content fetch summary for ${source}: ${contents.length}/${sourceStories.length} stories have valid content`)
-
-        if (contents.length > 0) {
-          try {
-            await kvPut(cacheKey, JSON.stringify(contents), { expirationTtl: 60 * 60 * 24 })
-            console.info(`cached story contents for ${source}`, { count: contents.length })
-          }
-          catch (error) {
-            console.error(`cache story contents for ${source} failed:`, error)
-          }
-        }
-
-        return contents
+        const serialized = JSON.stringify(storyRecord)
+        await Promise.all([
+          kvPut(cacheKey, serialized, { expirationTtl: 60 * 60 * 24 }),
+          this.env.HACKER_NEWS_R2.put(contentCheckpointKey, serialized),
+        ])
+        return contentCheckpointKey
       })
 
-      subrequestLogger.checkpoint(`after ${stepName}`)
+      kvRequestLogger.checkpoint(`after ${stepName}`)
+      if (!checkpointKey) {
+        continue
+      }
 
-      allStoryContents.push(...contentsForSource)
+      const checkpoint = await this.env.HACKER_NEWS_R2.get(checkpointKey)
+      if (!checkpoint) {
+        throw new Error(`Missing story content checkpoint: ${checkpointKey}`)
+      }
+      const storyRecord = parseStoryContentCheckpoint(await checkpoint.json<unknown>())
+      if (!storyRecord) {
+        throw new Error(`Invalid story content checkpoint: ${checkpointKey}`)
+      }
+      allStoryContents.push(storyRecord)
     }
 
     // 一次性處理所有文章摘要
     const summarizationMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
 
-    const storySummaries = await step.do('summarize all stories', { ...retryConfig, timeout: '12 minutes' }, async () => {
+    const storySummaries = await step.do('summarize all stories', AI_STEP_CONFIG, async () => {
       const summaries: string[] = []
       const expectedCount = allStoryContents.length
 
@@ -443,6 +459,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         system: `${summarizeStoryPrompt}\n\n請為每篇文章生成摘要。**重要：你必須為所有 ${expectedCount} 篇文章都生成摘要**。請用 <story-summary id="文章ID"> 標籤包裹每個摘要，確保數量正確。`,
         prompt: combinedContent,
         maxTokens: summarizationMaxTokens,
+        maxRetries: AI_SDK_MAX_RETRIES,
       })
 
       console.info('batch summarize all stories success', { usage, finishReason, responseLength: text.length })
@@ -483,9 +500,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return summaries
     })
 
-    subrequestLogger.checkpoint('after summarize all stories')
+    kvRequestLogger.checkpoint('after summarize all stories')
 
-    const podcastScript = await step.do('generate podcast script', retryConfig, async () => {
+    const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
       const storiesPerTurn = 2.5
       const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 5
@@ -529,13 +546,13 @@ ${fullContentString}
         system: podcastScriptPrompt,
         prompt: enhancedPrompt,
         maxTokens: scriptMaxTokens,
-        maxRetries: 3,
+        maxRetries: AI_SDK_MAX_RETRIES,
         schema: z.object({
           title: z.string().optional(),
           dialogue: z.array(z.object({
             speaker: z.enum(['男', '女']),
-            text: z.string().min(1),
-          })).min(1),
+            text: z.string().min(1).max(MAX_DIALOGUE_LINE_CHARS),
+          })).min(1).max(MAX_DIALOGUE_LINES),
         }),
       })
 
@@ -558,15 +575,16 @@ ${fullContentString}
       return { title: object.title, dialogue: sanitizedDialogue } as PodcastScriptResponse
     })
 
-    subrequestLogger.checkpoint('after generate podcast script')
+    kvRequestLogger.checkpoint('after generate podcast script')
 
     if (!podcastScript.title || podcastScript.title.length < 5) {
       console.info('Title missing or too short, triggering dedicated beautification step')
-      podcastScript.title = await step.do('beautify missing title', retryConfig, async () => {
+      podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
         const { text } = await generateText({
           model: openai(this.env.OPENAI_MODEL!),
           system: `你是 ${podcastTitle} 的總編輯。請為今天的播客內容生成一個極具吸引力、驚悚且符合 SEO 的標題。\n格式："[日期] [驚悚標題1]、[驚悚標題2]"。\n例如："2026-01-17 網路大崩潰前兆？X 平台無預警死機、手機輻射正在殺死我們？"`,
           prompt: `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
+          maxRetries: AI_SDK_MAX_RETRIES,
         })
         return text.trim().replace(/^"|"$/g, '')
       })
@@ -576,24 +594,24 @@ ${fullContentString}
 
     await step.sleep('pause before blog content', breakTime)
 
-    const blogContent = await step.do('create blog content', retryConfig, async () => {
+    const blogContent = await step.do('create blog content', AI_STEP_CONFIG, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
         system: summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
         maxTokens: blogMaxTokens,
-        maxRetries: 3,
+        maxRetries: AI_SDK_MAX_RETRIES,
       })
       console.info(`create blog content success`, { usage, finishReason })
       return text
     })
 
-    subrequestLogger.checkpoint('after create blog content')
+    kvRequestLogger.checkpoint('after create blog content')
 
     await step.sleep('pause before intro content', breakTime)
 
-    const introContent = await step.do('create intro content', retryConfig, async () => {
+    const introContent = await step.do('create intro content', AI_STEP_CONFIG, async () => {
       const podcastDialogueLines = podcastScript.dialogue.map(line => `${line.speaker}：${line.text}`)
       const podcastContent = podcastDialogueLines.join('\n')
 
@@ -601,13 +619,13 @@ ${fullContentString}
         model: openai(this.env.OPENAI_MODEL!),
         system: introPrompt,
         prompt: podcastContent,
-        maxRetries: 3,
+        maxRetries: AI_SDK_MAX_RETRIES,
       })
       console.info(`create intro content success`, { usage, finishReason })
       return text
     })
 
-    subrequestLogger.checkpoint('after create intro content')
+    kvRequestLogger.checkpoint('after create intro content')
 
     // Prepare complete data object
     const scriptData: GeneratedScriptData = {
@@ -618,31 +636,42 @@ ${fullContentString}
       stories: stories as Story[],
       storySummaries,
       displayDate,
-      generatedAt: Date.now(),
+      generatedAt: event.timestamp.getTime(),
     }
 
-    // Save to KV
-    await step.do('save script to kv', retryConfig, async () => {
-      await kvPut(scriptKey, JSON.stringify(scriptData), {
-        expirationTtl: 60 * 60 * 24 * 7, // Keep for 1 week
-      })
+    const nextRedditDedupeIndex = updateRedditDedupeIndex(
+      redditDedupeIndex,
+      displayDate,
+      stories.filter(story => story.source === 'reddit' && story.id).map(story => story.id as string),
+    )
+
+    // Save the final script and the compact Reddit index together.
+    await step.do('save script to kv', IO_STEP_CONFIG, async () => {
+      await Promise.all([
+        kvPut(scriptKey, JSON.stringify(scriptData), {
+          expirationTtl: 60 * 60 * 24 * 7, // Keep for 1 week
+        }),
+        kvPut(redditDedupeKey, JSON.stringify(nextRedditDedupeIndex), {
+          expirationTtl: 60 * 60 * 24 * 14,
+        }),
+      ])
       console.info(`✅ Script saved to KV: ${scriptKey}`)
     })
 
-    subrequestLogger.checkpoint('after save script to kv')
+    kvRequestLogger.checkpoint('after save script to kv')
 
     // Trigger Audio Workflow
-    await step.do('trigger audio workflow', retryConfig, async () => {
+    const audioInstanceId = await step.do('trigger audio workflow', IO_STEP_CONFIG, async () => {
       const audioParams: WorkflowParams = {
         today: displayDate,
         variant,
         phase: 'audio',
       }
-      const audioInstanceId = await buildChildWorkflowInstanceId(event.instanceId)
+      const childInstanceId = await buildChildWorkflowInstanceId(event.instanceId)
       const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(
         this.env.HACKER_NEWS_AUDIO_WORKFLOW,
         {
-          id: audioInstanceId,
+          id: childInstanceId,
           params: audioParams,
         },
       )
@@ -651,10 +680,16 @@ ${fullContentString}
         duplicateDetected ? 'Audio Workflow already exists' : 'Triggered Audio Workflow from Script Workflow',
         { id: instance.id, params: audioParams },
       )
+      return instance.id
     })
 
-    subrequestLogger.checkpoint('after trigger audio workflow')
+    kvRequestLogger.checkpoint('after trigger audio workflow')
 
-    return scriptData
+    return {
+      scriptKey,
+      audioInstanceId,
+      storyCount: stories.length,
+      dialogueLines: scriptData.dialogue.length,
+    }
   }
 }
