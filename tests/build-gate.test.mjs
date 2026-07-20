@@ -15,6 +15,18 @@ describe('build gate configuration', () => {
     assert.match(packageJson.scripts.check, /pnpm test:build-gate/)
   })
 
+  it('uses a Node version supported by Wrangler during clean installs', async () => {
+    const packageJson = JSON.parse(await readFile(new URL('package.json', rootUrl), 'utf8'))
+    const nodeVersion = (await readFile(new URL('.node-version', rootUrl), 'utf8')).trim()
+    const nodeMajor = Number.parseInt(nodeVersion.replace(/^v/, '').split('.')[0], 10)
+
+    assert.ok(nodeMajor >= 22)
+    assert.equal(packageJson.engines.node, '>=22')
+    assert.doesNotMatch(packageJson.scripts.postinstall, /simple-git-hooks/)
+    assert.match(packageJson.scripts.postinstall, /cf-typegen/)
+    assert.match(packageJson.scripts['cf-typegen'], /normalize-generated-types/)
+  })
+
   it('does not allow Next builds to ignore lint or TypeScript failures', async () => {
     const nextConfig = await readFile(new URL('next.config.mjs', rootUrl), 'utf8')
 
