@@ -1,3 +1,5 @@
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { cache } from 'react'
 import { keepDays } from '@/config'
 import { getPastDays, mapScriptToArticle } from '@/lib/utils'
 
@@ -21,6 +23,11 @@ export async function getArticleByDate(env: ContentEnv, date: string, variant = 
 
   return (await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${date}`, 'json')) as Article | null
 }
+
+export const getRequestArticleByDate = cache(async (date: string, variant = 'hacker-news') => {
+  const { env } = await getCloudflareContext({ async: true })
+  return getArticleByDate(env, date, variant)
+})
 
 export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6) {
   const variant = 'hacker-news'

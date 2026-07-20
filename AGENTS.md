@@ -18,7 +18,8 @@ the podcast-generation Workflows.
 
 1. Web Worker (`wrangler.jsonc`)
    - Next.js 15 / React 19 App Router, built by OpenNext for Cloudflare.
-   - Entry after build: `.open-next/worker.js`.
+   - Wrangler entry: `worker.js`, which wraps the generated
+     `.open-next/worker.js` to enforce response-aware cache headers.
    - Serves the website, article pages, RSS, sitemap, agent discovery, and API
      documentation.
    - Reads podcast metadata from `HACKER_NEWS_KV` and checks audio in
@@ -44,6 +45,9 @@ compatible across both Workers or be deployed in a deliberate order.
 - `components/`: client and server UI components; `components/ui/` is generated
   or vendored shadcn-style code and is excluded from linting.
 - `lib/content.ts`: shared KV-to-article reads and Markdown rendering.
+- `lib/web-cache-policy.ts`: browser/Edge/RSC cache policy and response guard.
+- `worker.js`: outer Web Worker entry; preserve its RSC `private, no-store`
+  boundary when changing OpenNext integration.
 - `lib/discovery.ts`: robots, OpenAPI, API catalog, and agent discovery output.
 - `config.ts`: podcast metadata and homepage/RSS/sitemap retention windows.
 - `worker/index.ts`: backend routing, scheduling, parameter parsing, and
@@ -160,6 +164,10 @@ Cloudflare-service subrequests, 128 MB memory, and 3 MB Worker size.
   limit. `Promise.all` does not remove subrequest or memory costs.
 - Prefer static assets and cached responses over invoking Next.js SSR. Preserve
   existing `revalidate` behavior unless measurements justify a change.
+- Preserve Workers Cache in `wrangler.jsonc`. Public HTML uses a short browser
+  TTL and a 10-minute Edge TTL; RSC/router responses must remain `private,
+  no-store` at the outer Worker boundary. Do not add `s-maxage`, because it
+  disables stale-while-revalidate for Workers Cache.
 - Keep homepage and RSS KV reads bounded by pagination/retention settings.
 - Minimize KV writes used only for logging or coordination; KV is eventually
   consistent and must not be treated as a strongly consistent lock.
@@ -172,6 +180,7 @@ Official references:
 - https://developers.cloudflare.com/r2/objects/upload-objects/
 - https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
 - https://developers.cloudflare.com/workers/runtime-apis/streams/transformstream/
+- https://developers.cloudflare.com/workers/cache/configuration/
 
 ## Security and secrets
 

@@ -4,6 +4,53 @@
 
 ---
 
+## [2026-07-20] Web Worker 邊緣快取與 request-scoped KV 去重
+
+### 摘要
+
+啟用 Cloudflare Workers Cache，讓可公開的 HTML 與 RSS 能在 Worker invocation
+之前由 Edge 回應；同時移除無上限的 isolate-global KV `Map`，避免完整 Podcast
+script 長期累積而逼近 Free Plan 的 128MB 記憶體限制。
+
+### 快取邊界
+
+- `wrangler.jsonc` 啟用 Workers Cache 並關閉 cross-version sharing；HTML 的瀏覽器
+  TTL 為 60 秒、Cloudflare Edge TTL 為 10 分鐘，另允許 30 分鐘 stale response
+  與 1 天 stale-if-error。
+- 新增外層 `worker.js` 包裝 OpenNext 產物。它會依最終 response 的 Content-Type
+  判斷 representation，所有 `text/x-component` RSC payload 均強制
+  `Cache-Control` 與 `Cloudflare-CDN-Cache-Control` 為 `private, no-store`。
+- HTML 的 `Vary` 同時包含 `Accept`、RSC 與 Next Router headers，避免 Markdown、
+  HTML 與 router representation 混用。RSS 使用相同 Edge policy。
+- 非 2xx 頁面一律 `private, no-store`，避免尚未產生的 Podcast 或暫時性錯誤被
+  Edge 固定成 404／錯誤頁。
+- 修正既有 `app/__markdown` 被 Next.js 視為 private folder、導致
+  `Accept: text/markdown` 永遠 404 的問題；內部 rewrite 改到可路由的
+  `/agent-markdown`，HTML 與 Markdown 由 `Vary: Accept` 安全分流。
+- 不使用 `s-maxage`，避免關閉 Workers Cache 的 stale-while-revalidate 行為。
+
+### KV 與 OpenNext
+
+- 首頁改用共用的 bounded pagination loader，不再保留一份重複 KV 讀取實作。
+- 文章頁 metadata 與 page body 透過 React `cache()` 在單次 Server Component request
+  內共用 KV 結果；不跨 request 保存 payload，也不依賴 Cloudflare isolate 壽命。
+- RSS 與 variant routes 統一走 `getArticleByDate()`，移除剩餘的直接 KV reads。
+- OpenNext regional cache 使用 purge-aware 預設 refresh mode，不再強制 lazy refresh。
+
+### 驗證
+
+- `pnpm check`：TypeScript 0 error、ESLint 0 error（6 個既有 warning），57 項測試
+  全數通過；其中 14 項專門驗證 cache policy、Worker entry 與部署設定。
+- OpenNext production build 與 Web Worker dry-run 通過；gzip 約 1694 KiB，低於
+  Workers Free Plan 3 MiB 限制。
+- 本機 Wrangler curl smoke：HTML 回傳 browser 60 秒／Edge 10 分鐘；RSC 回傳
+  `private, no-store`；RSS 回傳 Edge 10 分鐘。
+
+部署後可用重複 `curl -I` 觀察 `Cf-Cache-Status` 的 `MISS → HIT`，作為真實 Edge
+命中量測；本機 workerd 不代表全球 Edge 命中率。
+
+---
+
 ## [2026-07-20] Next.js 與 production dependencies 安全更新
 
 ### 摘要

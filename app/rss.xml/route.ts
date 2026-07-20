@@ -4,7 +4,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
-import { getArticleTimestamp, getPastDays, mapScriptToArticle } from '@/lib/utils'
+import { getArticleByDate } from '@/lib/content'
+import { getArticleTimestamp, getPastDays } from '@/lib/utils'
+import { EDGE_CACHE_CONTROL } from '@/lib/web-cache-policy'
 
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
 const MAX_DESCRIPTION_LENGTH = 3800
@@ -21,7 +23,8 @@ export const revalidate = 600
 
 const rssHeaders = {
   'Content-Type': 'application/xml',
-  'Cache-Control': `public, max-age=${revalidate}, s-maxage=${revalidate}`,
+  'Cache-Control': `public, max-age=${revalidate}`,
+  'Cloudflare-CDN-Cache-Control': EDGE_CACHE_CONTROL,
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Accept',
@@ -62,22 +65,10 @@ export async function GET() {
   })
 
   const { env } = await getCloudflareContext({ async: true })
-  const runEnv = env.NEXTJS_ENV || 'production'
   const variant = 'hacker-news'
   const pastDays = getPastDays(rssDays, 8)
   const posts = (await Promise.all(
-    pastDays.map(async (day) => {
-      // Try fetching new script format first
-      const scriptKey = `script:${runEnv}:${variant}:${day}`
-      const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-
-      if (scriptData) {
-        return mapScriptToArticle(scriptData, runEnv, variant)
-      }
-
-      const post = await env.HACKER_NEWS_KV.get(`content:${runEnv}:hacker-news:${day}`, 'json')
-      return post as unknown as Article
-    }),
+    pastDays.map(day => getArticleByDate(env, day, variant)),
   )).filter(Boolean)
 
   for (const post of posts) {

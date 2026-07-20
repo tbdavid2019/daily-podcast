@@ -3,26 +3,17 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { notFound } from 'next/navigation'
 import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
-import { mapScriptToArticle } from '@/lib/utils'
+import { getRequestArticleByDate } from '@/lib/content'
 
 export const revalidate = 3600
 
 // 生成页面的元数据
 export async function generateMetadata({ params }: { params: Promise<{ date: string, variant: string }> }): Promise<Metadata> {
   const { env } = await getCloudflareContext({ async: true })
-  const runEnv = env.NEXTJS_ENV || 'production'
   const resolvedParams = await params
   const date = resolvedParams.date
   const variant = resolvedParams.variant
-
-  const scriptKey = `script:${runEnv}:${variant}:${date}`
-  const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-
-  let post: any = null
-
-  if (scriptData) {
-    post = mapScriptToArticle(scriptData, runEnv, variant)
-  }
+  const post = await getRequestArticleByDate(date, variant)
 
   if (!post) {
     return notFound()
@@ -53,20 +44,10 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
 
 export default async function PostVariantPage({ params }: { params: Promise<{ date: string, variant: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
-  const runEnv = env.NEXTJS_ENV || 'production'
-
   const resolvedParams = await params
   const date = resolvedParams.date
   const variant = resolvedParams.variant
-
-  const scriptKey = `script:${runEnv}:${variant}:${date}`
-  const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
-
-  let post: any = null
-
-  if (scriptData) {
-    post = mapScriptToArticle(scriptData, runEnv, variant)
-  }
+  const post = await getRequestArticleByDate(date, variant)
 
   if (!post) {
     return notFound()

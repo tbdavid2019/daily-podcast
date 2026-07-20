@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
   if (pathname === '/') {
     if (wantsMarkdown(request)) {
       const url = request.nextUrl.clone()
-      url.pathname = '/__markdown'
+      url.pathname = '/agent-markdown'
       return withDiscoveryHeaders(NextResponse.rewrite(url), true)
     }
 
@@ -33,7 +33,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith('/post/')) {
     if (wantsMarkdown(request)) {
       const url = request.nextUrl.clone()
-      url.pathname = `/__markdown${pathname}`
+      url.pathname = `/agent-markdown${pathname}`
       return withDiscoveryHeaders(NextResponse.rewrite(url), false)
     }
 

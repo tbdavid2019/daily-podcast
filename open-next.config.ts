@@ -10,7 +10,6 @@ export default defineCloudflareConfig({
   enableCacheInterception: true,
   incrementalCache: withRegionalCache(r2IncrementalCache, {
     mode: 'long-lived',
-    shouldLazilyUpdateOnCacheHit: true,
   }),
   queue: queueCache(doQueue, {
     regionalCacheTtlSec: 5,
