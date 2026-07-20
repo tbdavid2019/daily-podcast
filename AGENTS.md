@@ -90,8 +90,9 @@ Use the pinned pnpm version from `package.json` and the Node version from
 pnpm install
 pnpm dev                 # Next.js local development
 pnpm dev:worker          # Generation Worker with persisted local state
+pnpm check               # Lint, typecheck, Workflow tests, and gate tests
 pnpm lint
-pnpm exec tsc --noEmit
+pnpm typecheck
 pnpm build               # Next.js build only
 pnpm opennext            # Build the actual Web Worker artifact
 pnpm preview             # OpenNext build plus local Wrangler
@@ -112,9 +113,9 @@ different pnpm workspace command.
 
 - Before editing, inspect the target file, its related types/tests, and one
   nearby implementation pattern.
-- For code changes, run `pnpm lint` and `pnpm exec tsc --noEmit` separately.
-  `next.config.mjs` currently skips lint and TypeScript validation during
-  `next build`, so a successful build alone is not proof of correctness.
+- For code changes, run `pnpm check`. `next.config.mjs` no longer skips lint or
+  TypeScript validation, so any attempt to restore `ignoreDuringBuilds` or
+  `ignoreBuildErrors` must be treated as a build-gate regression.
 - For Web runtime or routing changes, also run `pnpm build`; use `pnpm
   opennext` when Cloudflare bundling, bindings, caching, or runtime compatibility
   could be affected.

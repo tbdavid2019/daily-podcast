@@ -4,6 +4,58 @@
 
 ---
 
+## [2026-07-20] TypeScript 修復與前後端 Build Gate
+
+### 摘要
+
+修復專案既有的 10 個 TypeScript 錯誤，移除 Next.js 跳過 lint／型別錯誤的設定，
+並新增本機統一檢查指令與 GitHub Actions。現在 push 到 `main` 或建立 PR 時，會
+自動驗證前端 OpenNext bundle 與 Generation Worker bundle。
+
+### 根因與修復
+
+- `NEXT_STATIC_HOST` 只存在部署環境，未納入根 `wrangler.jsonc`，導致 Wrangler
+  無法產生正確 `CloudflareEnv`；現在已版本化該 binding 並重新產生
+  `cloudflare-env.d.ts`。
+- `mapScriptToArticle()` 會回傳 `variant`，但 `Article` 契約漏掉此欄位；現在以
+  optional field 保持舊 KV 資料相容。
+- Audio Workflow 將 `Uint8Array.buffer` 傳入 R2，使新版 TypeScript 將型別擴大
+  為可能包含 `SharedArrayBuffer`；現在直接傳遞 `Uint8Array` view，移除不安全的
+  `as ArrayBuffer`。
+- 移除 `next.config.mjs` 的 `ignoreBuildErrors` 與 `ignoreDuringBuilds`，正式 build
+  不再隱藏型別或 lint failure。
+- 移除 ESLint 9 已停用且與 `eslint.config.mjs` 重複的 `.eslintignore`。
+
+### 新增 Build Gate
+
+```bash
+# 一次執行 lint、typecheck 與所有本機 gate tests
+pnpm check
+
+# 分別執行
+pnpm typecheck
+pnpm test:build-gate
+pnpm opennext
+pnpm exec wrangler deploy --dry-run
+pnpm exec wrangler deploy --cwd worker --dry-run
+```
+
+`.github/workflows/quality-gate.yml` 會在 push／PR 執行 frozen-lockfile 安裝、lint、
+typecheck、22 項 Workflow tests、3 項 build-gate tests、OpenNext production build，
+以及前後端兩個 Wrangler dry-run。CI 僅使用 read-only repository permission，不含
+任何 production Secret 或自動部署權限。
+
+### 驗證結果
+
+- `pnpm typecheck`：0 error（原 10 個錯誤已清除）。
+- `pnpm check`：通過；ESLint 0 error，保留 6 個既有 warning。
+- `pnpm build`：通過，且輸出確認執行 lint 與型別檢查。
+- `pnpm opennext`：Cloudflare frontend production bundle 成功。
+- Frontend Worker dry-run：成功，gzip 約 1.74 MiB。
+- Generation Worker dry-run：成功，gzip 約 272 KiB。
+
+---
+
 ## [2026-07-20] Workflow 認證、冪等防重與 Cloudflare Secrets 遷移
 
 ### 摘要

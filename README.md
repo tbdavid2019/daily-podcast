@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **✅ TypeScript 與前後端 Build Gate (2026-07-20)**：修復 10 個既有 TypeScript 錯誤，Next build 不再跳過 lint／型別 failure；新增 `pnpm check` 與 GitHub Actions，在 push／PR 自動驗證 OpenNext 前端及 Generation Worker bundle。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🔐 Workflow 認證、冪等與安全重跑 (2026-07-20)**：`POST /workflow` 已加入 Bearer Token 認證與 fail-closed 保護；一般執行採固定 instance ID，強制重跑使用 `Idempotency-Key`，避免網路重試或並行請求重複消耗 AI/TTS 額度。另新增 Token 首次設定、輪換、文稿重產與聲音重產指令，並將 AI/TTS 金鑰遷移至 Cloudflare Secrets。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **📌 播放器懸浮固定與 RSS 格式優化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；優化 RSS feed 以置頂回連網址，並藉由限制內文大小，徹底解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文檔與腳本。詳見 [CHANGELOG.md](CHANGELOG.md)。
@@ -261,6 +262,18 @@ pnpm workflow:secret
 Workflow 之間的內部 binding 不使用這組 Token，因此不受輪換影響。
 
 ### 新聞來源測試
+
+提交前先執行完整 build gate：
+
+```bash
+pnpm check
+pnpm opennext
+pnpm exec wrangler deploy --dry-run
+pnpm exec wrangler deploy --cwd worker --dry-run
+```
+
+GitHub 的 `Quality Gate` 會在 push 到 `main` 或建立 Pull Request 時自動執行相同
+檢查；CI 不持有 production Secret，也不會自動部署。
 
 本地測試新聞來源抓取邏輯：
 ```bash
