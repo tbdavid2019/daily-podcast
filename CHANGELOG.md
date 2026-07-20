@@ -46,8 +46,14 @@ script 長期累積而逼近 Free Plan 的 128MB 記憶體限制。
 - 本機 Wrangler curl smoke：HTML 回傳 browser 60 秒／Edge 10 分鐘；RSC 回傳
   `private, no-store`；RSS 回傳 Edge 10 分鐘。
 
-部署後可用重複 `curl -I` 觀察 `Cf-Cache-Status` 的 `MISS → HIT`，作為真實 Edge
-命中量測；本機 workerd 不代表全球 Edge 命中率。
+### 正式部署與量測
+
+- 已部署 Web Worker version `09ceae33-2db5-4408-905c-91ad35e804f8`，並確認
+  `https://podcast.david888.com` 已切換到新版。
+- Production curl：首頁與 Markdown 均確認 `Cf-Cache-Status: HIT`；RSS 與
+  status API 均確認 `MISS → HIT`。
+- RSC 與不存在文章的 Markdown 404 均回傳 `Cf-Cache-Status: BYPASS` 與
+  `private, no-store`，不會寫入 Edge cache。
 
 ---
 
