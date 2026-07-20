@@ -4,6 +4,56 @@
 
 ---
 
+## [2026-07-20] Next.js 與 production dependencies 安全更新
+
+### 摘要
+
+修補既有 Next.js App Router／React Server Components 安全風險，並更新相依的
+Cloudflare adapter 與 production toolchain。Next.js 由 15.4.6 升至 15.5.20，
+production audit 從 60 項降至 4 項，Critical 與 High 均降為 0。
+
+### 版本與範圍
+
+- Next.js `15.4.6 → 15.5.20`、React／React DOM `19.1.1 → 19.2.7`、
+  `eslint-config-next` 同步至 15.5.20。
+- `@opennextjs/cloudflare 1.6.5 → 1.20.1`、Wrangler `4.110.0 → 4.112.0`；
+  OpenNext 官方支援 Next.js 15 最新 minor，雙 Worker 均重新 bundle 驗證。
+- 同步更新 Cloudflare Puppeteer、Cheerio、Radix UI、Markdown、Tailwind 與 lint／
+  TypeScript tooling，因此本次是受控 dependency refresh，不只是單一 Next patch。
+- 保持 `ai` 4.3.19 與 `@ai-sdk/openai` 1.3.24 的既有 major，避免 AI 產生流程
+  被非必要的 major migration 影響。
+- Wrangler typegen 產生的 workerd runtime version 註解同步提交，確保
+  `pnpm install --frozen-lockfile` 後工作樹可重現。
+
+### 剩餘 audit findings
+
+`pnpm audit --prod` 尚有 2 moderate、2 low，沒有 Critical／High：
+
+- `jsondiffpatch` HTML formatter XSS（由 AI SDK 間接帶入；本專案未使用 formatter）。
+- Next.js 內部 PostCSS stringify XSS（moderate，等待上游 dependency 更新）。
+- AI SDK file upload whitelist bypass（low；本專案未提供 AI file upload）。
+- `@ai-sdk/provider-utils` resource consumption（low，目前 advisory 無修補版本）。
+
+### 驗證
+
+- `pnpm install --frozen-lockfile`：通過，lockfile 可重現。
+- `pnpm check`：通過；TypeScript 0 error、ESLint 0 error（6 個既有 warning）、
+  38 項 Workflow／觸發腳本 tests 與 5 項 build/tooling gate tests 通過。
+- OpenNext production build：Next.js 15.5.20、React 19.2.7、adapter 1.20.1 成功。
+- Web Worker dry-run：gzip 1683.99 KiB；Generation Worker dry-run：297.74 KiB，
+  皆低於 Workers Free Plan 3 MiB 限制。
+- 本機 OpenNext Worker curl smoke：首頁、status API、RSS、API docs、API catalog、
+  robots.txt 均回傳 200 且 MIME 正確。
+
+官方依據：
+
+- https://nextjs.org/blog/CVE-2025-66478
+- https://nextjs.org/blog/security-update-2025-12-11
+- https://nextjs.org/support-policy
+- https://opennext.js.org/cloudflare
+
+---
+
 ## [2026-07-20] 音訊合併改為 bounded-memory R2 Multipart
 
 ### 摘要

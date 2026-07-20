@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🛡️ Next.js 與 production dependencies 安全更新 (2026-07-20)**：Next.js 由 15.4.6 升至 15.5.20，React 升至 19.2.7、OpenNext Cloudflare adapter 升至 1.20.1，並同步更新 Puppeteer、Cheerio、Radix 與 build tooling。Production audit 已由 60 項降至 4 項，Critical／High 均為 0；AI SDK 保持既有 `ai` 4.x／`@ai-sdk/openai` 1.x major。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🎧 音訊合併改為 bounded-memory R2 Multipart (2026-07-20)**：最終 Podcast 不再一次下載所有 batch 或建立整集 combined buffer；現在以 5 MiB 固定 Part、R2 range stream 與 `FixedLengthStream` 直接上傳，WAV 只保留一個正確總檔 header。每個 Part 可獨立重試，失敗會 abort，解決 128MB 峰值記憶體風險。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **⚙️ Workflow Free Plan 成本與恢復性優化 (2026-07-20)**：將文章內容改為單篇 durable step，原文以 4 天 R2 checkpoint 保存、step state 只保留短 key；AI 最壞嘗試由 20 次降為 2 次，TTS 以 deterministic segment/batch checkpoint 避免成功片段被重做，Reddit 去重的日常 KV 讀取由 7 次降為 1 次。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **✅ TypeScript 與前後端 Build Gate (2026-07-20)**：修復 10 個既有 TypeScript 錯誤，Next build 不再跳過 lint／型別 failure；新增 `pnpm check` 與 GitHub Actions，在 push／PR 自動驗證 OpenNext 前端及 Generation Worker bundle。詳見 [CHANGELOG.md](CHANGELOG.md)。
