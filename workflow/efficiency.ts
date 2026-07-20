@@ -213,6 +213,10 @@ export function buildAudioSegmentKey(input: AudioSegmentKeyInput): string {
   return `${audioTempPrefix(input)}/${safePathPart(input.variant)}-batch-${input.batchIndex}-segment-${input.segmentIndex}.mp3`
 }
 
+export function buildAudioMultipartStateKey(input: AudioBatchKeyInput): string {
+  return `${audioTempPrefix(input)}/${safePathPart(input.variant)}-multipart.json`
+}
+
 export function isAudioCheckpointForInstance(
   object: { customMetadata?: Record<string, string> } | null,
   instanceId: string,

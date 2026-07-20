@@ -9,9 +9,9 @@ export interface AudioBatchObject {
   size: number
 }
 
-export type AudioMultipartPiece =
-  | { kind: 'wav-header', offset: number, length: number }
-  | { kind: 'r2', key: string, offset: number, length: number }
+export type AudioMultipartPiece
+  = | { kind: 'wav-header', offset: number, length: number }
+    | { kind: 'r2', key: string, offset: number, length: number }
 
 export interface AudioMultipartPart {
   partNumber: number
@@ -24,6 +24,27 @@ export interface AudioMultipartPlan {
   pcmLength: number
   parts: AudioMultipartPart[]
 }
+
+interface AudioRangeBucket {
+  get: (
+    key: string,
+    options: { range: { offset: number, length: number } },
+  ) => Promise<{ body: ReadableStream } | null>
+}
+
+interface AudioMultipartTarget {
+  uploadPart: (
+    partNumber: number,
+    value: ReadableStream,
+  ) => Promise<{ partNumber: number, etag: string }>
+}
+
+interface AudioFixedLengthStream {
+  readable: ReadableStream
+  writable: WritableStream<ArrayBuffer | ArrayBufferView>
+}
+
+type AudioFixedLengthStreamFactory = (length: number) => AudioFixedLengthStream
 
 function writeAscii(view: DataView, offset: number, value: string) {
   for (let index = 0; index < value.length; index++) {
@@ -160,4 +181,67 @@ export function planAudioMultipartUpload(
   }
 
   return { totalLength, pcmLength, parts }
+}
+
+export async function uploadAudioMultipartPart(
+  bucket: AudioRangeBucket,
+  multipart: AudioMultipartTarget,
+  part: AudioMultipartPart,
+  wavHeader: Uint8Array,
+  createFixedLengthStream: AudioFixedLengthStreamFactory = length => new FixedLengthStream(length),
+) {
+  const { readable, writable } = createFixedLengthStream(part.length)
+
+  const writePart = async () => {
+    try {
+      for (const piece of part.pieces) {
+        if (piece.kind === 'wav-header') {
+          const bytes = wavHeader.subarray(piece.offset, piece.offset + piece.length)
+          const writer = writable.getWriter()
+          try {
+            await writer.write(bytes)
+          }
+          finally {
+            writer.releaseLock()
+          }
+          continue
+        }
+
+        const object = await bucket.get(piece.key, {
+          range: { offset: piece.offset, length: piece.length },
+        })
+        if (!object) {
+          throw new Error(`Missing audio batch range: ${piece.key}`)
+        }
+        await object.body.pipeTo(writable, { preventClose: true })
+      }
+
+      const writer = writable.getWriter()
+      try {
+        await writer.close()
+      }
+      finally {
+        writer.releaseLock()
+      }
+    }
+    catch (error) {
+      const writer = writable.getWriter()
+      await writer.abort(error).catch(() => undefined)
+      writer.releaseLock()
+      throw error
+    }
+  }
+
+  const [uploadResult, writeResult] = await Promise.allSettled([
+    multipart.uploadPart(part.partNumber, readable),
+    writePart(),
+  ])
+
+  if (writeResult.status === 'rejected') {
+    throw writeResult.reason
+  }
+  if (uploadResult.status === 'rejected') {
+    throw uploadResult.reason
+  }
+  return uploadResult.value
 }

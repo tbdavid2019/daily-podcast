@@ -2,8 +2,14 @@ import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { GeneratedScriptData, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import {
+  createPcmWavHeader,
+  planAudioMultipartUpload,
+  uploadAudioMultipartPart,
+} from './audio-multipart'
+import {
   AUDIO_BATCH_STEP_CONFIG,
   buildAudioBatchKey,
+  buildAudioMultipartStateKey,
   buildAudioSegmentKey,
   IO_STEP_CONFIG,
   isAudioCheckpointForInstance,
@@ -35,6 +41,23 @@ interface Env extends CloudflareEnv {
 }
 
 const TTS_RATE_LIMIT_DELAY_MS = 400
+
+interface AudioMultipartCheckpoint {
+  version: 1
+  podcastKey: string
+  uploadId: string
+}
+
+function parseAudioMultipartCheckpoint(value: unknown, podcastKey: string): AudioMultipartCheckpoint | null {
+  if (!value || typeof value !== 'object')
+    return null
+
+  const checkpoint = value as Partial<AudioMultipartCheckpoint>
+  if (checkpoint.version !== 1 || checkpoint.podcastKey !== podcastKey || !checkpoint.uploadId) {
+    return null
+  }
+  return checkpoint as AudioMultipartCheckpoint
+}
 
 function chunkDialogueText(text: string, maxChars = MAX_TTS_SEGMENT_CHARS) {
   const normalized = text.replace(/\s+/g, ' ').trim()
@@ -263,41 +286,116 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       batchKeys.push(batchKey)
     }
 
-    // 4. Merge all batches
-    const { totalLength } = await step.do('merge audio batches', AUDIO_BATCH_STEP_CONFIG, async () => {
+    // 4. Merge all batches with bounded-memory R2 multipart streams.
+    const completedAudioLength = await step.do('check final audio checkpoint', IO_STEP_CONFIG, async () => {
       const existingAudio = await this.env.HACKER_NEWS_R2.head(podcastKey)
       if (isAudioCheckpointForInstance(existingAudio, event.instanceId)) {
-        return {
-          segmentCount: allSegments.length,
-          totalLength: existingAudio?.size || 0,
+        return existingAudio?.size || 0
+      }
+      return null
+    })
+
+    const multipartStateKey = buildAudioMultipartStateKey({
+      displayDate,
+      runEnv,
+      variant,
+      instanceId: event.instanceId,
+      batchIndex: 0,
+    })
+    let totalLength = completedAudioLength ?? 0
+
+    if (completedAudioLength === null) {
+      const multipartPlan = await step.do('plan audio multipart upload', IO_STEP_CONFIG, async () => {
+        const batches: Array<{ key: string, size: number }> = []
+        for (const key of batchKeys) {
+          const object = await this.env.HACKER_NEWS_R2.head(key)
+          if (!object)
+            throw new Error(`Missing batch file: ${key}`)
+          batches.push({ key, size: object.size })
         }
-      }
-
-      const buffers: Uint8Array[] = []
-
-      for (const key of batchKeys) {
-        const object = await this.env.HACKER_NEWS_R2.get(key)
-        if (!object)
-          throw new Error(`Missing batch file: ${key}`)
-        const arrayBuffer = await object.arrayBuffer()
-        buffers.push(new Uint8Array(arrayBuffer))
-      }
-
-      const combined = combineAudioBuffers(buffers, isGeminiTTS)
-
-      await this.env.HACKER_NEWS_R2.put(podcastKey, combined, {
-        customMetadata: { workflowInstanceId: event.instanceId },
+        return planAudioMultipartUpload(batches, isGeminiTTS)
       })
 
-      return {
-        segmentCount: allSegments.length,
-        totalLength: combined.byteLength,
+      const uploadId = await step.do('create audio multipart upload', IO_STEP_CONFIG, async () => {
+        const storedCheckpoint = await this.env.HACKER_NEWS_R2.get(multipartStateKey)
+        if (storedCheckpoint) {
+          const checkpoint = parseAudioMultipartCheckpoint(await storedCheckpoint.json(), podcastKey)
+          if (!checkpoint) {
+            throw new Error(`Invalid audio multipart checkpoint: ${multipartStateKey}`)
+          }
+          return checkpoint.uploadId
+        }
+
+        const multipart = await this.env.HACKER_NEWS_R2.createMultipartUpload(podcastKey, {
+          customMetadata: { workflowInstanceId: event.instanceId },
+        })
+        const checkpoint: AudioMultipartCheckpoint = {
+          version: 1,
+          podcastKey,
+          uploadId: multipart.uploadId,
+        }
+        await this.env.HACKER_NEWS_R2.put(multipartStateKey, JSON.stringify(checkpoint))
+        return multipart.uploadId
+      })
+
+      const uploadedParts: R2UploadedPart[] = []
+      const wavHeader = isGeminiTTS
+        ? createPcmWavHeader(multipartPlan.pcmLength)
+        : new Uint8Array(0)
+
+      try {
+        for (const part of multipartPlan.parts) {
+          const uploadedPart = await step.do(
+            `upload audio multipart part ${part.partNumber}`,
+            AUDIO_BATCH_STEP_CONFIG,
+            async () => {
+              const multipart = this.env.HACKER_NEWS_R2.resumeMultipartUpload(podcastKey, uploadId)
+              return uploadAudioMultipartPart(
+                this.env.HACKER_NEWS_R2,
+                multipart,
+                part,
+                wavHeader,
+              )
+            },
+          )
+          uploadedParts.push(uploadedPart)
+        }
+
+        totalLength = await step.do('complete audio multipart upload', AUDIO_BATCH_STEP_CONFIG, async () => {
+          const existingAudio = await this.env.HACKER_NEWS_R2.head(podcastKey)
+          if (isAudioCheckpointForInstance(existingAudio, event.instanceId)) {
+            return existingAudio?.size || 0
+          }
+
+          const multipart = this.env.HACKER_NEWS_R2.resumeMultipartUpload(podcastKey, uploadId)
+          const completed = await multipart.complete(uploadedParts)
+          if (completed.size !== multipartPlan.totalLength) {
+            throw new Error(`Completed audio size mismatch: expected ${multipartPlan.totalLength}, received ${completed.size}`)
+          }
+          return completed.size
+        })
       }
-    })
+      catch (error) {
+        try {
+          await step.do('abort failed audio multipart upload', IO_STEP_CONFIG, async () => {
+            const existingAudio = await this.env.HACKER_NEWS_R2.head(podcastKey)
+            if (!isAudioCheckpointForInstance(existingAudio, event.instanceId)) {
+              const multipart = this.env.HACKER_NEWS_R2.resumeMultipartUpload(podcastKey, uploadId)
+              await multipart.abort()
+            }
+            await this.env.HACKER_NEWS_R2.delete(multipartStateKey)
+          })
+        }
+        catch (abortError) {
+          console.warn('Failed to abort audio multipart upload', { abortError })
+        }
+        throw error
+      }
+    }
 
     try {
       await step.do('cleanup audio checkpoints', IO_STEP_CONFIG, async () => {
-        await this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys])
+        await this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey])
       })
     }
     catch (error) {

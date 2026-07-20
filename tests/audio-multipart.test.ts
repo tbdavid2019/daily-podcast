@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { describe, it } from 'node:test'
 import {
   R2_MULTIPART_MAX_PARTS,
   R2_MULTIPART_PART_SIZE,
   createPcmWavHeader,
   planAudioMultipartUpload,
+  uploadAudioMultipartPart,
 } from '../workflow/audio-multipart'
 
 const MIB = 1024 * 1024
@@ -83,5 +85,74 @@ describe('PCM WAV header', () => {
     assert.equal(view.getUint16(34, true), 16)
     assert.equal(text(36, 4), 'data')
     assert.equal(view.getUint32(40, true), pcmLength)
+  })
+})
+
+describe('audio multipart streaming', () => {
+  it('streams exact ranged bytes into each upload part without whole-object buffering', async () => {
+    const first = new Uint8Array(3 * MIB)
+    const second = new Uint8Array(4 * MIB)
+    first.fill(0x11, 44)
+    second.fill(0x22, 44)
+    const objects = new Map([
+      ['batch-0.wav', first],
+      ['batch-1.wav', second],
+    ])
+    const plan = planAudioMultipartUpload([
+      { key: 'batch-0.wav', size: first.byteLength },
+      { key: 'batch-1.wav', size: second.byteLength },
+    ], true)
+    const uploaded = new Map<number, Uint8Array>()
+    const bucket = {
+      async get(key: string, options: { range: { offset: number, length: number } }) {
+        const source = objects.get(key)
+        if (!source)
+          return null
+        const bytes = source.slice(options.range.offset, options.range.offset + options.range.length)
+        return {
+          body: new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(bytes)
+              controller.close()
+            },
+          }),
+        }
+      },
+    }
+    const multipart = {
+      async uploadPart(partNumber: number, body: ReadableStream) {
+        uploaded.set(partNumber, new Uint8Array(await new Response(body).arrayBuffer()))
+        return { partNumber, etag: `etag-${partNumber}` }
+      },
+    }
+    const streamFactory = () => new TransformStream<ArrayBuffer | ArrayBufferView, Uint8Array>()
+    const header = createPcmWavHeader(plan.pcmLength)
+
+    for (const part of plan.parts) {
+      const result = await uploadAudioMultipartPart(bucket, multipart, part, header, streamFactory)
+      assert.equal(result.etag, `etag-${part.partNumber}`)
+      assert.equal(uploaded.get(part.partNumber)?.byteLength, part.length)
+    }
+
+    const firstPart = uploaded.get(1)
+    const secondPart = uploaded.get(2)
+    assert.ok(firstPart)
+    assert.ok(secondPart)
+    assert.deepEqual(firstPart.subarray(0, 44), header)
+    assert.equal(firstPart[44], 0x11)
+    assert.equal(firstPart[3 * MIB - 1], 0x11)
+    assert.equal(firstPart[3 * MIB], 0x22)
+    assert.equal(secondPart[0], 0x22)
+    assert.equal(secondPart.at(-1), 0x22)
+  })
+
+  it('keeps the final Workflow merge on ranged streams instead of arrayBuffer()', async () => {
+    const source = await readFile(new URL('../workflow/audio.ts', import.meta.url), 'utf8')
+    const finalMerge = source.slice(source.indexOf('// 4. Merge all batches'))
+
+    assert.match(finalMerge, /createMultipartUpload/)
+    assert.match(finalMerge, /uploadAudioMultipartPart/)
+    assert.doesNotMatch(finalMerge, /\.arrayBuffer\(\)/)
+    assert.doesNotMatch(finalMerge, /combineAudioBuffers/)
   })
 })

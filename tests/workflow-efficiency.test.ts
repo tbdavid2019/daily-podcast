@@ -9,6 +9,7 @@ import {
   MAX_DIALOGUE_LINE_CHARS,
   MAX_TTS_SEGMENT_CHARS,
   buildAudioBatchKey,
+  buildAudioMultipartStateKey,
   buildAudioSegmentKey,
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
@@ -78,6 +79,10 @@ describe('workflow compact checkpoints', () => {
     assert.equal(
       buildAudioSegmentKey({ ...input, segmentIndex: 3 }),
       '2026/07/20/production/temp/podcast-audio-child-abc123/hacker-news-batch-2-segment-3.mp3',
+    )
+    assert.equal(
+      buildAudioMultipartStateKey(input),
+      '2026/07/20/production/temp/podcast-audio-child-abc123/hacker-news-multipart.json',
     )
   })
 
