@@ -4,6 +4,51 @@
 
 ---
 
+## [2026-07-20] Workflow subrequest、重試與持久化狀態優化
+
+### 摘要
+
+針對 Cloudflare Workers Free Plan 的 50 個外部 subrequests、100MB Workflow
+instance state 與重試成本，將大型來源抓取拆成可獨立恢復的步驟，統一昂貴操作的
+重試政策，並以 deterministic R2 checkpoint 避免 AI/TTS 成功結果被整批重做。
+
+### 變更內容
+
+- Hacker News 等來源從「每個來源一個 step」改為「每篇故事一個 step」。單篇故事
+  即使走完 3 個 Jina 節點及 Firecrawl fallback，含一次 Workflow retry 的最壞值
+  仍低於 Free Plan 的 50 個外部 subrequests。
+- 原始文章不再直接成為大型 step output。每篇內容先寫入強一致 R2，step state
+  只保存短 object key；checkpoint 保留 4 天，後續每日 Workflow 清除過期 prefix，
+  覆蓋 Free Plan 已完成 instance 的 3 天狀態保留期。
+- 文字 AI 呼叫關閉 SDK 內層 retry，Workflow step 總 attempts 設為 2；以 Podcast
+  script 生成為例，最壞呼叫數由 `5 × 4 = 20` 降為 `2 × 1 = 2`。
+- TTS 移除 batch 內的手動 retry loop。每個 segment 與 batch 使用包含 Workflow
+  instance ID 的 deterministic R2 key；step retry 只重做缺少的片段，不會重做已
+  checkpoint 的成功片段。
+- 最終音檔加入 `workflowInstanceId` R2 metadata。若 merge step 在 upload 後重播，
+  可辨識同一 instance 已完成；不同 force rerun 仍會正確覆寫最終音檔。
+- Reddit 跨天去重改為 14 天 TTL 的小型索引。首次部署會相容讀取近 7 天 script
+  建立索引，之後每日由 7 次完整 script KV reads 降為 1 次 index read。
+- Workflow 日期與 `generatedAt` 改由 durable `event.timestamp` 推導，跨午夜 replay
+  不會改變日期、step 名稱或 object key。
+- 限制 AI 輸出最多 40 行對話、每行 2,000 字，確保 TTS steps 與暫存物件數量有界。
+- Script Workflow 最終 output 改為 script/audio key 與計數摘要；Audio Workflow
+  的 load step 只持久化 dialogue，不再重複保存 blog、stories 與 summaries。
+
+### 驗證結果
+
+- `pnpm check`：通過；TypeScript 0 error、ESLint 0 error（6 個既有 warning）。
+- Workflow tests：30 項通過，其中新增 8 項 retry/checkpoint/index regression tests。
+- Build/tooling tests：5 項通過。
+- Generation Worker dry-run：成功，gzip 約 273 KiB。
+
+### 尚未包含
+
+最終 `merge audio batches` 仍會把所有 batch 載入記憶體後再建立 combined buffer；
+128MB OOM 風險確認存在，將在下一階段以增量／串流合併方案處理。
+
+---
+
 ## [2026-07-20] TypeScript 修復與前後端 Build Gate
 
 ### 摘要

@@ -50,6 +50,8 @@ compatible across both Workers or be deployed in a deliberate order.
   Workflow creation.
 - `workflow/index.ts`: story collection and script generation Workflow.
 - `workflow/audio.ts`: audio chunking, TTS batching, R2 merge, and cleanup.
+- `workflow/efficiency.ts`: bounded retry policies, compact state/index helpers,
+  and deterministic R2 checkpoint keys.
 - `workflow/tts.ts`: Gemini, OpenAI, Minimax, and Edge TTS adapters/fallback.
 - `workflow/utils.ts`: source fetching, extraction, and audio utilities.
 - `wrangler.jsonc`: tracked Web Worker bindings.
@@ -72,6 +74,10 @@ compatible across both Workers or be deployed in a deliberate order.
   fall back to it, so do not remove it without a migration.
 - Per-story cached content is prefixed from the legacy content key with
   `:story-contents:`.
+- Durable story snapshots use
+  `workflow-state/story-content/{YYYY}/{MM}/{DD}/{instance-id}/{hash}.json` in
+  R2. Keep at least three days for Free Plan replay; the script Workflow retains
+  four calendar days and removes every older prefix.
 - Workflow invocations use deterministic instance IDs. Normal daily IDs are
   derived from environment/date/variant/phase; forced reruns additionally use
   the caller's `Idempotency-Key`.
@@ -137,6 +143,9 @@ Cloudflare-service subrequests, 128 MB memory, and 3 MB Worker size.
   I/O is different from CPU time.
 - Count redirects and fallback calls as extra external subrequests. Avoid
   retries at multiple nested layers unless their combined worst case is known.
+- Expensive AI/content/TTS steps have at most two total Workflow attempts. AI
+  SDK retries stay disabled; TTS recovery relies on deterministic R2 segment
+  checkpoints rather than an inner retry loop.
 - Avoid returning large objects from Workflow steps because step results are
   persisted. Put long-lived or binary data in R2 and return compact references.
 - Do not hold an entire large podcast plus all of its batches in memory when a
@@ -189,8 +198,8 @@ When asked for general optimization, prioritize:
 
 1. Protect costly trigger endpoints and eliminate duplicate paid work.
 2. Restore reliable type/build gates and add focused tests for pure logic.
-3. Measure and reduce Workflow subrequests, retries, step state, and audio
-   memory use.
-4. Reduce Web Worker invocations/KV reads and improve cache hit rates.
-5. Improve client bundle, rendering, and visual performance after server-side
+3. Measure and reduce Workflow subrequests, retries, and persisted step state.
+4. Replace whole-podcast audio buffering with bounded-memory merging.
+5. Reduce Web Worker invocations/KV reads and improve cache hit rates.
+6. Improve client bundle, rendering, and visual performance after server-side
    budgets and correctness are under control.
