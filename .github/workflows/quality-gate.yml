@@ -1,0 +1,59 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, types, tests, and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Workflow tests
+        run: pnpm test:workflow
+
+      - name: Build-gate tests
+        run: pnpm test:build-gate
+
+      - name: Build Cloudflare frontend
+        run: pnpm opennext
+
+      - name: Bundle frontend Worker
+        run: pnpm exec wrangler deploy --dry-run
+
+      - name: Bundle generation Worker
+        run: pnpm exec wrangler deploy --cwd worker --dry-run
