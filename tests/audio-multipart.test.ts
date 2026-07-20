@@ -155,4 +155,36 @@ describe('audio multipart streaming', () => {
     assert.doesNotMatch(finalMerge, /\.arrayBuffer\(\)/)
     assert.doesNotMatch(finalMerge, /combineAudioBuffers/)
   })
+
+  it('stops the stream producer when R2 rejects before consuming the upload body', async () => {
+    const plan = planAudioMultipartUpload([{ key: 'batch.mp3', size: MIB }], false)
+    const bucket = {
+      async get() {
+        return {
+          body: new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(MIB))
+              controller.close()
+            },
+          }),
+        }
+      },
+    }
+    const multipart = {
+      async uploadPart() {
+        throw new Error('upload unavailable')
+      },
+    }
+    const streamFactory = () => new TransformStream<ArrayBuffer | ArrayBufferView, Uint8Array>()
+    const upload = uploadAudioMultipartPart(
+      bucket,
+      multipart,
+      plan.parts[0],
+      new Uint8Array(0),
+      streamFactory,
+    )
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('stream did not stop')), 100))
+
+    await assert.rejects(Promise.race([upload, timeout]), /upload unavailable/)
+  })
 })

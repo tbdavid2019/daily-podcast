@@ -4,6 +4,50 @@
 
 ---
 
+## [2026-07-20] 音訊合併改為 bounded-memory R2 Multipart
+
+### 摘要
+
+移除 Audio Workflow 最後一步的 whole-podcast buffering。原本會把所有 batch
+完整讀入記憶體，再配置第二份 combined buffer；長音檔因此可能瞬間超過 Workers
+Free Plan 的 128MB 記憶體限制。現在改用 R2 Multipart Upload 與 range stream，
+Worker 不再持有整集音訊。
+
+### 設計與恢復性
+
+- 先以 R2 `head()` 取得 batch 大小，再將邏輯音訊重新規劃為 5 MiB 固定 Parts；
+  最後一個 Part 才允許較小，並限制最多 10,000 Parts，符合 R2 multipart 規則。
+- 每個 Part 由 R2 ranged `get()` 讀取來源，透過 `FixedLengthStream` 與原生
+  `pipeTo()` 直接送入 `uploadPart()`；不呼叫 final batch 的 `arrayBuffer()`，也不
+  建立整集 `Uint8Array`。
+- Gemini WAV batch 的 44-byte headers 全部略過，只在邏輯輸出的最前方串流一個
+  依總 PCM 長度產生的新 header，確保完成物件是單一有效 WAV，而不是多個 WAV
+  檔案的直接串接。
+- Multipart 建立後會把 `uploadId` 寫入 instance-specific R2 checkpoint。若
+  Workflow step 在成功後重播，可恢復同一個 upload；每個 Part 使用 deterministic
+  step name 與 part number，重試只覆寫該 Part。
+- Complete step 先檢查最終物件的 `workflowInstanceId` metadata，處理「完成成功、
+  step state 尚未提交」的重播情況；真正失敗時會 abort multipart 並刪除 checkpoint。
+  成功後才清除 segment、batch 與 multipart 暫存物件。
+- R2 官方會在 7 天後自動 abort 未完成的 multipart upload，覆蓋 create 成功但
+  checkpoint 寫入前即中斷的極小 orphan window。
+
+### 驗證
+
+- 新增 MP3/WAV part layout、WAV RIFF header、range streaming、R2 part 上限與
+  final merge 禁止 whole-buffer regression tests。
+- `pnpm check`：通過；TypeScript 0 error、ESLint 0 error（6 個既有 warning）、
+  38 項 Workflow／觸發腳本 tests 與 5 項 build/tooling gate tests 通過。
+- Generation Worker dry-run：成功，gzip 274.74 KiB，未新增 binding 或 dependency。
+
+官方依據：
+
+- https://developers.cloudflare.com/r2/objects/upload-objects/
+- https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+- https://developers.cloudflare.com/workers/runtime-apis/streams/transformstream/
+
+---
+
 ## [2026-07-20] Workflow subrequest、重試與持久化狀態優化
 
 ### 摘要
@@ -42,10 +86,10 @@ instance state 與重試成本，將大型來源抓取拆成可獨立恢復的�
 - Build/tooling tests：5 項通過。
 - Generation Worker dry-run：成功，gzip 約 273 KiB。
 
-### 尚未包含
+### 後續
 
-最終 `merge audio batches` 仍會把所有 batch 載入記憶體後再建立 combined buffer；
-128MB OOM 風險確認存在，將在下一階段以增量／串流合併方案處理。
+最終 `merge audio batches` 的 128MB OOM 風險已在同日後續的 bounded-memory R2
+Multipart 變更中完成處理。
 
 ---
 

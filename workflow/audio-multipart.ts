@@ -191,6 +191,34 @@ export async function uploadAudioMultipartPart(
   createFixedLengthStream: AudioFixedLengthStreamFactory = length => new FixedLengthStream(length),
 ) {
   const { readable, writable } = createFixedLengthStream(part.length)
+  const abortController = new AbortController()
+  let activeWriter: WritableStreamDefaultWriter<ArrayBuffer | ArrayBufferView> | null = null
+  let firstFailure: unknown
+  let hasFailure = false
+
+  const recordFailure = (error: unknown) => {
+    if (!hasFailure) {
+      firstFailure = error
+      hasFailure = true
+    }
+  }
+
+  const abortWritable = async (error: unknown) => {
+    abortController.abort(error)
+    if (activeWriter) {
+      await activeWriter.abort(error).catch(() => undefined)
+      return
+    }
+    if (!writable.locked) {
+      const writer = writable.getWriter()
+      try {
+        await writer.abort(error).catch(() => undefined)
+      }
+      finally {
+        writer.releaseLock()
+      }
+    }
+  }
 
   const writePart = async () => {
     try {
@@ -198,10 +226,12 @@ export async function uploadAudioMultipartPart(
         if (piece.kind === 'wav-header') {
           const bytes = wavHeader.subarray(piece.offset, piece.offset + piece.length)
           const writer = writable.getWriter()
+          activeWriter = writer
           try {
             await writer.write(bytes)
           }
           finally {
+            activeWriter = null
             writer.releaseLock()
           }
           continue
@@ -213,35 +243,44 @@ export async function uploadAudioMultipartPart(
         if (!object) {
           throw new Error(`Missing audio batch range: ${piece.key}`)
         }
-        await object.body.pipeTo(writable, { preventClose: true })
+        await object.body.pipeTo(writable, {
+          preventClose: true,
+          signal: abortController.signal,
+        })
       }
 
       const writer = writable.getWriter()
+      activeWriter = writer
       try {
         await writer.close()
       }
       finally {
+        activeWriter = null
         writer.releaseLock()
       }
     }
     catch (error) {
-      const writer = writable.getWriter()
-      await writer.abort(error).catch(() => undefined)
-      writer.releaseLock()
+      recordFailure(error)
+      await abortWritable(error)
       throw error
     }
   }
 
-  const [uploadResult, writeResult] = await Promise.allSettled([
-    multipart.uploadPart(part.partNumber, readable),
-    writePart(),
-  ])
+  const uploadPromise = multipart.uploadPart(part.partNumber, readable).catch(async (error) => {
+    recordFailure(error)
+    await abortWritable(error)
+    throw error
+  })
+  const [uploadResult, writeResult] = await Promise.allSettled([uploadPromise, writePart()])
 
-  if (writeResult.status === 'rejected') {
-    throw writeResult.reason
+  if (hasFailure) {
+    throw firstFailure
   }
   if (uploadResult.status === 'rejected') {
     throw uploadResult.reason
+  }
+  if (writeResult.status === 'rejected') {
+    throw writeResult.reason
   }
   return uploadResult.value
 }

@@ -53,7 +53,12 @@ function parseAudioMultipartCheckpoint(value: unknown, podcastKey: string): Audi
     return null
 
   const checkpoint = value as Partial<AudioMultipartCheckpoint>
-  if (checkpoint.version !== 1 || checkpoint.podcastKey !== podcastKey || !checkpoint.uploadId) {
+  if (
+    checkpoint.version !== 1
+    || checkpoint.podcastKey !== podcastKey
+    || typeof checkpoint.uploadId !== 'string'
+    || !checkpoint.uploadId
+  ) {
     return null
   }
   return checkpoint as AudioMultipartCheckpoint

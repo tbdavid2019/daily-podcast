@@ -12,7 +12,8 @@
 
 ## 🆕 最近更新
 
-- **⚙️ Workflow Free Plan 成本與恢復性優化 (2026-07-20)**：將文章內容改為單篇 durable step，原文以 4 天 R2 checkpoint 保存、step state 只保留短 key；AI 最壞嘗試由 20 次降為 2 次，TTS 以 deterministic segment/batch checkpoint 避免成功片段被重做，Reddit 去重的日常 KV 讀取由 7 次降為 1 次。音訊最終合併的 128MB 記憶體問題仍列在下一階段。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🎧 音訊合併改為 bounded-memory R2 Multipart (2026-07-20)**：最終 Podcast 不再一次下載所有 batch 或建立整集 combined buffer；現在以 5 MiB 固定 Part、R2 range stream 與 `FixedLengthStream` 直接上傳，WAV 只保留一個正確總檔 header。每個 Part 可獨立重試，失敗會 abort，解決 128MB 峰值記憶體風險。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **⚙️ Workflow Free Plan 成本與恢復性優化 (2026-07-20)**：將文章內容改為單篇 durable step，原文以 4 天 R2 checkpoint 保存、step state 只保留短 key；AI 最壞嘗試由 20 次降為 2 次，TTS 以 deterministic segment/batch checkpoint 避免成功片段被重做，Reddit 去重的日常 KV 讀取由 7 次降為 1 次。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **✅ TypeScript 與前後端 Build Gate (2026-07-20)**：修復 10 個既有 TypeScript 錯誤，Next build 不再跳過 lint／型別 failure；新增 `pnpm check` 與 GitHub Actions，在 push／PR 自動驗證 OpenNext 前端及 Generation Worker bundle。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🔐 Workflow 認證、冪等與安全重跑 (2026-07-20)**：`POST /workflow` 已加入 Bearer Token 認證與 fail-closed 保護；一般執行採固定 instance ID，強制重跑使用 `Idempotency-Key`，避免網路重試或並行請求重複消耗 AI/TTS 額度。另新增 Token 首次設定、輪換、文稿重產與聲音重產指令，並將 AI/TTS 金鑰遷移至 Cloudflare Secrets。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **📌 播放器懸浮固定與 RSS 格式優化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；優化 RSS feed 以置頂回連網址，並藉由限制內文大小，徹底解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG.md](CHANGELOG.md)。

@@ -50,6 +50,8 @@ compatible across both Workers or be deployed in a deliberate order.
   Workflow creation.
 - `workflow/index.ts`: story collection and script generation Workflow.
 - `workflow/audio.ts`: audio chunking, TTS batching, R2 merge, and cleanup.
+- `workflow/audio-multipart.ts`: pure multipart layout/WAV header planning and
+  bounded-memory ranged-stream upload helpers.
 - `workflow/efficiency.ts`: bounded retry policies, compact state/index helpers,
   and deterministic R2 checkpoint keys.
 - `workflow/tts.ts`: Gemini, OpenAI, Minimax, and Edge TTS adapters/fallback.
@@ -85,6 +87,9 @@ compatible across both Workers or be deployed in a deliberate order.
   retrying the trigger step cannot create a second audio Workflow.
 - Final audio object key:
   `{YYYY}/{MM}/{DD}/{env}/{variant}-{YYYY-MM-DD}.mp3`.
+- Final audio assembly uses 5 MiB R2 multipart parts. Non-final parts stay the
+  same size; Gemini/WAV batches contribute PCM bytes after their 44-byte source
+  headers and the final object receives one newly calculated WAV header.
 - RSS must publish an episode only after the final R2 object exists.
 
 ## Commands
@@ -149,7 +154,8 @@ Cloudflare-service subrequests, 128 MB memory, and 3 MB Worker size.
 - Avoid returning large objects from Workflow steps because step results are
   persisted. Put long-lived or binary data in R2 and return compact references.
 - Do not hold an entire large podcast plus all of its batches in memory when a
-  streaming or incremental approach is available.
+  streaming or incremental approach is available. Preserve the current R2
+  ranged-read + `FixedLengthStream` multipart path for final audio assembly.
 - Bound parallel fetches and respect the six simultaneous outbound connection
   limit. `Promise.all` does not remove subrequest or memory costs.
 - Prefer static assets and cached responses over invoking Next.js SSR. Preserve
@@ -163,6 +169,9 @@ Official references:
 - https://developers.cloudflare.com/workers/platform/limits/
 - https://developers.cloudflare.com/workflows/reference/limits/
 - https://developers.cloudflare.com/workflows/reference/pricing/
+- https://developers.cloudflare.com/r2/objects/upload-objects/
+- https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+- https://developers.cloudflare.com/workers/runtime-apis/streams/transformstream/
 
 ## Security and secrets
 
@@ -199,7 +208,7 @@ When asked for general optimization, prioritize:
 1. Protect costly trigger endpoints and eliminate duplicate paid work.
 2. Restore reliable type/build gates and add focused tests for pure logic.
 3. Measure and reduce Workflow subrequests, retries, and persisted step state.
-4. Replace whole-podcast audio buffering with bounded-memory merging.
+4. Preserve bounded-memory multipart audio assembly and its replay guarantees.
 5. Reduce Web Worker invocations/KV reads and improve cache hit rates.
 6. Improve client bundle, rendering, and visual performance after server-side
    budgets and correctness are under control.
