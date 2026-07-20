@@ -257,7 +257,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
         // Upload batch to R2 (Temp)
         const key = `${displayDate.replaceAll('-', '/')}/${runEnv}/temp/${variant}-batch-${batchIndex}-${Date.now()}.mp3`
-        await this.env.HACKER_NEWS_R2.put(key, combined.buffer as ArrayBuffer)
+        await this.env.HACKER_NEWS_R2.put(key, combined)
         return key
       })
 
@@ -278,7 +278,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
       const combined = combineAudioBuffers(buffers, isGeminiTTS)
 
-      await this.env.HACKER_NEWS_R2.put(podcastKey, combined.buffer)
+      await this.env.HACKER_NEWS_R2.put(podcastKey, combined)
 
       // Cleanup temp files
       await Promise.all(batchKeys.map(key => this.env.HACKER_NEWS_R2.delete(key)))

@@ -7,4 +7,5 @@ interface Article {
   introContent: string
   audio: string
   updatedAt: number
+  variant?: string
 }

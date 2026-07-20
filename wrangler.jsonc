@@ -21,7 +21,8 @@
   },
   "keep_vars": true,
   "vars": {
-    "NEXT_PUBLIC_BASE_URL": "https://podcast.david888.com"
+    "NEXT_PUBLIC_BASE_URL": "https://podcast.david888.com",
+    "NEXT_STATIC_HOST": "https://podcast.david888.com"
   },
   "kv_namespaces": [
     {
