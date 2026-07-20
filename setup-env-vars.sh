@@ -21,7 +21,7 @@ echo ""
 echo "1. 設定 OpenAI API Key (必需)"
 echo "   請在 https://platform.openai.com/ 獲取您的 API Key"
 read -p "   輸入您的 OpenAI API Key: " openai_key
-echo "OPENAI_API_KEY=\"$openai_key\"" >> $WORKER_ENV_FILE
+echo "OPENAI_API_SECRET=\"$openai_key\"" >> $WORKER_ENV_FILE
 
 echo ""
 echo "2. 設定 OpenAI 基礎 URL"
@@ -172,7 +172,7 @@ echo "pnpx wrangler secret list --cwd worker"
 echo "pnpx wrangler secret list"
 echo ""
 echo "💡 重要提示："
-echo "   - 環境變數檔案已儲存在本地，方便日後維護和版本控制"
+echo "   - 環境變數檔案只供本機維護，禁止加入版本控制"
 echo "   - ⚠️  secrets (環境變數) 和 binding (資源綁定) 是不同的！"
 echo "   - binding 在 wrangler.jsonc 中配置，部署時才會生效"
 echo "   - 如果 binding 沒有生效，請重新執行部署命令"

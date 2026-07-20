@@ -30,9 +30,9 @@ echo "🔍 檢查環境變數..."
 
 # 檢查 Worker 環境變數
 echo "檢查 Worker 環境變數..."
-if ! pnpx wrangler secret list --cwd worker | grep -q "OPENAI_API_KEY"; then
-    echo "⚠️  警告: OPENAI_API_KEY 未設定，這是必需的環境變數"
-    echo "請執行: pnpx wrangler secret put --cwd worker OPENAI_API_KEY"
+if ! pnpx wrangler secret list --cwd worker | grep -q "OPENAI_API_SECRET"; then
+    echo "⚠️  警告: OPENAI_API_SECRET 未設定，這是必需的 Cloudflare Secret"
+    echo "請執行: pnpm exec wrangler secret put --cwd worker OPENAI_API_SECRET"
     echo ""
 fi
 
@@ -67,7 +67,7 @@ echo "📋 接下來的步驟:"
 echo "1. 檢查 Worker URL 是否可以訪問"
 echo "2. 檢查 Web 應用是否正常顯示"
 echo "3. 測試手動觸發工作流程"
-echo "4. 等待定時任務在 23:30 UTC 自動執行"
+echo "4. 等待定時任務在 00:30 UTC（台北時間 08:30）自動執行"
 echo ""
 echo "📖 更多信息請查看: ./CLOUDFLARE-DEPLOY.md"
 echo ""

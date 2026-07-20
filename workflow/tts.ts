@@ -6,17 +6,21 @@ interface Env extends CloudflareEnv {
   TTS_API_URL?: string
   TTS_API_ID?: string
   TTS_API_KEY?: string
+  TTS_API_SECRET?: string
   TTS_MODEL?: string
   MAN_VOICE_ID?: string
   WOMAN_VOICE_ID?: string
   AUDIO_SPEED?: string
   OPENAI_TTS_API_KEY?: string
+  OPENAI_TTS_API_SECRET?: string
   OPENAI_TTS_BASE_URL?: string
   OPENAI_TTS_MODEL?: string
   OPENAI_TTS_INSTRUCTIONS?: string
   OPENAI_BASE_URL?: string
   OPENAI_API_KEY?: string
+  OPENAI_API_SECRET?: string
   GEMINI_TTS_API_KEY?: string
+  GEMINI_TTS_API_SECRET?: string
   GEMINI_TTS_MODEL?: string
 }
 
@@ -60,9 +64,9 @@ export function pcmToWav(pcmData: Uint8Array, sampleRate = 24000, numChannels = 
 }
 
 async function geminiTTS(text: string, gender: string, env: Env) {
-  const apiKey = env.GEMINI_TTS_API_KEY
+  const apiKey = env.GEMINI_TTS_API_SECRET || env.GEMINI_TTS_API_KEY
   if (!apiKey) {
-    throw new Error('Gemini TTS API key is missing (GEMINI_TTS_API_KEY)')
+    throw new Error('Gemini TTS API key is missing (GEMINI_TTS_API_SECRET)')
   }
 
   // Use the model specified by user or fallback to standard flash
@@ -130,11 +134,12 @@ async function edgeTTS(text: string, gender: string, env: Env) {
 }
 
 async function minimaxTTS(text: string, gender: string, env: Env) {
+  const apiKey = env.TTS_API_SECRET || env.TTS_API_KEY
   const res = await fetch(`${env.TTS_API_URL || 'https://api.minimax.chat/v1/t2a_v2'}?GroupId=${env.TTS_API_ID}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.TTS_API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: env.TTS_MODEL || 'speech-2.5-turbo-preview',
@@ -173,7 +178,7 @@ async function minimaxTTS(text: string, gender: string, env: Env) {
 }
 
 async function openaiTTS(text: string, gender: string, env: Env) {
-  const apiKey = env.OPENAI_TTS_API_KEY || env.OPENAI_API_KEY
+  const apiKey = env.OPENAI_TTS_API_SECRET || env.OPENAI_API_SECRET || env.OPENAI_TTS_API_KEY || env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('OpenAI TTS API key is missing')
   }

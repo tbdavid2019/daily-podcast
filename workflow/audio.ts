@@ -12,6 +12,7 @@ interface Env extends CloudflareEnv {
   TTS_API_URL?: string
   TTS_API_ID?: string
   TTS_API_KEY?: string
+  TTS_API_SECRET?: string
   TTS_MODEL?: string
   MAN_VOICE_ID?: string
   WOMAN_VOICE_ID?: string
@@ -21,6 +22,7 @@ interface Env extends CloudflareEnv {
   TIMEZONE_NAME?: string
   // Gemini TTS
   GEMINI_TTS_API_KEY?: string
+  GEMINI_TTS_API_SECRET?: string
   GEMINI_TTS_MODEL?: string
 }
 

@@ -13,12 +13,20 @@
     "dev:worker": "wrangler dev --cwd worker --persist-to ../.wrangler/state",
     "deploy:worker": "wrangler deploy --cwd worker",
     "logs:worker": "wrangler tail --cwd worker",
+    "test:workflow-trigger": "node --test tests/trigger-workflow-script.test.mjs",
+    "test:workflow-security": "tsx --test tests/workflow-security.test.ts",
     "tests": "wrangler dev --cwd tests --remote",
     "test:sources": "node tests/test-new-sources.mjs",
     "opennext": "opennextjs-cloudflare build",
     "preview": "npm run -s opennext && wrangler dev",
     "deploy": "npm run -s opennext && WRANGLER_BUILD_PLATFORM=node wrangler deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "workflow:setup": "node scripts/setup-workflow-auth.mjs",
+    "workflow:secret": "node --env-file=.env.workflow.local scripts/set-workflow-secret.mjs",
+    "workflow:migrate-secrets": "node scripts/migrate-worker-vars-to-secrets.mjs",
+    "workflow:run": "node --env-file=.env.workflow.local scripts/trigger-workflow.mjs --phase script",
+    "workflow:audio": "node --env-file=.env.workflow.local scripts/trigger-workflow.mjs --phase audio --force",
+    "test:workflow": "pnpm test:workflow-security && pnpm test:workflow-trigger"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",

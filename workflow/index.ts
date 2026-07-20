@@ -5,20 +5,22 @@ import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
 import { podcastTitle } from '@/config'
+import { buildChildWorkflowInstanceId, createIdempotentWorkflowInstance } from '@/worker/workflow-security'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import { getAllStories, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
   OPENAI_BASE_URL: string
-  OPENAI_API_KEY: string
+  OPENAI_API_KEY?: string
+  OPENAI_API_SECRET?: string
   OPENAI_MODEL: string
   OPENAI_THINKING_MODEL?: string
   OPENAI_MAX_TOKENS?: string
   OPENAI_MAX_COMPLETION_TOKENS?: string
   WORKER_ENV?: string
   HACKER_NEWS_KV: KVNamespace
-  HACKER_NEWS_WORKFLOW: Workflow
-  HACKER_NEWS_AUDIO_WORKFLOW: Workflow
+  HACKER_NEWS_WORKFLOW: Workflow<WorkflowParams>
+  HACKER_NEWS_AUDIO_WORKFLOW: Workflow<WorkflowParams>
   // 新增時區配置
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
@@ -236,7 +238,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       name: 'openai',
       baseURL: this.env.OPENAI_BASE_URL!,
       headers: {
-        Authorization: `Bearer ${this.env.OPENAI_API_KEY!}`,
+        Authorization: `Bearer ${this.env.OPENAI_API_SECRET || this.env.OPENAI_API_KEY!}`,
       },
     })
     const modelName = (this.env.OPENAI_MODEL || '').toLowerCase()
@@ -636,20 +638,19 @@ ${fullContentString}
         variant,
         phase: 'audio',
       }
-      // 寫入 KV 鎖，與 worker/index.ts runWorkflow 使用相同的 key 格式，防止重複觸發
-      const audioParamsKey = JSON.stringify({ variant, phase: 'audio', today: displayDate })
-      const audioRunningKey = `workflow:running:${audioParamsKey}`
-      const existingAudioRun = await this.env.HACKER_NEWS_KV.get(audioRunningKey)
-      if (existingAudioRun) {
-        console.warn('Audio workflow already running, skipping duplicate trigger', JSON.parse(existingAudioRun))
-        return
-      }
-      console.info('Triggering Audio Workflow from Script Workflow', audioParams)
-      const audioInstance = await this.env.HACKER_NEWS_AUDIO_WORKFLOW.create({ params: audioParams })
-      await this.env.HACKER_NEWS_KV.put(audioRunningKey, JSON.stringify({
-        id: audioInstance.id,
-        params: audioParams,
-      }), { expirationTtl: 300 }) // 5 分鐘後過期
+      const audioInstanceId = await buildChildWorkflowInstanceId(event.instanceId)
+      const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(
+        this.env.HACKER_NEWS_AUDIO_WORKFLOW,
+        {
+          id: audioInstanceId,
+          params: audioParams,
+        },
+      )
+
+      console.info(
+        duplicateDetected ? 'Audio Workflow already exists' : 'Triggered Audio Workflow from Script Workflow',
+        { id: instance.id, params: audioParams },
+      )
     })
 
     subrequestLogger.checkpoint('after trigger audio workflow')

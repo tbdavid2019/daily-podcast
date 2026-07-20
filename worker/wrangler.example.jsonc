@@ -1,6 +1,10 @@
 /**
  * For more details on how to configure Wrangler, refer to:
  * https://developers.cloudflare.com/workers/wrangler/configuration/
+ *
+ * API_SECRET_TOKEN is intentionally not stored in this file. After running
+ * pnpm workflow:setup, configure it with:
+ * pnpm workflow:secret
  */
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
@@ -22,16 +26,16 @@
       "30 0 * * *"
     ]
   },
-  "keep_vars": true,
+  "keep_vars": false,
   "vars": {
     // --- TTS Configuration (Gemini is default) ---
     "TTS_PROVIDER": "gemini", // Options: gemini, openai, minimax, edge
     "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
-    "GEMINI_TTS_API_KEY": "Paste_Your_Gemini_API_Key_Here",
+    // Store GEMINI_TTS_API_SECRET with `wrangler secret put --cwd worker GEMINI_TTS_API_SECRET`.
 
     // --- Other Services ---
     "HACKER_NEWS_WORKER_URL": "https://podcast.yourdomain.com",
-    "OPENAI_API_KEY": "Paste_Your_OpenAI_API_Key_Here",
+    // Store OPENAI_API_SECRET with `wrangler secret put --cwd worker OPENAI_API_SECRET`.
     "OPENAI_BASE_URL": "https://api.openai.com/v1", // or gemini proxy
     "OPENAI_MAX_COMPLETION_TOKENS": "1000000",
     "OPENAI_MAX_TOKENS": "1000000",
@@ -39,7 +43,7 @@
     "OPENAI_THINKING_MODEL": "gpt-4o",
 
     // OpenAI TTS Settings
-    "OPENAI_TTS_API_KEY": "Paste_Your_OpenAI_API_Key_Here",
+    // Store OPENAI_TTS_API_SECRET with `wrangler secret put --cwd worker OPENAI_TTS_API_SECRET`.
     "OPENAI_TTS_BASE_URL": "https://api.openai.com/v1",
     "OPENAI_TTS_INSTRUCTIONS": "請使用自然親切和活潑愉快的語氣。",
     "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
