@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🔐 Workflow 認證、冪等與安全重跑 (2026-07-20)**：`POST /workflow` 已加入 Bearer Token 認證與 fail-closed 保護；一般執行採固定 instance ID，強制重跑使用 `Idempotency-Key`，避免網路重試或並行請求重複消耗 AI/TTS 額度。另新增 Token 首次設定、輪換、文稿重產與聲音重產指令，並將 AI/TTS 金鑰遷移至 Cloudflare Secrets。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **📌 播放器懸浮固定與 RSS 格式優化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；優化 RSS feed 以置頂回連網址，並藉由限制內文大小，徹底解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文檔與腳本。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🤖 Agent Discovery / robots.txt / Markdown for Agents (2026-07-07)**：新增正式 `robots.txt`（含 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 wildcard 規則）、`Content-Signal`、首頁 `Link` discovery headers、`/.well-known/api-catalog`、`/.well-known/agent-skills/index.json`、`/openapi.json`、`/api/status` 與 `/docs/api`。同時支援首頁與文章頁在 `Accept: text/markdown` 時回傳 Markdown，並已部署至 `https://podcast.david888.com`。詳見 [CHANGELOG.md](CHANGELOG.md)。
@@ -27,7 +28,7 @@
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
 - **爬蟲熔斷機制**：針對 Jina / Firecrawl 增加錯誤計數熔斷機制。當連續 2 次遇到 402 (Payment Required) 或 429 (Too Many Requests) 錯誤時，自動暫停後續請求，避免大量無效 subrequest 導致 Workflow 崩潰。
-- **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用高品質的 **Fenrir (男)** 與 **Leda (女)** 聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需配置 `GEMINI_TTS_API_KEY`。此功能提供更自然的語音合成效果，且可作為 OpenAI TTS 的替代方案。
+- **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用高品質的 **Fenrir (男)** 與 **Leda (女)** 聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需配置 Cloudflare Secret `GEMINI_TTS_API_SECRET`。此功能提供更自然的語音合成效果，且可作為 OpenAI TTS 的替代方案。
 - **TTS 故障自動轉移 (Fallback) (2026-02-08)**：實作 TTS 容錯機制。當主選的 TTS 服務商（如 Gemini/OpenAI）發生錯誤時，系統會自動降級並切換至免費的 **Edge TTS** 繼續生成，確保 Podcast 每日更新不中斷。
 - **自建 Jina Reader 支援**：支援配置多個自建 Jina Reader 節點（Primary/Secondary），優先使用自建節點以節省額度並提高穩定性。
 
@@ -164,20 +165,23 @@ npx wrangler tail daily-podcast-worker
 
 | 服務商 (Provider) | 設定值 (`TTS_PROVIDER`) | 必填變數 (Required Vars) | 說明 |
 | :--- | :--- | :--- | :--- |
-| **Gemini** (推薦) | `gemini` | `GEMINI_TTS_API_KEY` | 使用 Google Gemini 2.5 Flash 生成高品質中文語音 (Fenrir/Leda)。 |
-| **OpenAI** | `openai` | `OPENAI_TTS_API_KEY` (或 `OPENAI_API_KEY`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
-| **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_KEY` | 使用 Minimax 語音模型。 |
+| **Gemini** (推薦) | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 2.5 Flash 生成高品質中文語音 (Fenrir/Leda)。 |
+| **OpenAI** | `openai` | `OPENAI_TTS_API_SECRET` (或 `OPENAI_API_SECRET`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
+| **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_SECRET` | 使用 Minimax 語音模型。 |
 | **Edge TTS** (預設) | `edge` (或留空) | 無 | 使用微軟免費 Edge TTS，台灣腔調優化 (zh-TW-HsiaoChenNeural)。 |
 
 ### Gemini TTS 設定範例
 
-若要使用 Gemini TTS，請在 `wrangler.jsonc` 或環境變數中設定：
+若要使用 Gemini TTS，公開設定留在 `wrangler.jsonc`，金鑰用 Wrangler Secret：
+
+```bash
+pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
+```
 
 ```jsonc
 {
   "vars": {
     "TTS_PROVIDER": "gemini",
-    "GEMINI_TTS_API_KEY": "你的_Google_AI_Studio_API_Key",
     // 預設使用 gemini-2.5-flash-preview-tts，可選
     "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
     // 自訂 Gemini 音色 (可選)
@@ -205,6 +209,58 @@ npx wrangler tail daily-podcast-worker
 ---
 
 ## 🛠️ 開發與測試
+
+### 安全地手動重新產生 Podcast
+
+後端的 `POST /workflow` 使用 Bearer Token 保護。Cloudflare Cron 與文稿完成後
+自動觸發聲音的內部流程不需要手動提供 Token。
+
+首次設定：
+
+```bash
+# 1. 安全產生 Token 與本機設定（Token 不會印在終端）
+pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
+
+# 2. 將 .env.workflow.local 內的 Token 存入 Cloudflare
+pnpm workflow:secret
+```
+
+手動執行：
+
+```bash
+# 重新產生指定日期的文稿，完成後會自動產生聲音
+pnpm workflow:run --today 2026-07-20 --force
+
+# 只重新產生指定日期的聲音
+pnpm workflow:audio --today 2026-07-20
+
+# 一般執行不加 --force；同一天重複呼叫會回傳既有 instance
+pnpm workflow:run --today 2026-07-20
+```
+
+`force` 執行會自動產生 `Idempotency-Key`。如果需要重送同一個請求，可用
+`--idempotency-key <原本的值>`，避免因網路重試建立兩份工作。
+
+Token 不需要背下來。它保存在 git ignored、權限為 `0600` 的
+`.env.workflow.local`，上述指令會自動讀取。建議另存一份到密碼管理器，但不要
+貼到聊天、README、Git 或 shell 指令參數中。
+
+Token 遺失、懷疑外洩或需要定期輪換時：
+
+```bash
+# 產生新 Token 並覆寫本機設定
+pnpm workflow:setup \
+  --worker-url https://your-generation-worker.workers.dev \
+  --rotate
+
+# 將新 Token 更新至 Cloudflare；成功後舊 Token 立即失效
+pnpm workflow:secret
+```
+
+若第二步因網路或登入狀態失敗，重新執行 `pnpm workflow:secret` 即可。Cron 與
+Workflow 之間的內部 binding 不使用這組 Token，因此不受輪換影響。
+
+### 新聞來源測試
 
 本地測試新聞來源抓取邏輯：
 ```bash

@@ -17,25 +17,26 @@
 
 ## 🔐 必須保密的信息
 
-### 1. Worker URL
+### 1. Worker URL 與觸發 Token
 
 ```
 ❌ 不要公開: https://your-worker.workers.dev
 ```
 
-**原因**: 任何人知道這個 URL 都可以觸發 workflow 生成播客
+Worker URL 本身不是憑證。`POST /workflow` 仍必須使用 Bearer Token；避免公開
+URL 可以減少掃描與無效請求。
 
 **保護方法**:
 
 - 不要在 README、文檔中使用真實 URL
 - 不要在 Git 提交中包含
-- 實施 API 認證（見下方）
+- 使用已實作的 API Token 認證（見下方）
 
 ### 2. API 密鑰
 
 ```
 ❌ 不要公開:
-- OPENAI_API_KEY
+- OPENAI_API_SECRET
 - JINA_KEY
 - FIRECRAWL_KEY
 - MINIMAX_API_KEY
@@ -47,73 +48,52 @@
 - 永遠不要提交到 Git
 - 定期輪換密鑰
 
-## 🛡️ 實施安全措施
+## 🛡️ 已實作的安全措施
 
-### 方案 1: API Token 認證（推薦）
+### API Token 認證
 
 #### 步驟 1: 生成強密鑰
 
 ```bash
-# 生成隨機密鑰
-openssl rand -base64 32
-# 輸出: 例如 abc123xyz789...
+# 產生隨機密鑰並建立權限 0600 的本機設定
+pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
 ```
 
 #### 步驟 2: 設定密鑰
 
 ```bash
-pnpx wrangler secret put --cwd worker API_SECRET_TOKEN
-# 輸入剛才生成的密鑰
+pnpm workflow:secret
 ```
 
-#### 步驟 3: 修改 Worker 代碼
+`API_SECRET_TOKEN` 未設定時，`POST /workflow` 會 fail closed 並回傳 503。
+Token 缺少或錯誤時會回傳 401。
 
-編輯 `worker/index.ts`：
+#### 步驟 3: 設定本機觸發工具
 
-```typescript
-export default {
-  async fetch(request: Request, env: Env) {
-    const url = new URL(request.url)
+`.env.workflow.local` 已由 setup 指令產生並被 git 忽略，不要提交或分享。
 
-    // 只對 workflow 路徑進行認證
-    if (url.pathname.startsWith('/workflow')) {
-      const authHeader = request.headers.get('Authorization')
-      const expectedToken = env.API_SECRET_TOKEN
-
-      if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
-        return new Response('Unauthorized', {
-          status: 401,
-          headers: { 'Content-Type': 'text/plain' }
-        })
-      }
-    }
-
-    // 繼續處理請求...
-  }
-}
-```
-
-#### 步驟 4: 更新 Cron 觸發器
-
-編輯 `worker/wrangler.jsonc`：
-
-```jsonc
-{
-  "triggers": {
-    "crons": ["30 23 * * *"]
-  }
-}
-```
-
-注意: Cloudflare Cron 會繞過認證，因為它是內部觸發
-
-#### 步驟 5: 手動觸發時使用 Token
+#### 步驟 4: 手動重新產生
 
 ```bash
-# 需要攜帶 Authorization header
-curl -X POST https://your-worker.workers.dev/workflow \
-     -H "Authorization: Bearer your-secret-token-here"
+# 文稿完成後會自動接續聲音 Workflow
+pnpm workflow:run --today 2026-07-20 --force
+
+# 只重做聲音
+pnpm workflow:audio --today 2026-07-20
 ```
+
+Cloudflare Cron 與 parent Workflow 透過內部 binding 觸發，不需要 Bearer
+Token。
+
+### 冪等與防重複
+
+- 每日一般執行依環境、日期、variant、phase 使用固定 Workflow instance ID。
+- Cron 與手動請求同時抵達時，只會建立一個 instance。
+- `force` 重跑必須帶 `Idempotency-Key`；相同 key 的重送會回傳既有 instance。
+- Script Workflow 以 parent instance ID 派生 Audio Workflow ID，step retry 不會
+  重複建立聲音工作。
+
+## 可選的額外保護
 
 ### 方案 2: Cloudflare Access（最簡單）
 
@@ -218,7 +198,7 @@ pnpx wrangler tail --cwd worker
 
 注意以下異常：
 
-- ✅ 預期的 Cron 觸發（每日 23:30 UTC）
+- ✅ 預期的 Cron 觸發（每日 00:30 UTC／台北時間 08:30）
 - ❌ 非預期時間的大量請求
 - ❌ 來自陌生 IP 的請求
 - ❌ 失敗率突然增加
@@ -241,44 +221,32 @@ pnpx wrangler tail --cwd worker
 
 ## 🚨 應急響應
 
-### 如果懷疑 Worker URL 洩露
+### 如果 Worker URL 被公開
 
-#### 1. 立即更改 Worker 名稱
+Worker URL 本身不是憑證。先檢查 Worker 日誌是否有大量 401 或異常請求；只要
+`API_SECRET_TOKEN` 未洩漏，外部無法啟動 Workflow。
+
+#### 1. 懷疑 Token 洩漏時立即輪換
 
 ```bash
-# 編輯 worker/wrangler.jsonc
-{
-  "name": "daily-podcast-worker-new-12345"  # 改成新的隨機名稱
-}
-
-# 重新部署
-pnpm run deploy:worker
+pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev --rotate
+pnpm workflow:secret
 ```
 
-#### 2. 更新環境變數
+同步更新本機 `.env.workflow.local` 中的 `PODCAST_WORKFLOW_TOKEN`。
+
+#### 2. 發現 AI/TTS API Key 洩漏時輪換相關密鑰
 
 ```bash
-# 更新 Worker 應用的 URL
-pnpx wrangler secret put --cwd worker HACKER_NEWS_WORKER_URL
-# 輸入新的 Worker URL
-
-# 更新 Web 應用也需要這個 URL 嗎？檢查代碼
-```
-
-#### 3. 輪換所有 API 密鑰
-
-```bash
-# OpenAI
-pnpx wrangler secret put --cwd worker OPENAI_API_KEY
+# OpenAI / OpenAI TTS / Gemini TTS
+pnpm exec wrangler secret put --cwd worker OPENAI_API_SECRET
+pnpm exec wrangler secret put --cwd worker OPENAI_TTS_API_SECRET
+pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 
 # 其他密鑰...
 ```
 
-#### 4. 實施認證機制
-
-如果之前沒有認證，現在立即實施（見上述方案）
-
-#### 5. 檢查損失
+#### 3. 檢查使用量
 
 - 查看 OpenAI 使用統計
 - 查看 Cloudflare Workers 請求量
@@ -294,7 +262,7 @@ pnpx wrangler secret put --cwd worker OPENAI_API_KEY
 #### 2. 生成新密鑰並更新
 
 ```bash
-pnpx wrangler secret put --cwd worker OPENAI_API_KEY
+pnpm exec wrangler secret put --cwd worker OPENAI_API_SECRET
 # 輸入新的 API Key
 ```
 

@@ -4,6 +4,102 @@
 
 ---
 
+## [2026-07-20] Workflow 認證、冪等防重與 Cloudflare Secrets 遷移
+
+### 摘要
+
+生成 Worker 的公開 `POST /workflow` 原本沒有實作認證，任何知道網址的人都能
+啟動 AI 文稿與 TTS 工作。本次加入 Bearer Token 保護、輸入驗證、確定性的
+Workflow instance ID 與安全的手動重跑腳本，同時將部署設定中的 AI/TTS 明文
+金鑰遷移到 Cloudflare Secrets。
+
+### 變更內容
+
+#### 1. 保護公開 Workflow 入口
+
+- `POST /workflow` 必須提供 `Authorization: Bearer <token>`。
+- 生產環境未配置 `API_SECRET_TOKEN` 時採 fail-closed，回傳 `503`，不會在無認證
+  狀態下繼續執行。
+- Token 缺少或錯誤時回傳 `401`；非 `POST` 請求回傳 `405`。
+- JSON body 與 query string 經 schema 驗證；格式錯誤、無效日期及不支援的參數
+  不會啟動 Workflow。
+- Cloudflare Cron 與 Script → Audio 的內部 Workflow binding 不經公開 HTTP
+  入口，因此不需要 Bearer Token。
+
+#### 2. 冪等與防止重複付費工作
+
+- 一般執行依環境、日期、variant 與 phase 產生固定 Workflow instance ID。
+- Cron、手動請求或網路重送同時抵達時，重複的 instance 會回傳既有工作，不再
+  建立第二份 AI/TTS 工作。
+- `force` 重跑必須使用 `Idempotency-Key`；相同 key 可以安全重送，不同 key 才會
+  建立新的刻意重跑。
+- Audio Workflow ID 由 parent Script Workflow instance ID 派生，避免 step retry
+  重複建立聲音工作。
+- 移除原本只有五分鐘有效且採 eventual-consistent KV 的重複鎖定，改由 Cloudflare
+  Workflow instance ID 提供建立時的唯一性。
+
+#### 3. 首次設定與日常重跑指令
+
+```bash
+# 首次產生本機 Token（不會把 Token 印到終端）
+pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
+
+# 將同一組 Token 寫入 Cloudflare API_SECRET_TOKEN
+pnpm workflow:secret
+
+# 重新產生文稿，完成後自動接續聲音
+pnpm workflow:run --today 2026-07-20 --force
+
+# 只重新產生聲音
+pnpm workflow:audio --today 2026-07-20
+```
+
+Token 儲存在 `.env.workflow.local`，檔案權限為 `0600` 且已被 Git 忽略，不需背誦
+或放入指令參數。建議另外保存於密碼管理器。
+
+#### 4. Token 遺失與輪換
+
+```bash
+pnpm workflow:setup \
+  --worker-url https://your-generation-worker.workers.dev \
+  --rotate
+pnpm workflow:secret
+```
+
+第二個指令成功後舊 Token 立即失效。若上傳失敗，可直接重跑
+`pnpm workflow:secret`；Cron 與內部 Workflow binding 不受 Token 輪換影響。
+
+#### 5. AI/TTS 金鑰安全遷移
+
+- `GEMINI_TTS_API_KEY` → `GEMINI_TTS_API_SECRET`
+- `OPENAI_API_KEY` → `OPENAI_API_SECRET`
+- `OPENAI_TTS_API_KEY` → `OPENAI_TTS_API_SECRET`
+- 程式暫時保留舊名稱 fallback，避免既有環境在遷移期間中斷；新部署與文件統一
+  使用 `*_SECRET`。
+- `worker/wrangler.example.jsonc` 不再包含任何 API Key placeholder，且設定
+  `keep_vars: false`，由版本化設定完整管理非敏感 vars。
+- 新增遷移腳本 `pnpm workflow:migrate-secrets`，只有 Cloudflare Secret 上傳成功
+  後才會移除本機明文值，且不會輸出金鑰內容。
+
+#### 6. 測試與上線驗證
+
+- 新增 17 項認證、輸入解析與冪等單元測試。
+- 新增 5 項手動觸發腳本測試，共 22 項全部通過。
+- ESLint 通過，保留 6 個與本次變更無關的既有 warning。
+- TypeScript 仍有 10 個先前已存在的錯誤，將在下一階段修復 build gate；本次沒有
+  新增 TypeScript 錯誤。
+- 生產 smoke test：未授權請求回傳 `401`；正確 Token 搭配刻意無效 JSON 回傳
+  `400`，確認認證有效且未啟動任何 Workflow。
+- 2026-07-20 首次上線版本：`8226f868-78a5-48cc-ac21-dd3dadb240c8`。
+
+### 安全提醒
+
+舊設定曾讓 AI/TTS 金鑰出現在部署輸出。雖然 Worker 已改用 Cloudflare Secrets，
+仍應在對應供應商後台輪換舊金鑰，再更新 `GEMINI_TTS_API_SECRET`、
+`OPENAI_API_SECRET` 與 `OPENAI_TTS_API_SECRET`。
+
+---
+
 ## [2026-07-08] 播放器懸浮固定與 RSS 格式優化
 
 ### 🎯 優化與修復目標

@@ -143,7 +143,7 @@ export const rssDays = 30 // 一個月 RSS
 | `WORKER_ENV`                | 運行環境         | `production`                                      | ✅   |
 | `HACKER_NEWS_WORKER_URL`    | 後端 Worker 域名 | `https://your-worker.workers.dev` ⚠️ **不要公開** | ✅   |
 | `HACKER_NEWS_R2_BUCKET_URL` | R2 公開 URL      | `https://podcast.david888.com`                    | ✅   |
-| `OPENAI_API_KEY`            | OpenAI API 金鑰  | `sk-...`                                          | ✅   |
+| `OPENAI_API_SECRET`         | OpenAI API 金鑰（Cloudflare Secret） | `sk-...`                              | ✅   |
 | `OPENAI_BASE_URL`           | OpenAI API 端點  | `https://api.openai.com/v1`                       | ✅   |
 | `OPENAI_MODEL`              | OpenAI 模型      | `gpt-4o-mini`                                     | ✅   |
 | `JINA_KEY`                  | Jina AI 金鑰     | `jina_...`                                        | ⭕   |
@@ -167,7 +167,7 @@ export const rssDays = 30 // 一個月 RSS
 - **用途**: Workflow 內部呼叫後端 Worker API（例如音頻合併）
 - **範例**: `https://your-worker.workers.dev`
 - **如何獲取**: 部署 Worker 後，Cloudflare 會提供的域名
-- **⚠️ 安全警告**: 不要在公開文檔中暴露此 URL，否則任何人都能觸發 workflow 消耗你的 API 配額
+- **安全說明**: URL 本身不是憑證；公開入口仍由 Bearer Token 保護。避免在文件中使用真實 URL 可減少掃描與無效請求。
 
 #### `HACKER_NEWS_R2_BUCKET_URL`
 
@@ -424,11 +424,12 @@ curl https://podcast.david888.com/rss.xml
 
 ---
 
-## � 安全建議
+## 🔒 安全建議
 
-### ⚠️ 重要：保護你的 Worker URL
+### ⚠️ 重要：保護 Workflow 觸發權限
 
-**問題**：如果你的 Worker URL 被公開，任何人都可以：
+Worker URL 本身不是憑證。`POST /workflow` 已使用 Bearer Token 保護；Token
+洩漏後，外部人員可能：
 
 - 觸發 workflow 生成播客
 - 消耗你的 API 配額（OpenAI、TTS 等）
@@ -437,7 +438,7 @@ curl https://podcast.david888.com/rss.xml
 
 **解決方案**：
 
-#### 1. 不要在公開文檔中暴露 Worker URL
+#### 1. 避免在公開文檔中暴露 Worker URL
 
 ❌ **錯誤做法**：
 
@@ -451,33 +452,18 @@ curl https://podcast.david888.com/rss.xml
 我的 Worker URL: https://your-worker.workers.dev
 ```
 
-#### 2. 實施 API 認證（推薦）
+#### 2. 設定已實作的 API 認證
 
-在 Worker 中添加認證機制：
-
-```typescript
-// worker/index.ts
-export default {
-  async fetch(request: Request, env: Env) {
-    // 驗證請求來源
-    const authHeader = request.headers.get('Authorization')
-    const expectedToken = env.API_SECRET_TOKEN
-
-    if (authHeader !== `Bearer ${expectedToken}`) {
-      return new Response('Unauthorized', { status: 401 })
-    }
-
-    // 繼續處理請求...
-  }
-}
-```
-
-設定密鑰：
+建立並設定密鑰：
 
 ```bash
-pnpx wrangler secret put --cwd worker API_SECRET_TOKEN
-# 輸入一個強密碼，例如: your-strong-random-token-here
+pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
+pnpm workflow:secret
 ```
+
+指令會建立 git ignored、權限 0600 的 `.env.workflow.local`，並把同一組 Token
+安全寫入 Cloudflare。手動重跑使用 `pnpm workflow:run` 或
+`pnpm workflow:audio`，不需自行組 Authorization header。
 
 #### 3. 使用 Cloudflare Access（最安全）
 
