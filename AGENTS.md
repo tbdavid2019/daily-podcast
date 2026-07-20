@@ -83,8 +83,8 @@ compatible across both Workers or be deployed in a deliberate order.
 
 ## Commands
 
-Use the pinned pnpm version from `package.json` and the Node version from
-`.node-version`.
+Use the pinned pnpm version from `package.json` and Node.js 24 from
+`.node-version`. Wrangler requires Node.js 22 or newer.
 
 ```bash
 pnpm install

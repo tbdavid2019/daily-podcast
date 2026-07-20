@@ -25,6 +25,10 @@
 - 移除 `next.config.mjs` 的 `ignoreBuildErrors` 與 `ignoreDuringBuilds`，正式 build
   不再隱藏型別或 lint failure。
 - 移除 ESLint 9 已停用且與 `eslint.config.mjs` 重複的 `.eslintignore`。
+- 將 `.node-version` 升級為 Node.js 24，並在 `package.json` 宣告 Node.js 22+
+  requirement，符合目前 Wrangler 的 runtime 要求。
+- 修正 `postinstall` 呼叫未設定的 `simple-git-hooks` 所造成的乾淨安裝失敗；現在
+  只執行 Cloudflare typegen，並以小型 normalization script 清除產生檔尾端空白。
 
 ### 新增 Build Gate
 
@@ -41,7 +45,7 @@ pnpm exec wrangler deploy --cwd worker --dry-run
 ```
 
 `.github/workflows/quality-gate.yml` 會在 push／PR 執行 frozen-lockfile 安裝、lint、
-typecheck、22 項 Workflow tests、3 項 build-gate tests、OpenNext production build，
+typecheck、22 項 Workflow tests、5 項 build/tooling gate tests、OpenNext production build，
 以及前後端兩個 Wrangler dry-run。CI 僅使用 read-only repository permission，不含
 任何 production Secret 或自動部署權限。
 
@@ -49,6 +53,8 @@ typecheck、22 項 Workflow tests、3 項 build-gate tests、OpenNext production
 
 - `pnpm typecheck`：0 error（原 10 個錯誤已清除）。
 - `pnpm check`：通過；ESLint 0 error，保留 6 個既有 warning。
+- `pnpm install --frozen-lockfile`：Node.js 24 下通過，postinstall 可重現且不留下
+  generated diff。
 - `pnpm build`：通過，且輸出確認執行 lint 與型別檢查。
 - `pnpm opennext`：Cloudflare frontend production bundle 成功。
 - Frontend Worker dry-run：成功，gzip 約 1.74 MiB。

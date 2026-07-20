@@ -104,7 +104,7 @@
 ## 🚀 快速開始 (Quick Start)
 
 ### 1. 準備工作
-- 安裝 Node.js 18+ 和 pnpm
+- 安裝 Node.js 24（專案以 `.node-version` 固定版本；Wrangler 需要 Node.js 22+）和 pnpm
 - 準備 OpenAI API Key
 - Cloudflare 帳號 (需開通 Workers 與 R2)
 
@@ -273,7 +273,8 @@ pnpm exec wrangler deploy --cwd worker --dry-run
 ```
 
 GitHub 的 `Quality Gate` 會在 push 到 `main` 或建立 Pull Request 時自動執行相同
-檢查；CI 不持有 production Secret，也不會自動部署。
+檢查；CI 使用 Node.js 24 與 `pnpm install --frozen-lockfile`，不持有 production
+Secret，也不會自動部署。
 
 本地測試新聞來源抓取邏輯：
 ```bash
