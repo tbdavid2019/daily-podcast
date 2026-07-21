@@ -251,6 +251,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const openai = createOpenAI({
       name: 'openai',
       baseURL: this.env.OPENAI_BASE_URL!,
+      apiKey: this.env.OPENAI_API_SECRET || this.env.OPENAI_API_KEY || '',
       headers: {
         Authorization: `Bearer ${this.env.OPENAI_API_SECRET || this.env.OPENAI_API_KEY!}`,
       },

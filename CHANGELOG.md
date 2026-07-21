@@ -2,6 +2,18 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-07-21] 靜態資源 Host 與 OpenAI API Key 環境變數彈性相容
+
+### 摘要
+
+調整 `NEXT_STATIC_HOST` 靜態資源網域為 `https://r2.david888.com`，並補強前端與腳本生成 Workflow 中的環境變數讀取相容性。
+
+### 變更細節
+
+- `wrangler.jsonc`：將 `NEXT_STATIC_HOST` 更新為 `https://r2.david888.com`。
+- `app/page.tsx`：`ArticleCard` 的 `staticHost` 增加 `process.env.NEXT_STATIC_HOST` 備用讀取機制。
+- `workflow/index.ts`：OpenAI SDK 初始化時新增 `OPENAI_API_SECRET` 與 `OPENAI_API_KEY` 的 fallback 相容處理。
+
 ---
 
 ## [2026-07-20] Web Worker 邊緣快取與 request-scoped KV 去重

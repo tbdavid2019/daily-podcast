@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import React from 'react'
 import { ArticleCard } from '@/components/article-card'
@@ -5,7 +6,7 @@ import { GoogleAd } from '@/components/google-ad'
 import { Pagination } from '@/components/pagination'
 import { getHomepageArticles } from '@/lib/content'
 
-export const revalidate = 600
+export const revalidate = 598
 const PAGE_SIZE = 6
 
 interface HomeProps {
@@ -28,7 +29,7 @@ export default async function Home({ searchParams }: HomeProps) {
         <React.Fragment key={post.date}>
           <ArticleCard
             article={post}
-            staticHost={env.NEXT_STATIC_HOST}
+            staticHost={env.NEXT_STATIC_HOST || process.env.NEXT_STATIC_HOST}
             showSummary
           />
           {(index + 1) % 2 === 0 && (
