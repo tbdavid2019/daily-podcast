@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import process from 'node:process'
 import { Rss } from 'lucide-react'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import Link from 'next/link'
 import Script from 'next/script'
 import { BgToggle } from '@/components/bg-toggle'
@@ -71,7 +71,17 @@ export const metadata: Metadata = {
   themeColor: '#111827',
 }
 
-const inter = Inter({ subsets: ['latin'] })
+const jetbrainsMono = localFont({
+  src: '../public/fonts/JetBrainsMono-Medium.woff2',
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+})
+
+const genJyuuGothic = localFont({
+  src: '../public/fonts/GenJyuuGothic-Medium.woff2',
+  variable: '--font-gen-jyuu-gothic',
+  display: 'swap',
+})
 
 export default function RootLayout({
   children,
@@ -81,7 +91,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.className} antialiased`}
+        className={`${jetbrainsMono.variable} ${genJyuuGothic.variable} font-sans antialiased`}
       >
         <script
           type="application/ld+json"
