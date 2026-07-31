@@ -13,6 +13,7 @@ describe('build gate configuration', () => {
     assert.match(packageJson.scripts.check, /pnpm typecheck/)
     assert.match(packageJson.scripts.check, /pnpm test:workflow/)
     assert.match(packageJson.scripts.check, /pnpm test:web-cache/)
+    assert.match(packageJson.scripts.check, /pnpm test:pwa/)
     assert.match(packageJson.scripts.check, /pnpm test:build-gate/)
   })
 
@@ -45,6 +46,7 @@ describe('build gate configuration', () => {
     assert.match(workflow, /pnpm typecheck/)
     assert.match(workflow, /pnpm test:workflow/)
     assert.match(workflow, /pnpm test:web-cache/)
+    assert.match(workflow, /pnpm test:pwa/)
     assert.match(workflow, /pnpm test:build-gate/)
     assert.match(workflow, /pnpm opennext/)
     assert.match(workflow, /wrangler deploy --dry-run/)

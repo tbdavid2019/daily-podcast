@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import process from 'node:process'
 import { Rss } from 'lucide-react'
 import localFont from 'next/font/local'
@@ -7,6 +7,7 @@ import Script from 'next/script'
 import { BgToggle } from '@/components/bg-toggle'
 import { BingBackground } from '@/components/bing-background'
 import { GoogleAd } from '@/components/google-ad'
+import { PwaServiceWorker } from '@/components/pwa-service-worker'
 import { podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
 
@@ -68,6 +69,14 @@ export const metadata: Metadata = {
     ],
   },
   manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: podcastTitle,
+    statusBarStyle: 'black-translucent',
+  },
+}
+
+export const viewport: Viewport = {
   themeColor: '#111827',
 }
 
@@ -89,10 +98,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-TW">
       <body
         className={`${jetbrainsMono.variable} ${genJyuuGothic.variable} font-sans antialiased`}
       >
+        <PwaServiceWorker />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

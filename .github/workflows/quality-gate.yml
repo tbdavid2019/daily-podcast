@@ -49,6 +49,9 @@ jobs:
       - name: Web cache tests
         run: pnpm test:web-cache
 
+      - name: PWA tests
+        run: pnpm test:pwa
+
       - name: Build-gate tests
         run: pnpm test:build-gate
 

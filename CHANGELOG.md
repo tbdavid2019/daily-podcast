@@ -2,6 +2,33 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-07-31] Android 與 macOS PWA 安裝、離線導覽
+
+### 摘要
+
+網站現在可作為 Progressive Web App 安裝。Android 的 Chromium 瀏覽器可使用
+「安裝／加入主畫面」；macOS 的 Chrome／Edge 可安裝為獨立視窗，Safari 則可使用
+「加入 Dock」。
+
+### 變更細節
+
+- Manifest 新增穩定的 app ID，維持 standalone 顯示模式、繁中語系與 192／512px
+  maskable icons。
+- 根 layout 註冊 Service Worker，補上 Apple Web App metadata、`zh-TW` 文件語系，
+  並使用 Next.js 15 的 viewport metadata 設定主題色。
+- 新增離線頁與 network-first 導覽 fallback；僅預先快取離線頁、manifest 與圖示，
+  不快取每日文章或 Podcast 音檔，避免過期內容與不必要的裝置儲存量。
+- 新增 PWA regression tests，並納入 `pnpm check` 與 GitHub Actions quality gate。
+
+### 驗證
+
+- `pnpm check`、`pnpm build`、`pnpm opennext` 全數通過。
+- 本機正式建置確認 `/manifest.webmanifest`、`/sw.js` 與 `/offline` 均回傳 200；
+  manifest Content-Type 為 `application/manifest+json`。
+- ESLint 維持 0 error，保留 6 個既有 warning。
+
+---
+
 ## [2026-07-21] 靜態資源 Host 與 OpenAI API Key 環境變數彈性相容
 
 ### 摘要

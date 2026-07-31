@@ -6,6 +6,7 @@ const backgroundColor = '#ffffff'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: '/',
     name: podcastTitle,
     short_name: podcastTitle,
     description: podcastDescription,
