@@ -27,20 +27,17 @@ describe('PWA configuration', () => {
 
   it('serves a conservative offline fallback without caching podcast data', async () => {
     const serviceWorkerUrl = new URL('public/sw.js', rootUrl)
-    const offlinePageUrl = new URL('public/offline.html', rootUrl)
     await access(serviceWorkerUrl)
-    await access(offlinePageUrl)
 
-    const [serviceWorker, offlinePage] = await Promise.all([
-      readFile(serviceWorkerUrl, 'utf8'),
-      readFile(offlinePageUrl, 'utf8'),
-    ])
+    const serviceWorker = await readFile(serviceWorkerUrl, 'utf8')
     assert.match(serviceWorker, /addEventListener\('install'/)
     assert.match(serviceWorker, /addEventListener\('fetch'/)
     assert.match(serviceWorker, /request\.mode !== 'navigate'/)
-    assert.match(serviceWorker, /OFFLINE_PAGE = '\/offline\.html'/)
+    assert.match(serviceWorker, /OFFLINE_PAGE = '\/offline'/)
+    assert.match(serviceWorker, /cache\.put\(OFFLINE_PAGE, new Response/)
+    assert.match(serviceWorker, /text\/html; charset=utf-8/)
     assert.match(serviceWorker, /caches\.match\(OFFLINE_PAGE\)/)
     assert.doesNotMatch(serviceWorker, /\.mp3/)
-    assert.match(offlinePage, /目前沒有網路連線/)
+    assert.match(serviceWorker, /目前沒有網路連線/)
   })
 })

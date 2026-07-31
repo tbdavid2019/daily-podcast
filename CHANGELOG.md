@@ -16,15 +16,17 @@
   maskable icons。
 - 根 layout 註冊 Service Worker，補上 Apple Web App metadata、`zh-TW` 文件語系，
   並使用 Next.js 15 的 viewport metadata 設定主題色。
-- 新增靜態離線頁與 network-first 導覽 fallback；僅預先快取離線頁、manifest 與圖示，
-  不快取每日文章或 Podcast 音檔，避免過期內容與不必要的裝置儲存量。靜態檔避免被
-  OpenNext regional cache 中舊版本的動態路由回應遮蔽。
+- 新增由 Service Worker Cache Storage 提供的離線頁與 network-first 導覽 fallback；
+  僅預先快取離線頁、manifest 與圖示，不快取每日文章或 Podcast 音檔，避免過期內容
+  與不必要的裝置儲存量。fallback 不經 OpenNext 路由，避免舊版本的 dynamic route
+  cache 回應遮蔽。
 - 新增 PWA regression tests，並納入 `pnpm check` 與 GitHub Actions quality gate。
 
 ### 驗證
 
 - `pnpm check`、`pnpm build`、`pnpm opennext` 全數通過。
-- 本機正式建置確認 `/manifest.webmanifest`、`/sw.js` 與 `/offline.html` 均回傳 200；
+- 本機正式建置確認 `/manifest.webmanifest` 與 `/sw.js` 均回傳 200，並驗證 Service
+  Worker 會建立 HTML fallback response；
   manifest Content-Type 為 `application/manifest+json`。
 - ESLint 維持 0 error，保留 6 個既有 warning。
 
