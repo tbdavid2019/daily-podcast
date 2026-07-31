@@ -1,10 +1,18 @@
 'use client'
+import { Share2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  buildPlaybackShareUrl,
+  formatPlaybackTimestamp,
+  getArticlePath,
+  getPlaybackStartFromHash,
+} from '@/lib/playback-share'
 
 const AudioPlayer = dynamic(() => import('player.style/tailwind-audio/react'), {
   ssr: false,
@@ -35,8 +43,61 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, staticHost = '', showSummary = false, showFooter = false }: ArticleCardProps) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const sharedStartRef = useRef<number | null>(null)
+  const [shareMessage, setShareMessage] = useState('')
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
+
+  const applySharedStart = useCallback(() => {
+    const audioElement = audioRef.current
+    const start = sharedStartRef.current
+
+    if (!audioElement || start === null) {
+      return
+    }
+
+    audioElement.currentTime = Number.isFinite(audioElement.duration)
+      ? Math.min(start, audioElement.duration)
+      : start
+  }, [])
+
+  useEffect(() => {
+    if (window.location.pathname !== getArticlePath(article.date, article.variant)) {
+      return
+    }
+
+    sharedStartRef.current = getPlaybackStartFromHash(window.location.hash)
+    const audioElement = audioRef.current
+    if (audioElement && audioElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      applySharedStart()
+    }
+  }, [applySharedStart, article.date, article.variant])
+
+  const handleShare = async () => {
+    const currentTime = audioRef.current?.currentTime ?? 0
+    const timestamp = formatPlaybackTimestamp(currentTime)
+    const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, currentTime)
+    const text = `從 ${timestamp} 開始收聽`
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: article.title, text, url })
+        setShareMessage('已開啟分享')
+        return
+      }
+
+      await navigator.clipboard.writeText(url)
+      setShareMessage('連結已複製')
+    }
+    catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+
+      setShareMessage('無法複製連結')
+    }
+  }
 
   return (
     <Card className="mb-6 glass border-zinc-200/50 hover:shadow-xl transition-all duration-500 group">
@@ -63,14 +124,28 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
             } as React.CSSProperties}
           >
             <audio
+              ref={audioRef}
               slot="media"
               src={audio}
               preload="metadata"
               playsInline
               crossOrigin="anonymous"
               tabIndex={article.updatedAt || -1}
+              onLoadedMetadata={applySharedStart}
             />
           </AudioPlayer>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            {shareMessage && <span className="text-xs text-zinc-500" aria-live="polite">{shareMessage}</span>}
+            <button
+              type="button"
+              onClick={() => void handleShare()}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
+              title="分享目前播放位置"
+            >
+              <Share2 className="size-4" aria-hidden="true" />
+              分享此刻
+            </button>
+          </div>
         </div>
       </CardContent>
       {showFooter && (
