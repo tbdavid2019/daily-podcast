@@ -9,6 +9,12 @@ export { BucketCachePurge, DOQueueHandler, DOShardedTagCache }
 
 export default {
   async fetch(request, env, ctx) {
+    const { pathname } = new URL(request.url)
+
+    if (pathname === '/manifest.webmanifest') {
+      return env.ASSETS.fetch(request)
+    }
+
     const response = await openNextWorker.fetch(request, env, ctx)
     return applyWebPageCacheHeaders(request, response)
   },

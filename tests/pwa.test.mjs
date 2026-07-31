@@ -31,6 +31,13 @@ describe('PWA configuration', () => {
     assert.match(installButton, /installPrompt\.prompt\(\)/)
   })
 
+  it('bypasses the incremental cache when serving the PWA manifest', async () => {
+    const worker = await readFile(new URL('worker.js', rootUrl), 'utf8')
+
+    assert.match(worker, /pathname === '\/manifest\.webmanifest'/)
+    assert.match(worker, /env\.ASSETS\.fetch\(request\)/)
+  })
+
   it('serves a conservative offline fallback without caching podcast data', async () => {
     const serviceWorkerUrl = new URL('public/sw.js', rootUrl)
     await access(serviceWorkerUrl)
