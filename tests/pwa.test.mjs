@@ -6,15 +6,15 @@ const rootUrl = new URL('../', import.meta.url)
 
 describe('PWA configuration', () => {
   it('provides an installable standalone manifest with Android icons', async () => {
-    const manifest = await readFile(new URL('app/manifest.ts', rootUrl), 'utf8')
+    const manifest = JSON.parse(await readFile(new URL('public/manifest.webmanifest', rootUrl), 'utf8'))
 
-    assert.match(manifest, /id:\s*'\/'/)
-    assert.match(manifest, /start_url:\s*'\/'/)
-    assert.match(manifest, /display:\s*'standalone'/)
-    assert.match(manifest, /sizes:\s*'192x192'/)
-    assert.match(manifest, /sizes:\s*'512x512'/)
-    assert.match(manifest, /purpose:\s*'any'/)
-    assert.match(manifest, /purpose:\s*'maskable'/)
+    assert.equal(manifest.id, '/')
+    assert.equal(manifest.start_url, '/')
+    assert.equal(manifest.display, 'standalone')
+    assert.ok(manifest.icons.some(icon => icon.sizes === '192x192'))
+    assert.ok(manifest.icons.some(icon => icon.sizes === '512x512'))
+    assert.ok(manifest.icons.some(icon => icon.purpose === 'any'))
+    assert.ok(manifest.icons.some(icon => icon.purpose === 'maskable'))
   })
 
   it('registers a service worker and provides Apple web-app metadata', async () => {

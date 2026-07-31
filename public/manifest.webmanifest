@@ -1,0 +1,37 @@
+{
+  "id": "/",
+  "name": "DAVID888 Daily 每日放送",
+  "short_name": "DAVID888 Daily",
+  "description": "多元科技新聞播客,每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容,自動生成繁體中文摘要並轉換為播客節目 david888.com。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "lang": "zh-TW",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

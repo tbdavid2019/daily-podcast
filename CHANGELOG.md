@@ -13,7 +13,8 @@
 ### 變更細節
 
 - Manifest 新增穩定的 app ID，維持 standalone 顯示模式、繁中語系與 192／512px
-  通用及 maskable icons。
+  通用及 maskable icons。Manifest 以靜態資產提供，避免 OpenNext incremental cache
+  保留舊 manifest 而使 Chromium 無法重新判斷安裝性。
 - 根 layout 註冊 Service Worker，補上 Apple Web App metadata、`zh-TW` 文件語系，
   並使用 Next.js 15 的 viewport metadata 設定主題色。
 - 新增由 Service Worker Cache Storage 提供的離線頁與 network-first 導覽 fallback；
