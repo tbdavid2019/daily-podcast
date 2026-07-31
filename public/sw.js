@@ -1,5 +1,5 @@
 const CACHE_NAME = 'daily-podcast-offline-v1'
-const OFFLINE_PAGE = '/offline'
+const OFFLINE_PAGE = '/offline.html'
 const PRECACHE_URLS = [
   OFFLINE_PAGE,
   '/manifest.webmanifest',
