@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { describe, it } from 'node:test'
 import {
   applyPlaybackStart,
@@ -45,5 +46,11 @@ describe('timestamped playback sharing', () => {
   it('formats the shared position for people', () => {
     assert.equal(formatPlaybackTimestamp(379.8), '6:19')
     assert.equal(formatPlaybackTimestamp(3_845), '1:04:05')
+  })
+
+  it('shares only the timestamp URL without a separate description', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+
+    assert.match(source, /navigator\.share\(\{ url \}\)/)
   })
 })

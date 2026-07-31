@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   applyPlaybackStart,
   buildPlaybackShareUrl,
-  formatPlaybackTimestamp,
   getArticlePath,
   getPlaybackStartFromHash,
 } from '@/lib/playback-share'
@@ -75,13 +74,11 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
 
   const handleShare = async () => {
     const currentTime = audioElement?.currentTime ?? 0
-    const timestamp = formatPlaybackTimestamp(currentTime)
     const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, currentTime)
-    const text = `從 ${timestamp} 開始收聽`
 
     try {
       if (navigator.share) {
-        await navigator.share({ title: article.title, text, url })
+        await navigator.share({ url })
         setShareMessage('已開啟分享')
         return
       }
