@@ -13,7 +13,7 @@
 ### 變更細節
 
 - Manifest 新增穩定的 app ID，維持 standalone 顯示模式、繁中語系與 192／512px
-  maskable icons。
+  通用及 maskable icons。
 - 根 layout 註冊 Service Worker，補上 Apple Web App metadata、`zh-TW` 文件語系，
   並使用 Next.js 15 的 viewport metadata 設定主題色。
 - 新增由 Service Worker Cache Storage 提供的離線頁與 network-first 導覽 fallback；
@@ -21,6 +21,8 @@
   與不必要的裝置儲存量。fallback 不經 OpenNext 路由，避免舊版本的 dynamic route
   cache 回應遮蔽。
 - 新增 PWA regression tests，並納入 `pnpm check` 與 GitHub Actions quality gate。
+- Chrome 通過 installability 檢查時，首頁標題旁會顯示「安裝 App」按鈕並開啟原生
+  安裝對話框，避免依賴不保證出現的瀏覽器自動邀請。
 
 ### 驗證
 

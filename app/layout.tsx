@@ -7,6 +7,7 @@ import Script from 'next/script'
 import { BgToggle } from '@/components/bg-toggle'
 import { BingBackground } from '@/components/bing-background'
 import { GoogleAd } from '@/components/google-ad'
+import { PwaInstallButton } from '@/components/pwa-install-button'
 import { PwaServiceWorker } from '@/components/pwa-service-worker'
 import { podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
@@ -147,6 +148,7 @@ export default function RootLayout({
                 >
                   <Rss className="w-7 h-7 font-bold" />
                 </a>
+                <PwaInstallButton />
               </div>
               <p className="text-lg text-gray-600/80 mt-4 leading-relaxed max-w-2xl font-medium">{podcastDescription}</p>
             </header>

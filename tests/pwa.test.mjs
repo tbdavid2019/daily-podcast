@@ -13,6 +13,7 @@ describe('PWA configuration', () => {
     assert.match(manifest, /display:\s*'standalone'/)
     assert.match(manifest, /sizes:\s*'192x192'/)
     assert.match(manifest, /sizes:\s*'512x512'/)
+    assert.match(manifest, /purpose:\s*'any'/)
     assert.match(manifest, /purpose:\s*'maskable'/)
   })
 
@@ -22,7 +23,12 @@ describe('PWA configuration', () => {
     assert.match(layout, /appleWebApp:\s*\{[\s\S]*?capable:\s*true/)
     assert.match(layout, /export const viewport: Viewport = \{[\s\S]*?themeColor: '#111827'/)
     assert.match(layout, /<html lang="zh-TW">/)
+    assert.match(layout, /PwaInstallButton/)
     assert.match(layout, /PwaServiceWorker/)
+
+    const installButton = await readFile(new URL('components/pwa-install-button.tsx', rootUrl), 'utf8')
+    assert.match(installButton, /beforeinstallprompt/)
+    assert.match(installButton, /installPrompt\.prompt\(\)/)
   })
 
   it('serves a conservative offline fallback without caching podcast data', async () => {
