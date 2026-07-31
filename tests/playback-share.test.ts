@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyPlaybackStart,
   buildPlaybackShareUrl,
   formatPlaybackTimestamp,
   getArticlePath,
@@ -31,6 +32,14 @@ describe('timestamped playback sharing', () => {
   it('reads a playback start from a URL hash without creating a server cache key', () => {
     assert.equal(getPlaybackStartFromHash('#t=379'), 379)
     assert.equal(getPlaybackStartFromHash('#section=summary'), null)
+  })
+
+  it('applies a shared start after audio metadata becomes available', () => {
+    const audio = { currentTime: 0, duration: 300 }
+
+    applyPlaybackStart(audio, 379)
+
+    assert.equal(audio.currentTime, 300)
   })
 
   it('formats the shared position for people', () => {

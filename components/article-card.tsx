@@ -3,11 +3,12 @@ import { Share2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  applyPlaybackStart,
   buildPlaybackShareUrl,
   formatPlaybackTimestamp,
   getArticlePath,
@@ -43,39 +44,37 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, staticHost = '', showSummary = false, showFooter = false }: ArticleCardProps) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const sharedStartRef = useRef<number | null>(null)
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
   const [shareMessage, setShareMessage] = useState('')
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
-  const applySharedStart = useCallback(() => {
-    const audioElement = audioRef.current
-    const start = sharedStartRef.current
-
-    if (!audioElement || start === null) {
-      return
-    }
-
-    audioElement.currentTime = Number.isFinite(audioElement.duration)
-      ? Math.min(start, audioElement.duration)
-      : start
+  const setAudioRef = useCallback((element: HTMLAudioElement | null) => {
+    setAudioElement(element)
   }, [])
 
   useEffect(() => {
-    if (window.location.pathname !== getArticlePath(article.date, article.variant)) {
+    if (!audioElement || window.location.pathname !== getArticlePath(article.date, article.variant)) {
       return
     }
 
-    sharedStartRef.current = getPlaybackStartFromHash(window.location.hash)
-    const audioElement = audioRef.current
-    if (audioElement && audioElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
-      applySharedStart()
+    const start = getPlaybackStartFromHash(window.location.hash)
+    if (start === null) {
+      return
     }
-  }, [applySharedStart, article.date, article.variant])
+
+    const seekToSharedStart = () => applyPlaybackStart(audioElement, start)
+    if (audioElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      seekToSharedStart()
+      return
+    }
+
+    audioElement.addEventListener('loadedmetadata', seekToSharedStart, { once: true })
+    return () => audioElement.removeEventListener('loadedmetadata', seekToSharedStart)
+  }, [article.date, article.variant, audioElement])
 
   const handleShare = async () => {
-    const currentTime = audioRef.current?.currentTime ?? 0
+    const currentTime = audioElement?.currentTime ?? 0
     const timestamp = formatPlaybackTimestamp(currentTime)
     const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, currentTime)
     const text = `從 ${timestamp} 開始收聽`
@@ -124,14 +123,13 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
             } as React.CSSProperties}
           >
             <audio
-              ref={audioRef}
+              ref={setAudioRef}
               slot="media"
               src={audio}
               preload="metadata"
               playsInline
               crossOrigin="anonymous"
               tabIndex={article.updatedAt || -1}
-              onLoadedMetadata={applySharedStart}
             />
           </AudioPlayer>
           <div className="mt-2 flex items-center justify-end gap-2">

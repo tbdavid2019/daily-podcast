@@ -15,6 +15,8 @@
   但不會自動播放。
 - 使用 URL hash 而非 query string，因此秒數不會送往 Web Worker，也不會為每個播放
   位置建立獨立的 Edge cache key。
+- 修正動態播放器延遲掛載時可能錯過初始 metadata 的時序問題，分享連結現在會在音訊
+  元素掛載後可靠定位。
 - 新增時間戳格式、連結生成與讀取的回歸測試，並納入既有 Web test command 與 CI。
 
 ### 驗證

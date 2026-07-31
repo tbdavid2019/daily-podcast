@@ -1,5 +1,10 @@
 const PLAYBACK_START_PARAMETER = 't'
 
+interface PlaybackMedia {
+  currentTime: number
+  duration: number
+}
+
 function normalizePlaybackSecond(currentTime: number) {
   if (!Number.isFinite(currentTime) || currentTime < 0) {
     return 0
@@ -32,6 +37,12 @@ export function parsePlaybackStart(value: string | null) {
 
 export function getPlaybackStartFromHash(hash: string) {
   return parsePlaybackStart(new URLSearchParams(hash.replace(/^#/, '')).get(PLAYBACK_START_PARAMETER))
+}
+
+export function applyPlaybackStart(media: PlaybackMedia, start: number) {
+  media.currentTime = Number.isFinite(media.duration)
+    ? Math.min(start, Math.max(0, media.duration))
+    : start
 }
 
 export function formatPlaybackTimestamp(currentTime: number) {
