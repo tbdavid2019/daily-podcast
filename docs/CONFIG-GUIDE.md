@@ -146,8 +146,6 @@ export const rssDays = 30 // 一個月 RSS
 | `OPENAI_API_SECRET`         | OpenAI API 金鑰（Cloudflare Secret） | `sk-...`                              | ✅   |
 | `OPENAI_BASE_URL`           | OpenAI API 端點  | `https://api.openai.com/v1`                       | ✅   |
 | `OPENAI_MODEL`              | OpenAI 模型      | `gpt-4o-mini`                                     | ✅   |
-| `JINA_KEY`                  | Jina AI 金鑰     | `jina_...`                                        | ⭕   |
-| `FIRECRAWL_KEY`             | Firecrawl 金鑰   | `fc-...`                                          | ⭕   |
 | `TTS_PROVIDER`              | 語音合成提供者   | `edge` / `openai` / `minimax`                     | ⭕   |
 | `AUDIO_SPEED`               | TTS 語速倍數     | `1.3`（快 30%）範圍：`0.25`-`4.0`                 | ⭕   |
 

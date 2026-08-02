@@ -7,124 +7,68 @@ interface StoryFetchOptions {
   excludeRedditIds?: Set<string>
 }
 
-const breakerState = {
-  jinaFailures: 0,
-  firecrawlFailures: 0,
-}
-
-const BREAKER_THRESHOLD = 2
-
-const SELF_HOSTED_JINA_NODES = [
+const SELF_HOSTED_MARKDOWN_NODES = [
   'https://create360.ai', // Primary
   'http://git.glsoft.ai:8083', // Secondary
   'http://60.248.142.126:8083', // Fallback
 ]
 
-async function getContentFromJina(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, JINA_KEY?: string) {
-  if (breakerState.jinaFailures >= BREAKER_THRESHOLD) {
-    console.warn('Jina circuit breaker open - skipping request')
-    return ''
-  }
-
-  const jinaHeaders: HeadersInit = {
+async function getContentFromReader(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }) {
+  const readerHeaders: HeadersInit = {
     'X-Retain-Images': 'none',
     'X-Return-Format': format,
   }
 
-  // Self-hosted likely doesn't need auth, but keeping logic just in case user passes it for a reason
-  // or if they switch back to official endpoint later.
-  if (JINA_KEY) {
-    jinaHeaders.Authorization = `Bearer ${JINA_KEY}`
-  }
-
   if (selector?.include) {
-    jinaHeaders['X-Target-Selector'] = selector.include
+    readerHeaders['X-Target-Selector'] = selector.include
   }
 
   if (selector?.exclude) {
-    jinaHeaders['X-Remove-Selector'] = selector.exclude
+    readerHeaders['X-Remove-Selector'] = selector.exclude
   }
 
-  console.info('get content from jina', url)
+  console.info('get content from self-hosted reader', url)
 
   // Try nodes in order
-  for (const node of SELF_HOSTED_JINA_NODES) {
+  for (const node of SELF_HOSTED_MARKDOWN_NODES) {
     try {
       const targetUrl = `${node}/${url}`
-      console.info(`Trying Jina node: ${node}`)
+      console.info(`Trying self-hosted reader node: ${node}`)
 
       // Use a timeout for self-hosted nodes to fail fast
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
 
       const response = await fetch(targetUrl, {
-        headers: jinaHeaders,
+        headers: readerHeaders,
         signal: controller.signal,
       })
 
       clearTimeout(timeoutId)
 
       if (response.ok) {
-        breakerState.jinaFailures = 0 // Reset on success
         const text = await response.text()
-        return text
+        if (text.trim().length >= 50) {
+          return text
+        }
+        console.warn(`Self-hosted reader node ${node} returned insufficient content`)
+        continue
       }
 
-      console.warn(`Jina node ${node} failed: ${response.statusText}`)
+      console.warn(`Self-hosted reader node ${node} failed: ${response.status} ${response.statusText}`)
       // Don't break immediately on 4xx/5xx from one node, try next one
     }
     catch (error) {
-      console.warn(`Jina node ${node} error:`, error)
+      console.warn(`Self-hosted reader node ${node} error:`, error)
     }
   }
 
   // If all nodes failed
-  console.error(`All Jina nodes failed for ${url}`)
-  breakerState.jinaFailures++
+  console.error(`All self-hosted reader nodes failed for ${url}`)
   return ''
 }
 
-async function getContentFromFirecrawl(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }, FIRECRAWL_KEY?: string) {
-  if (breakerState.firecrawlFailures >= BREAKER_THRESHOLD) {
-    console.warn('Firecrawl circuit breaker open - skipping request')
-    return ''
-  }
-
-  const firecrawlHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${FIRECRAWL_KEY}`,
-  }
-
-  console.info('get content from firecrawl', url)
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: firecrawlHeaders,
-    body: JSON.stringify({
-      url,
-      formats: [format],
-      onlyMainContent: true,
-      include_tags: selector?.include ? [selector.include] : undefined,
-      exclude_tags: selector?.exclude ? [selector.exclude] : undefined,
-    }),
-  })
-
-  if (response.ok) {
-    breakerState.firecrawlFailures = 0 // Reset on success
-    const result = await response.json() as { success: boolean, data: Record<string, string> }
-    if (result.success) {
-      return result.data[format] || ''
-    }
-  }
-
-  console.error(`get content from firecrawl failed: ${response.statusText} ${url}`)
-  if (response.status === 402 || response.status === 429) {
-    breakerState.firecrawlFailures++
-    console.warn(`Firecrawl failure count: ${breakerState.firecrawlFailures}`)
-  }
-  return ''
-}
-
-export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getHackerNewsTopStories(today: string) {
   console.info('[Hacker News] Fetching stories for date:', today)
 
   // 優先使用 RSS feed，更穩定可靠
@@ -186,26 +130,14 @@ export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRA
 
   console.info('[Hacker News] Fetching from web page:', url)
 
-  const html = await getContentFromJina(url, 'html', {}, JINA_KEY)
+  const html = await getContentFromReader(url, 'html', {})
 
-  console.info('[Hacker News] HTML length from Jina:', html.length)
+  console.info('[Hacker News] HTML length from self-hosted reader:', html.length)
 
-  let $ = cheerio.load(html)
-  let items = $('.athing.submission')
+  const $ = cheerio.load(html)
+  const items = $('.athing.submission')
 
-  console.info('[Hacker News] Found items from Jina:', items.length)
-
-  if (!items.length) {
-    console.warn('[Hacker News] No items from Jina, trying Firecrawl...')
-    const firecrawlHtml = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
-
-    console.info('[Hacker News] HTML length from Firecrawl:', firecrawlHtml.length)
-
-    $ = cheerio.load(firecrawlHtml)
-    items = $('.athing.submission')
-
-    console.info('[Hacker News] Found items from Firecrawl:', items.length)
-  }
+  console.info('[Hacker News] Found items from self-hosted reader:', items.length)
 
   const stories: Story[] = items.map((i: number, el: any) => ({
     id: $(el).attr('id'),
@@ -225,7 +157,7 @@ export async function getHackerNewsTopStories(today: string, { JINA_KEY, FIRECRA
   return filteredStories
 }
 
-export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getHackerNewsStory(story: Story, maxTokens: number, _config?: unknown) {
   console.info(`[Content Fetch] Processing story: ${story.title}`)
   console.info(`[Content Fetch] Source: ${story.source}, URL: ${story.url}`)
 
@@ -236,38 +168,26 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     // 先嘗試抓取原始文章內容
     let article = ''
     try {
-      console.info(`[Hacker News] Trying Jina for article: ${story.url}`)
-      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+      console.info(`[Hacker News] Trying self-hosted reader for article: ${story.url}`)
+      article = await getContentFromReader(story.url!, 'markdown', {})
       if (!article || article.trim().length < 50) {
-        throw new Error('Jina returned empty or too short content')
+        throw new Error('Self-hosted readers returned empty or too short content')
       }
-      console.info(`[Hacker News] Jina success - article length: ${article.length}`)
+      console.info(`[Hacker News] Self-hosted reader success - article length: ${article.length}`)
     }
-    catch (jinaError) {
-      console.warn(`[Hacker News] Jina failed for article: ${jinaError}`)
-      try {
-        console.info(`[Hacker News] Trying Firecrawl for article: ${story.url}`)
-        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
-        if (!article || article.trim().length < 50) {
-          throw new Error('Firecrawl returned empty or too short content')
-        }
-        console.info(`[Hacker News] Firecrawl success - article length: ${article.length}`)
-      }
-      catch (firecrawlError) {
-        console.error(`[Hacker News] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
-        article = ''
-      }
+    catch (readerError) {
+      console.warn(`[Hacker News] Self-hosted readers failed for article: ${readerError}`)
+      article = ''
     }
 
     // 再抓取 Hacker News 評論（評論可選，失敗不影響文章處理）
     let comments = ''
     try {
       console.info(`[Hacker News] Fetching comments for ID: ${story.id}`)
-      comments = await getContentFromJina(
+      comments = await getContentFromReader(
         `https://news.ycombinator.com/item?id=${story.id}`,
         'markdown',
-        { include: '#pagespace + tr', exclude: '.navs' },
-        JINA_KEY,
+        { include: '.comment-tree', exclude: '.navs' },
       )
       if (!comments || comments.trim().length < 30) {
         throw new Error('Comments content too short')
@@ -275,20 +195,8 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
       console.info(`[Hacker News] Comments fetched successfully - length: ${comments.length}`)
     }
     catch (commentsError) {
-      console.warn(`[Hacker News] Failed to fetch comments: ${commentsError}`)
-      try {
-        comments = await getContentFromFirecrawl(
-          `https://news.ycombinator.com/item?id=${story.id}`,
-          'markdown',
-          { include: '#pagespace + tr', exclude: '.navs' },
-          FIRECRAWL_KEY,
-        )
-        console.info(`[Hacker News] Comments fetched via Firecrawl - length: ${comments.length}`)
-      }
-      catch (fallbackError) {
-        console.warn(`[Hacker News] Comments unavailable (non-critical): ${fallbackError}`)
-        comments = '' // 評論失敗不影響文章處理
-      }
+      console.warn(`[Hacker News] Comments unavailable (non-critical): ${commentsError}`)
+      comments = '' // 評論失敗不影響文章處理
     }
 
     const articleLength = article.trim().length
@@ -316,7 +224,7 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
     let isSelfPost = false
 
     // 1. 嘗試透過 JSON API 獲取內容 (如果是 Self Post) 與評論
-    // 這是比 Jina 更清晰的資料來源，特別是針對純文字討論
+    // 這是比 Markdown 閱讀器更清晰的資料來源，特別是針對純文字討論
     const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
 
     if (sourceUrl) {
@@ -372,30 +280,19 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
       }
     }
 
-    // 2. 如果 JSON 沒抓到文章內容 (例如是連結貼文，或 JSON 失敗)，則使用 Jina 抓取外部連結
+    // 2. 如果 JSON 沒抓到文章內容 (例如是連結貼文，或 JSON 失敗)，則使用自架閱讀器抓取外部連結
     if (!article && !isSelfPost && story.url) {
       try {
-        console.info('[Reddit] Trying Jina for article:', story.url)
-        article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+        console.info('[Reddit] Trying self-hosted reader for article:', story.url)
+        article = await getContentFromReader(story.url!, 'markdown', {})
         if (!article || article.trim().length < 50) {
-          throw new Error('Jina returned empty or too short content')
+          throw new Error('Self-hosted readers returned empty or too short content')
         }
-        console.info(`[Reddit] Jina success - article length: ${article.length}`)
+        console.info(`[Reddit] Self-hosted reader success - article length: ${article.length}`)
       }
-      catch (jinaError) {
-        console.warn(`[Reddit] Jina failed for article: ${jinaError}`)
-        try {
-          console.info('[Reddit] Trying Firecrawl for article:', story.url)
-          article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
-          if (!article || article.trim().length < 50) {
-            throw new Error('Firecrawl returned empty or too short content')
-          }
-          console.info(`[Reddit] Firecrawl success - article length: ${article.length}`)
-        }
-        catch (firecrawlError) {
-          console.error(`[Reddit] Both Jina and Firecrawl failed for article: ${firecrawlError}`)
-          article = ''
-        }
+      catch (readerError) {
+        console.warn(`[Reddit] Self-hosted readers failed for article: ${readerError}`)
+        article = ''
       }
     }
 
@@ -422,27 +319,16 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, { JINA
 
     let article = ''
     try {
-      console.info(`[${story.source}] Trying Jina for: ${story.url}`)
-      article = await getContentFromJina(story.url!, 'markdown', {}, JINA_KEY)
+      console.info(`[${story.source}] Trying self-hosted reader for: ${story.url}`)
+      article = await getContentFromReader(story.url!, 'markdown', {})
       if (!article || article.trim().length < 50) {
-        throw new Error('Jina returned empty or too short content')
+        throw new Error('Self-hosted readers returned empty or too short content')
       }
-      console.info(`[${story.source}] Jina success - length: ${article.length}`)
+      console.info(`[${story.source}] Self-hosted reader success - length: ${article.length}`)
     }
-    catch (jinaError) {
-      console.warn(`[${story.source}] Jina failed: ${jinaError}`)
-      try {
-        console.info(`[${story.source}] Trying Firecrawl for: ${story.url}`)
-        article = await getContentFromFirecrawl(story.url!, 'markdown', {}, FIRECRAWL_KEY)
-        if (!article || article.trim().length < 50) {
-          throw new Error('Firecrawl returned empty or too short content')
-        }
-        console.info(`[${story.source}] Firecrawl success - length: ${article.length}`)
-      }
-      catch (firecrawlError) {
-        console.error(`[${story.source}] Both services failed: ${firecrawlError}`)
-        article = ''
-      }
+    catch (readerError) {
+      console.warn(`[${story.source}] Self-hosted readers failed: ${readerError}`)
+      article = ''
     }
 
     // 對於非 Hacker News 來源，如果抓取失敗也直接過濾掉
@@ -491,7 +377,7 @@ export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, {
   return await response.blob()
 }
 
-export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getGitHubTrendingStories() {
   // GitHub Trending 抓取設定
   const GITHUB_CONFIG = {
     MAX_REPOS: 10, // 最多返回的 repo 數量
@@ -500,11 +386,7 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
 
   const url = 'https://github.com/trending'
 
-  let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
-
-  if (!html) {
-    html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
-  }
+  const html = await getContentFromReader(url, 'html', {})
 
   const $ = cheerio.load(html)
   const repos = $('.Box-row')
@@ -545,7 +427,7 @@ export async function getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }: { JI
   return shuffled.slice(0, GITHUB_CONFIG.MAX_REPOS)
 }
 
-export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getProductHuntStories() {
   console.info('Fetching Product Hunt stories...')
 
   // Product Hunt 抓取設定
@@ -617,15 +499,10 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
 
   const url = 'https://www.producthunt.com'
 
-  let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
+  const html = await getContentFromReader(url, 'html', {})
 
   if (!html) {
-    console.info('Jina failed, trying Firecrawl for Product Hunt...')
-    html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
-  }
-
-  if (!html) {
-    console.error('Failed to get HTML content from both Jina and Firecrawl for Product Hunt')
+    console.error('Failed to get HTML content from self-hosted readers for Product Hunt')
     throw new Error('No HTML content available for Product Hunt')
   }
 
@@ -692,7 +569,7 @@ export async function getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_
   return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
 }
 
-export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }) {
+export async function getDevToStories() {
   // Dev.to 抓取設定
   const DEV_TO_CONFIG = {
     MAX_ARTICLES: 10, // 最多返回的文章數量
@@ -785,11 +662,7 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
     console.warn('[Dev.to] RSS Fetch failed, falling back to scraping:', error)
   }
 
-  let html = await getContentFromJina(url, 'html', {}, JINA_KEY)
-
-  if (!html) {
-    html = await getContentFromFirecrawl(url, 'html', {}, FIRECRAWL_KEY)
-  }
+  const html = await getContentFromReader(url, 'html', {})
 
   const $ = cheerio.load(html)
   const articles = $('.crayons-story')
@@ -834,7 +707,7 @@ export async function getDevToStories({ JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: 
   return stories.slice(0, DEV_TO_CONFIG.MAX_ARTICLES)
 }
 
-export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: StoryFetchOptions = {}) {
+export async function getAllStories(today: string, _config: unknown, options: StoryFetchOptions = {}) {
   const { limits = {}, excludeRedditIds } = options
 
   console.info('Starting to fetch stories from all sources...', { limits })
@@ -848,7 +721,7 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
   // 只抓取需要的來源
   const fetchPromises: Record<StorySource, Promise<Story[]>> = {
     'hacker-news': shouldFetchSource('hacker-news')
-      ? getHackerNewsTopStories(today, { JINA_KEY, FIRECRAWL_KEY })
+      ? getHackerNewsTopStories(today)
           .then((stories) => {
             console.info(`[Hacker News] Fetched ${stories.length} stories successfully`)
             return stories
@@ -859,25 +732,25 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
           })
       : Promise.resolve([]),
     'github-trending': shouldFetchSource('github-trending')
-      ? getGitHubTrendingStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      ? getGitHubTrendingStories().catch((err) => {
           console.error('Failed to get GitHub trending stories:', err)
           return []
         })
       : Promise.resolve([]),
     'product-hunt': shouldFetchSource('product-hunt')
-      ? getProductHuntStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      ? getProductHuntStories().catch((err) => {
           console.error('Failed to get Product Hunt stories:', err)
           return []
         })
       : Promise.resolve([]),
     'dev-to': shouldFetchSource('dev-to')
-      ? getDevToStories({ JINA_KEY, FIRECRAWL_KEY }).catch((err) => {
+      ? getDevToStories().catch((err) => {
           console.error('Failed to get Dev.to stories:', err)
           return []
         })
       : Promise.resolve([]),
     'reddit': shouldFetchSource('reddit')
-      ? getRedditStories({ JINA_KEY, FIRECRAWL_KEY }, { excludeRedditIds }).catch((err) => {
+      ? getRedditStories({ excludeRedditIds }).catch((err) => {
           console.error('Failed to get Reddit stories:', err)
           return []
         })
@@ -917,7 +790,7 @@ export async function getAllStories(today: string, { JINA_KEY, FIRECRAWL_KEY }: 
   ]
 }
 
-export async function getRedditStories({ JINA_KEY: _JINA_KEY, FIRECRAWL_KEY: _FIRECRAWL_KEY }: { JINA_KEY?: string, FIRECRAWL_KEY?: string }, options: { excludeRedditIds?: Set<string> } = {}) {
+export async function getRedditStories(options: { excludeRedditIds?: Set<string> } = {}) {
   console.info('Fetching Reddit stories...')
 
   const { excludeRedditIds } = options

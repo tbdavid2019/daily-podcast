@@ -7,6 +7,21 @@ export const MAX_DIALOGUE_LINE_CHARS = 2000
 export const MAX_TTS_SEGMENT_CHARS = 400
 export const STORY_CONTENT_CHECKPOINT_ROOT = 'workflow-state/story-content/'
 
+export interface DialoguePlan {
+  targetLines: number
+  minLines: number
+  maxLines: number
+}
+
+export function getDialoguePlan(storyCount: number): DialoguePlan {
+  const count = Math.max(1, Math.floor(storyCount))
+  const targetLines = Math.min(32, Math.max(8, count * 2 + 4))
+  const minLines = Math.min(targetLines, Math.max(6, count * 2))
+  const maxLines = Math.min(MAX_DIALOGUE_LINES, Math.max(targetLines, count * 3 + 4))
+
+  return { targetLines, minLines, maxLines }
+}
+
 export const IO_STEP_CONFIG = {
   retries: {
     limit: 3,

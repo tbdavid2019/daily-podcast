@@ -16,6 +16,7 @@ import {
   buildStoryContentCheckpointPrefix,
   getExcludedRedditIds,
   getDateDaysBefore,
+  getDialoguePlan,
   isAudioCheckpointForInstance,
   parseStoryContentCheckpoint,
   STORY_CONTENT_CHECKPOINT_ROOT,
@@ -37,6 +38,43 @@ describe('workflow retry budgets', () => {
       assert.doesNotMatch(source, /const now = new Date\(\)/)
     }
   })
+
+  it('uses only the three self-hosted readers without forwarding authorization', async () => {
+    const source = await readFile(new URL('../workflow/utils.ts', import.meta.url), 'utf8')
+    const readerStart = source.indexOf('async function getContentFromReader')
+    const readerEnd = source.indexOf('export async function getHackerNewsTopStories')
+    const readerSource = source.slice(readerStart, readerEnd)
+
+    assert.match(source, /'https:\/\/create360\.ai'/)
+    assert.match(source, /'http:\/\/git\.glsoft\.ai:8083'/)
+    assert.match(source, /'http:\/\/60\.248\.142\.126:8083'/)
+    assert.doesNotMatch(source, /r\.jina\.ai/)
+    assert.doesNotMatch(source, /Firecrawl|FIRECRAWL|firecrawl/)
+    assert.doesNotMatch(readerSource, /Authorization/)
+    assert.doesNotMatch(readerSource, /circuit breaker|BREAKER_THRESHOLD/)
+    assert.match(source, /include: '\.comment-tree'/)
+    assert.doesNotMatch(source, /#pagespace \+ tr/)
+  })
+
+  it('allocates a complete exchange per story without unbounded dialogue growth', async () => {
+    assert.deepEqual(getDialoguePlan(10), {
+      targetLines: 24,
+      minLines: 20,
+      maxLines: 34,
+    })
+    assert.deepEqual(getDialoguePlan(13), {
+      targetLines: 30,
+      minLines: 26,
+      maxLines: 40,
+    })
+    assert.ok(getDialoguePlan(100).maxLines <= MAX_DIALOGUE_LINES)
+
+    const source = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
+    assert.match(source, /每個故事至少要有一個完整來回/)
+    assert.match(source, /每段控制在 220-360 字/)
+    assert.doesNotMatch(source, /每輪專注討論 2-3 個故事/)
+  })
+
 })
 
 describe('workflow compact checkpoints', () => {

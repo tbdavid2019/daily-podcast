@@ -2,6 +2,70 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-08-02] 自架來源穩定性、完整對話稿與 Free Plan 驗證
+
+### 摘要
+
+修正 Podcast 生成時的文章來源路徑與故事覆蓋邏輯，保留腳本直接閱讀完整原始內容的設計，並
+實際部署 Generation Worker、強制重跑 2026-08-02，確認文字與 Gemini TTS Workflow 沒有超過
+Cloudflare Workers Free Plan 的單次 50 次外部 subrequest 限制。
+
+### 來源與內容完整性
+
+- 文章全文與討論內容只依序使用三台自架 Markdown reader：
+  `https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`。
+- 自架 reader 不再接收 `JINA_KEY`／`Authorization`；runtime 不再呼叫 `r.jina.ai` 或 Firecrawl。
+- 每篇故事獨立嘗試三台 reader，不會因前一篇 reader 失敗而啟動全域熔斷、跳過後續故事。
+- RSS 僅負責提供候選故事清單；完整文章與評論仍經自架 reader 取得。
+- Podcast 腳本仍直接讀取 `<raw-story-content>` 的完整原始素材；深度摘要不會取代腳本輸入。
+
+### 對話稿節奏
+
+- 對話段數改依實際成功取得內容的故事數計算，不再用原始候選清單估算。
+- 每個故事至少完成一個由男女主持人共同參與的觀點交換；重要或有爭議的故事可展開 2–3 個來回。
+- 每段集中討論一個故事，避免一段塞入多個故事造成內容快速跳過。
+- 保留既有 Cordelia／David 主持人設定、繁體中文與 JSON Schema。
+
+### 正式重跑驗證
+
+- Generation Worker version：`ff0d4c0b-1f7b-46cf-b0f9-8fe7c42668f0`。
+- 文字 Workflow 成功取得 7 則故事並完成腳本；沒有 `Too many subrequests` 或資源超限錯誤。
+- 新腳本為 19 段、6,059 字純對話（含講者標記 6,116 字）；舊稿約 4,348 字，增加約 39%。
+- 23 個 Gemini TTS segment 分成 5 個批次，每批最多 5 次外部請求；五批均一次成功。
+- 音訊 Workflow 約 9 分鐘完成，R2 multipart 合併後音檔大小為 46,716,142 bytes，公開音檔回傳 HTTP 200。
+
+### 驗證
+
+- `pnpm check` 通過；保留既有 ESLint warnings，沒有新增 error。
+- 公開文章與音檔均已確認可讀：
+  [2026-08-02 文章](https://podcast.david888.com/post/2026-08-02)、
+  [2026-08-02 音檔](https://r2.david888.com/2026/08/02/production/hacker-news-2026-08-02.mp3)。
+
+---
+
+## [2026-07-31] WebTalk 全站聊天室與 AI 對話
+
+### 摘要
+
+全站加入 WebTalk 333 聊天室與 AI 對話元件，訪客可在所有頁面使用同一個即時討論空間。
+
+### 變更細節
+
+- 根 layout 使用 WebTalk 的 `origin` scope，讓網站內所有頁面共用同一間聊天室。
+- WebTalk 腳本以 Next.js `lazyOnload` 策略延後至頁面載入後再取得，不阻塞首屏渲染，也不增加
+  Web Worker 的 SSR、KV 或 Workflow 成本。
+- 保留 WebTalk 提供的 AI endpoint；使用摘要、AI 對話或 `@ai` 時，頁面文字與提問會由訪客瀏覽器
+  傳送至該服務，應依網站隱私政策揭露此資料流。
+- 新增 layout 整合 regression test，確認 WebTalk source、全站 room scope、AI endpoint 與延後載入
+  策略不會被後續修改移除。
+
+### 驗證
+
+- `pnpm check`、`pnpm build`、`pnpm opennext` 全數通過。
+- ESLint 維持 0 error，保留 6 個既有 warning。
+
+---
+
 ## [2026-07-31] Podcast 播放進度分享
 
 ### 摘要

@@ -15,6 +15,7 @@ import {
   buildStoryContentCheckpointPrefix,
   CONTENT_FETCH_STEP_CONFIG,
   getDateDaysBefore,
+  getDialoguePlan,
   getExcludedRedditIds,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
@@ -44,9 +45,6 @@ interface Env extends CloudflareEnv {
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
   MAX_STORY_BUDGET?: string
-  // For utils
-  JINA_KEY?: string
-  FIRECRAWL_KEY?: string
 }
 
 function createKvRequestLogger() {
@@ -505,21 +503,27 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
-      const storiesPerTurn = 2.5
-      const suggestedTurns = Math.ceil(stories.length / storiesPerTurn) + 5
-      const minTurns = Math.max(8, Math.ceil(stories.length / 3))
-      const maxTurns = Math.min(35, Math.ceil(stories.length * 2))
+      const dialoguePlan = getDialoguePlan(allStoryContents.length)
 
-      console.info('Dynamic dialogue turns calculation:', {
-        storyCount: stories.length,
-        suggestedTurns,
-        minTurns,
-        maxTurns,
+      console.info('Dynamic dialogue lines calculation:', {
+        storyCount: allStoryContents.length,
+        ...dialoguePlan,
       })
 
-      const storyList = stories.map((story, index) =>
+      const storyList = allStoryContents.map((story, index) =>
         `${index + 1}. [${story.source}] ${story.title}`,
       ).join('\n')
+
+      const storyMetadata = allStoryContents.map((storyContent) => {
+        const story = stories.find(candidate =>
+          candidate.id === storyContent.id && candidate.source === storyContent.source,
+        )
+        return story || {
+          id: storyContent.id,
+          title: storyContent.title,
+          source: storyContent.source,
+        }
+      })
 
       // Re-use the combinedContent (raw stories) for script generation
       const fullContentString = allStoryContents.map((story, index) =>
@@ -527,15 +531,17 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       ).join('\n\n---\n\n')
 
       const enhancedPrompt = `日期: ${displayDate}
-【必須討論的故事清單】（共 ${stories.length} 個故事，每一個都必須討論）
+【必須討論的故事清單】（共 ${allStoryContents.length} 個故事，每一個都必須完整討論）
 ${storyList}
 
-【動態對話輪數建議】
-- 建議對話輪數：${Math.min(suggestedTurns, maxTurns)} 輪（範圍：${minTurns}-${maxTurns} 輪）
-- 每輪專注討論 2-3 個故事，但每段話請講久一點（300-600 字）以確保深度
-- 根據實際內容靈活調整，但確保所有故事都被涵蓋
+【動態對話展開要求】
+- 目標 ${dialoguePlan.targetLines} 段發言，允許範圍 ${dialoguePlan.minLines}-${dialoguePlan.maxLines} 段；JSON dialogue 中的一個項目就是一段發言
+- 每個故事至少要有一個完整來回：Cordelia 與 David 都必須針對該故事各發言至少一次
+- 最重要或爭議最大的故事應展開 2-3 個來回；資訊較少的故事仍須解釋其價值或不足，不得略過
+- 每段只深入一個故事；相關故事可以自然銜接，但順帶提及不算完成討論
+- 每段控制在 220-360 字，避免超過單一 TTS segment；在此範圍內優先保留具體事實、技術細節與評論觀點
 
-<story-metadata>${JSON.stringify(stories)}</story-metadata>
+<story-metadata>${JSON.stringify(storyMetadata)}</story-metadata>
 
 <raw-story-content>
 ${fullContentString}

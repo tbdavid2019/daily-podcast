@@ -95,20 +95,6 @@ echo ""
 echo "🔧 設定可選環境變數 (可以提高系統穩定性)..."
 echo ""
 
-read -p "是否要設定 Jina AI API Key？(y/N): " setup_jina
-if [[ $setup_jina =~ ^[Yy]$ ]]; then
-    echo "在 https://jina.ai/ 獲取 API Key"
-    read -p "   輸入 Jina AI API Key: " jina_key
-    echo "JINA_KEY=\"$jina_key\"" >> $WORKER_ENV_FILE
-fi
-
-read -p "是否要設定 Firecrawl API Key？(y/N): " setup_firecrawl
-if [[ $setup_firecrawl =~ ^[Yy]$ ]]; then
-    echo "在 https://firecrawl.dev/ 獲取 API Key"
-    read -p "   輸入 Firecrawl API Key: " firecrawl_key
-    echo "FIRECRAWL_KEY=\"$firecrawl_key\"" >> $WORKER_ENV_FILE
-fi
-
 # 設定其他可選參數
 echo ""
 echo "設定其他 OpenAI 參數..."

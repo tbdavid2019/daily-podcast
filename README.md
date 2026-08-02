@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🧪 自架來源、完整 Podcast 對話與 Free Plan 驗證 (2026-08-02)**：文章全文與討論內容依序由三台自架 Markdown reader 取得：`https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`。Podcast 腳本維持直接閱讀完整原始內容，不改成只吃摘要；每個成功取得的故事都必須有男女主持人的完整觀點交換，重要故事再展開 2–3 個來回。正式重跑結果為 7 則故事、19 段對話、6,059 字純對話；23 個 Gemini TTS segment 分成 5 批，每批最多 5 次外部請求，未超過 Cloudflare Workers Free Plan 的 50 次限制。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **⚡ Web Worker 邊緣快取與 KV 去重 (2026-07-20)**：啟用 Cloudflare Workers Cache，在 Worker invocation 前快取 HTML 與 RSS；HTML 的 Edge TTL 為 10 分鐘、瀏覽器為 60 秒，RSC／router payload 則在外層 Worker 強制 `private, no-store`。移除會累積完整 Podcast script 的全域 `Map`，改用 React request-scoped cache 去除同一 SSR 的重複 KV reads，並新增實際 header 與 build gate 回歸測試。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🛡️ Next.js 與 production dependencies 安全更新 (2026-07-20)**：Next.js 由 15.4.6 升至 15.5.20，React 升至 19.2.7、OpenNext Cloudflare adapter 升至 1.20.1，並同步更新 Puppeteer、Cheerio、Radix 與 build tooling。Production audit 已由 60 項降至 4 項，Critical／High 均為 0；AI SDK 保持既有 `ai` 4.x／`@ai-sdk/openai` 1.x major。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🎧 音訊合併改為 bounded-memory R2 Multipart (2026-07-20)**：最終 Podcast 不再一次下載所有 batch 或建立整集 combined buffer；現在以 5 MiB 固定 Part、R2 range stream 與 `FixedLengthStream` 直接上傳，WAV 只保留一個正確總檔 header。每個 Part 可獨立重試，失敗會 abort，解決 128MB 峰值記憶體風險。詳見 [CHANGELOG.md](CHANGELOG.md)。
@@ -32,10 +33,9 @@
 - **Reddit 選題機制**：每版保留前 K 名後再隨機抽樣，降低重複又保留熱門度。
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
-- **爬蟲熔斷機制**：針對 Jina / Firecrawl 增加錯誤計數熔斷機制。當連續 2 次遇到 402 (Payment Required) 或 429 (Too Many Requests) 錯誤時，自動暫停後續請求，避免大量無效 subrequest 導致 Workflow 崩潰。
+- **自架內容閱讀器**：依序使用 `https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083` 取得文章與討論內容；每篇故事獨立 fallback，不會因單篇 reader 失敗而跳過後續故事。
 - **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用高品質的 **Fenrir (男)** 與 **Leda (女)** 聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需配置 Cloudflare Secret `GEMINI_TTS_API_SECRET`。此功能提供更自然的語音合成效果，且可作為 OpenAI TTS 的替代方案。
 - **TTS 故障自動轉移 (Fallback) (2026-02-08)**：實作 TTS 容錯機制。當主選的 TTS 服務商（如 Gemini/OpenAI）發生錯誤時，系統會自動降級並切換至免費的 **Edge TTS** 繼續生成，確保 Podcast 每日更新不中斷。
-- **自建 Jina Reader 支援**：支援配置多個自建 Jina Reader 節點（Primary/Secondary），優先使用自建節點以節省額度並提高穩定性。
 
 ---
 

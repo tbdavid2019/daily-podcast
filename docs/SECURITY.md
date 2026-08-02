@@ -37,8 +37,6 @@ URL 可以減少掃描與無效請求。
 ```
 ❌ 不要公開:
 - OPENAI_API_SECRET
-- JINA_KEY
-- FIRECRAWL_KEY
 - MINIMAX_API_KEY
 ```
 
