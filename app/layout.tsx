@@ -123,6 +123,13 @@ export default function RootLayout({
           crossOrigin="anonymous"
           strategy="afterInteractive"
         />
+        <Script
+          id="webtalk-widget"
+          src="https://webtalk-nine.vercel.app/webtalk.js"
+          data-webtalk-scope="origin"
+          data-webtalk-ai-endpoint="https://webtalk-nine.vercel.app/api/webtalk/ai"
+          strategy="lazyOnload"
+        />
 
         <BingBackground />
         <BgToggle />
