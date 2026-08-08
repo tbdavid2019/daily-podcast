@@ -2,6 +2,52 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-08-08] 主持人風格、台灣用語與 TTS 節目預算
+
+### 摘要
+
+調整 Podcast 腳本提示，恢復 Cordelia 技術樂觀派與 David 工程現實派的對立風格，並加強
+David 的技術解說責任。同步統一 AI 產出、網站介面、PWA 描述與維護文件的台灣用語，且在
+Cloudflare Workers Free plan 的 50 次外部 subrequest 限制內保留 15–20 分鐘的節目內容。
+
+### 對話稿與主持人定位
+
+- Cordelia 從產品願景、使用者價值、架構潛力與正面證據展開觀點；David 從技術原理、部署、
+  維護、相容性、授權、效能與 Bug 檢驗主張。
+- David 不再只負責質疑。每個故事都必須補充背景或核心原理，重要故事至少安排一段完整的
+  機制解說，再進入雙方的價值判斷。
+- 保留支持與反對觀點的角色張力，但所有評論、Issues、價格、使用經驗與因果關係都必須能由
+  原始素材支持，避免為了製造衝突而補造翻車案例。
+- Hacker News、Reddit、GitHub Trending、Product Hunt 與 Dev.to 依來源採用不同分析角度，
+  繼續直接閱讀 `<raw-story-content>`，不增加額外 LLM 規劃或審稿呼叫。
+- 移除套版式聊天句型與固定訂閱宣傳收尾，維持 DAVID888 Daily 原有的技術調查與觀點交鋒風格。
+
+### 節目長度與 Free plan 保護
+
+- 正常對話目標依故事數計算，10 篇故事為 24 段、13 篇故事為 30 段，硬上限由 40 段降為
+  34 段，替 TTS 失敗與 fallback 保留外部 subrequest 餘裕。
+- 單段 schema 上限由 2,000 字收斂為 380 字，低於 400 字 TTS segment 上限，避免單一
+  `dialogue` 項目被拆成多次 TTS 呼叫。
+- 實質討論以 220–360 字為主，全稿參考範圍為 4,800–6,500 字，目標節目長度約 15–20 分鐘。
+
+### 台灣用語
+
+- AI prompt 明確要求台灣繁體中文，將「播客、博客、用戶、搜索引擎、評論區、內存、函數、
+  純文本、超鏈接、音頻」等用語改為「Podcast、部落格、使用者、搜尋引擎、留言討論、記憶體、
+  函式、純文字、超連結、音訊」等台灣常用說法。
+- 網站 Podcast 分頁、節目描述、PWA manifest、README、操作指南、部署腳本與程式註解同步整理。
+- 新增 build-gate 測試，防止主要 prompt 與對外文案重新加入已排除的用語或外部模板句型。
+
+### 驗證與部署
+
+- `pnpm check`、`pnpm build` 與 OpenNext Cloudflare build 全數通過。
+- ESLint 維持 0 error，保留 6 個既有 warning。
+- Generation Worker version：`7201ae2a-14ea-4f23-9b87-60f1d0c90aa5`。
+- Web Worker version：`2356a9e2-f996-42ac-8bd0-c74720bfc75b`。
+- 未手動觸發 AI 或 TTS；下一次排程會使用新版主持人與長度規則。
+
+---
+
 ## [2026-08-02] 自架來源穩定性、完整對話稿與 Free Plan 驗證
 
 ### 摘要
@@ -284,7 +330,7 @@ Worker 不再持有整集音訊。
 
 ---
 
-## [2026-07-20] Workflow subrequest、重試與持久化狀態優化
+## [2026-07-20] Workflow subrequest、重試與持久化狀態最佳化
 
 ### 摘要
 
@@ -401,7 +447,7 @@ Workflow instance ID 與安全的手動重跑腳本，同時將部署設定中�
 #### 1. 保護公開 Workflow 入口
 
 - `POST /workflow` 必須提供 `Authorization: Bearer <token>`。
-- 生產環境未配置 `API_SECRET_TOKEN` 時採 fail-closed，回傳 `503`，不會在無認證
+- 正式環境未設定 `API_SECRET_TOKEN` 時採 fail-closed，回傳 `503`，不會在無驗證
   狀態下繼續執行。
 - Token 缺少或錯誤時回傳 `401`；非 `POST` 請求回傳 `405`。
 - JSON body 與 query string 經 schema 驗證；格式錯誤、無效日期及不支援的參數
@@ -483,10 +529,10 @@ pnpm workflow:secret
 
 ---
 
-## [2026-07-08] 播放器懸浮固定與 RSS 格式優化
+## [2026-07-08] 播放器懸浮固定與 RSS 格式最佳化
 
-### 🎯 優化與修復目標
-解決了網頁端播放器無法固定漂浮在最上方的問題、修改了頁尾（Footer）的商標與版權聲明，並優化了 RSS XML 的生成結構，解決了 YouTube Podcast RSS 匯入時因為描述過長而產生的警告訊息，同時也滿足了聽眾在 Apple Podcasts 等客戶端收聽時能夠直觀點擊回連至網站原文章的期待。
+### 🎯 最佳化與修復目標
+解決網頁播放器無法固定在最上方的問題、修改頁尾（Footer）的商標與版權聲明，並調整 RSS XML 的產生結構，解決 YouTube Podcast RSS 匯入時因描述過長而出現的警告訊息，也讓聽眾在 Apple Podcasts 等 App 收聽時能直接點選連結回到網站原文。
 
 ### 📝 變更內容
 #### 1. 網頁播放器懸浮固定修復 (`components/article-card.tsx`)
@@ -500,11 +546,11 @@ pnpm workflow:secret
 - **修復**: 移除了原有的 Hacker News 關聯聲明，將頁尾文字修改為：
   > 由 [david888.com](https://david888.com) 製作
 
-#### 3. RSS 格式與描述長度優化 (`app/rss.xml/route.ts`)
-- **解決 YouTube 描述過長警告**: RSS `description` 優化為 `[回連連結] + [極簡摘要]`，且當無極簡摘要時，只截取前 300 個字元作為預覽，防範 YouTube 5,000 字元長度限制警告。
+#### 3. RSS 格式與描述長度最佳化 (`app/rss.xml/route.ts`)
+- **解決 YouTube 描述過長警告**：RSS `description` 調整為 `[回連連結] + [極簡摘要]`，沒有極簡摘要時只擷取前 300 個字元作為預覽，避免觸發 YouTube 的 5,000 字元長度警告。
 - **Apple Podcasts 回連連結支援**: 在 RSS 產生的 `<description>` (純文字) 與 `<content:encoded>` (HTML) 最頂部，置頂顯示 `"詳細網頁版與參考連結：https://podcast.david888.com/post/YYYY-MM-DD"`。
 - **精簡 HTML 內文**: `<content:encoded>` 改為極簡的 `[網頁回連] + [極簡摘要] + [相關連結列表]`，大幅縮減 Feed 體積並防止 YouTube 讀取過長 HTML 出錯。
-- **代碼清理**: 移除了 `app/rss.xml/route.ts` 中不再使用的 `markdown-it` 套件引用。
+- **程式碼整理**：移除 `app/rss.xml/route.ts` 中不再使用的 `markdown-it` 套件引用。
 
 ---
 
@@ -520,7 +566,7 @@ pnpm workflow:secret
 在 `app/rss.xml/route.ts` 補上 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods: GET, HEAD, OPTIONS`、`Access-Control-Allow-Headers: Content-Type, Accept`。同時新增 `OPTIONS` handler。
 #### 2. 釐清正確 Web 部署指令
 將部署指令修正為 `pnpm run deploy`，排除 `pnpm deploy` 的歧義。
-#### 3. 修正文檔與腳本
+#### 3. 修正文件與腳本
 同步修正 `README.md`、`deploy-to-cloudflare.sh`、`setup-env-vars.sh` 與 `docs/DOCS-INDEX.md` 中的部署說明。
 
 ---
@@ -548,33 +594,33 @@ pnpm workflow:secret
 
 ---
 
-## [2026-04-24] Bing 背景與 Bento 視覺優化
+## [2026-04-24] Bing 背景與 Bento 視覺最佳化
 
 ### 概述
-本更新導入了動態 Bing 桌布背景功能，並運用 Bento 設計風格全面優化了前端介面視覺，提升了整體的沉浸感與現代感。
+本次更新加入動態 Bing 桌布背景功能，並運用 Bento 設計風格調整前端介面視覺。
 
 ### 新增功能
 #### 1. 動態 Bing 背景
 - **呼吸動畫**：圖片載入後套用平滑淡入與 Ken Burns 效果縮放動畫。
 - **隨機桌布**：載入時隨機從 GitHub 源抓取歷史桌布。
 - **開關控制**：右上角新增切換按鈕，預設為開啟，支援 `localStorage` 偏好記憶。
-#### 2. Bento 視覺風格優化
+#### 2. Bento 視覺風格最佳化
 - **毛玻璃效果 (Glassmorphism)**：為文章卡片與 UI 組件加入 `backdrop-blur` 與半透明背景。
-- **現代字體**：引入 `Inter` 字體，優化間距與標題層次感，卡片加入柔和邊框與陰影。
+- **現代字體**：加入 `Inter` 字體，調整間距與標題層次，卡片加入柔和邊框與陰影。
 
 ---
 
 ## [2026-04-14] TTS 引擎與 Workflow 穩定性修復
 
 ### 🎯 修復目標
-為解決語音合成 (TTS) 引擎失效、環境變數配置錯誤、工作流程 (Workflow) 重複觸發，以及播客標題偶爾未經過 LLM 美化的問題。
+解決語音合成（TTS）引擎失效、環境變數設定錯誤、Workflow 重複觸發，以及 Podcast 標題偶爾未經 LLM 調整的問題。
 
 ### 📝 主要變更
 #### 1. 標題美化與故障切換 (Fail-safe)
 - **標題自動補位機制 (`workflow/index.ts`)**: 若偵測到標題缺失，會額外發起一個極輕量的 LLM 請求產出 SEO 驚悚標題。
-- **Fallback 標式優化 (`lib/utils.ts`)**: 新增 `[備用標題]` 前綴。
-#### 2. TTS 引擎修復與優化
-- **Gemini TTS 模型代碼校正**: 修正模型代碼為 `gemini-2.5-flash-preview-tts`。
+- **Fallback 標示調整 (`lib/utils.ts`)**：新增 `[備用標題]` 前綴。
+#### 2. TTS 引擎修復與最佳化
+- **Gemini TTS 模型名稱校正**：修正模型名稱為 `gemini-2.5-flash-preview-tts`。
 #### 3. Workflow 穩定性增強
 - **防止重複觸發 Audio Workflow**: 新增 KV 狀態鎖定 (Dedup Lock)，防止 5 分鐘內重複觸發。
 - **API 路由精確化**: 修正 `/workflow` 路由判斷。
@@ -584,7 +630,7 @@ pnpm workflow:secret
 ## [2026-04-08] RSS 日期排序修正
 
 ### 摘要
-修正 `https://podcast.david888.com/rss.xml` 在 Pocket Casts 等播客 App 中未依節目日期穩定排序的問題。
+修正 `https://podcast.david888.com/rss.xml` 在 Pocket Casts 等 Podcast App 中未依節目日期穩定排序的問題。
 
 ### 變更內容
 #### 1. 導入穩定時間戳
@@ -603,7 +649,7 @@ RSS item `date` 與 `enclosure` 的 `?t=` 參數皆改用穩定時間，不再�
 ## [2025-10-31] 新聞來源擴充實作
 
 ### 🎯 新增功能概覽
-為 Hacker News 播客系統新增了三個新的新聞來源：
+為 Hacker News Podcast 系統新增三個新聞來源：
 1. **GitHub Trending** - 熱門開源專案（使用 DeepWiki 增強內容）
 2. **Product Hunt** - 新產品發布
 3. **Dev.to** - 技術文章 Top 10
@@ -611,10 +657,10 @@ RSS item `date` 與 `enclosure` 的 `?t=` 參數皆改用穩定時間，不再�
 ### 📝 主要變更
 #### 1. 類型定義更新 (`types/story.d.ts`)
 擴充了 `Story` 介面以支援多種來源（`source`、`sourceUrl`、`description` 等）。
-#### 2. 爬蟲函數 (`workflow/utils.ts`)
+#### 2. 來源擷取函式 (`workflow/utils.ts`)
 新增 `getGitHubTrendingStories()`（轉換為 DeepWiki URL 並透過 Jina 爬取）、`getProductHuntStories()`（取前 5 產品）、`getDevToStories()`（取前 10 技術文章）與 `getAllStories()`（並行聚合所有來源）。
 #### 3. 內容處理與提示詞更新
-- `getHackerNewsStory()` 根據來源進行不同內容獲取。
+- `getHackerNewsStory()` 會依來源使用不同的內容取得方式。
 - 更新 `summarizeStoryPrompt` AI 提示詞以處理多種來源類型。
 #### 4. 工作流程整合
 `workflow/index.ts` 從抓取單一 HN 改為執行 `getAllStories()` 聚合。

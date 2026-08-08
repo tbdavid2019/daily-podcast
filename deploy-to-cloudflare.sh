@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🚀 開始部署 Hacker News 播客系統到 Cloudflare Workers..."
+echo "🚀 開始將 Hacker News Podcast 系統部署到 Cloudflare Workers..."
 echo ""
 
 # 檢查 Node.js 和 pnpm
@@ -64,13 +64,13 @@ echo ""
 echo "🎉 部署完成！"
 echo ""
 echo "📋 接下來的步驟:"
-echo "1. 檢查 Worker URL 是否可以訪問"
+echo "1. 檢查 Worker URL 是否可以存取"
 echo "2. 檢查 Web 應用是否正常顯示"
 echo "3. 測試手動觸發工作流程"
 echo "4. 等待定時任務在 00:30 UTC（台北時間 08:30）自動執行"
 echo ""
-echo "📖 更多信息請查看: ./CLOUDFLARE-DEPLOY.md"
+echo "📖 詳細資訊請參閱：./CLOUDFLARE-DEPLOY.md"
 echo ""
 
-# 顯示部署的 URL (如果可以獲取的話)
-echo "🔗 請記錄您的部署 URL 以便後續配置和測試"
+# 顯示部署 URL（如果能取得）
+echo "🔗 請記錄部署 URL，供後續設定與測試使用"

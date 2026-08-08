@@ -1,25 +1,25 @@
 #!/bin/bash
 
 # Cloudflare Workers 環境變數設定腳本 (明文版本)
-# 將環境變數寫入本地文件，然後設定到 Cloudflare
+# 將環境變數寫入本機檔案，再設定到 Cloudflare
 
 echo "🔐 開始設定 Cloudflare Workers 環境變數..."
-echo "請按照提示輸入各項配置值 (值會儲存在本地檔案中)"
+echo "請依照提示輸入各項設定值（數值會儲存在本機檔案中）"
 echo ""
 
 # 建立環境變數檔案
 ENV_FILE=".env.production"
 WORKER_ENV_FILE="worker/.env.production"
 
-echo "# 生產環境變數配置" > $ENV_FILE
-echo "# Worker 環境變數配置" > $WORKER_ENV_FILE
+echo "# 正式環境變數設定" > $ENV_FILE
+echo "# Worker 環境變數設定" > $WORKER_ENV_FILE
 
 # Worker 應用環境變數設定
 echo "📡 設定 Worker 應用環境變數..."
 echo ""
 
 echo "1. 設定 OpenAI API Key (必需)"
-echo "   請在 https://platform.openai.com/ 獲取您的 API Key"
+echo "   請前往 https://platform.openai.com/ 取得您的 API Key"
 read -p "   輸入您的 OpenAI API Key: " openai_key
 echo "OPENAI_API_SECRET=\"$openai_key\"" >> $WORKER_ENV_FILE
 
@@ -50,10 +50,10 @@ worker_url=${worker_url:-"https://placeholder.workers.dev"}
 echo "HACKER_NEWS_WORKER_URL=\"$worker_url\"" >> $WORKER_ENV_FILE
 
 echo ""
-echo "6. 設定 R2 存儲桶 URL"
+echo "6. 設定 R2 儲存貯體 URL"
 echo "   ⚠️  需要先到 Cloudflare Dashboard 設定："
 echo "   1. 進入 R2 Object Storage"
-echo "   2. 選擇 'hacker-news' 存儲桶"
+echo "   2. 選擇 'hacker-news' 儲存貯體"
 echo "   3. 啟用 'Public Access' -> 'Allow Access'"
 echo "   4. 選擇 'R2.dev subdomain'"
 echo "   5. 複製獲得的 URL (如: https://pub-xxxxx.r2.dev)"
@@ -160,6 +160,6 @@ echo ""
 echo "💡 重要提示："
 echo "   - 環境變數檔案只供本機維護，禁止加入版本控制"
 echo "   - ⚠️  secrets (環境變數) 和 binding (資源綁定) 是不同的！"
-echo "   - binding 在 wrangler.jsonc 中配置，部署時才會生效"
+echo "   - binding 在 wrangler.jsonc 中設定，部署時才會生效"
 echo "   - 如果 binding 沒有生效，請重新執行部署命令"
 echo "   - `pnpm deploy` 在 pnpm@10 會被當成 workspace deploy 子命令，請使用 `pnpm run deploy`"

@@ -7,7 +7,7 @@ import { getRequestArticleByDate } from '@/lib/content'
 
 export const revalidate = 3600
 
-// 生成页面的元数据
+// 產生頁面的中繼資料
 export async function generateMetadata({ params }: { params: Promise<{ date: string, variant: string }> }): Promise<Metadata> {
   const { env } = await getCloudflareContext({ async: true })
   const resolvedParams = await params

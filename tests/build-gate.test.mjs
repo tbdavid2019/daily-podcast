@@ -36,6 +36,24 @@ describe('build gate configuration', () => {
     assert.doesNotMatch(nextConfig, /ignoreDuringBuilds\s*:\s*true/)
   })
 
+  it('keeps generated and user-facing copy in Taiwanese terminology', async () => {
+    const paths = [
+      'workflow/prompt.ts',
+      'workflow/index.ts',
+      'config.ts',
+      'components/article-card.tsx',
+      'public/manifest.webmanifest',
+    ]
+    const copy = (await Promise.all(paths.map(path => readFile(new URL(path, rootUrl), 'utf8')))).join('\n')
+
+    assert.doesNotMatch(
+      copy,
+      /播客|博客|用戶|用户|搜索引擎|評論區|评论区|內存|内存|函數|函数|純文本|纯文本|超鏈接|超链接|主播|音頻|音频|視頻|视频|文檔|配置|返回|獲取|获取|生成/,
+    )
+    assert.match(copy, /台灣繁體中文/)
+    assert.doesNotMatch(copy, /泛用型|Podcast App|老朋友聊天|手把手|不完整想法/)
+  })
+
   it('runs the complete quality gate for pushes and pull requests', async () => {
     const workflow = await readFile(new URL('.github/workflows/quality-gate.yml', rootUrl), 'utf8')
 

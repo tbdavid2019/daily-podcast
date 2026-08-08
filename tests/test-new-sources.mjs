@@ -1,5 +1,5 @@
 // 測試新增的新聞來源網站可用性
-// 這個文件用於測試新聞來源網站的基本可用性
+// 這個檔案用於測試新聞來源網站的基本可用性
 // 注意：實際的內容爬取使用自架 Markdown 閱讀器
 
 async function testNewsSources() {
@@ -62,7 +62,7 @@ async function testNewsSources() {
   console.log('💡 注意：')
   console.log('   - 這個測試只檢查網站基本可用性')
   console.log('   - 實際內容爬取使用自架 Markdown 閱讀器')
-  console.log('   - 如果網站可用但應用無法獲取內容，請檢查閱讀器節點')
+  console.log('   - 如果網站可用但程式無法取得內容，請檢查閱讀器節點')
 }
 
 // 執行測試

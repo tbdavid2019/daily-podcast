@@ -41,7 +41,7 @@ interface Env extends CloudflareEnv {
   HACKER_NEWS_R2: R2Bucket
   HACKER_NEWS_WORKFLOW: Workflow<WorkflowParams>
   HACKER_NEWS_AUDIO_WORKFLOW: Workflow<WorkflowParams>
-  // 新增時區配置
+  // 新增時區設定
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
   MAX_STORY_BUDGET?: string
@@ -62,7 +62,7 @@ function createKvRequestLogger() {
   return { checkpoint, logKv }
 }
 
-// 每輪 workflow 的故事與音訊配置限制
+// 每輪 workflow 的故事與音訊設定限制
 const SOURCE_PRIORITY: readonly string[] = [
   'hacker-news',
   'reddit',
@@ -159,28 +159,28 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const isDev = runEnv !== 'production'
     const breakTime = isDev ? '2 seconds' : '5 seconds'
 
-    // 時區處理邏輯 - 支援配置化時區
+    // 時區處理邏輯 - 支援自訂時區
     const now = new Date(event.timestamp.getTime())
-    // 從環境變數讀取時區配置，預設為台北時間（UTC+8）
+    // 從環境變數讀取時區設定，預設為台北時間（UTC+8）
     const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
 
     // 計算指定時區的時間
     const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
     const localToday = localTime.toISOString().split('T')[0]
 
-    // 用戶可以手動指定日期，否則使用自動計算
+    // 使用者可以手動指定日期，否則使用自動計算
     const userSpecifiedDate = params.today
 
-    // 顯示日期：用戶指定 > 本地時區今天
+    // 顯示日期：使用者指定 > 本地時區今天
     const displayDate = userSpecifiedDate || localToday
 
-    // 抓取日期：用戶指定 > UTC 昨天（確保抓取前一天完整內容）
+    // 抓取日期：使用者指定 > UTC 昨天（確保抓取前一天完整內容）
     const utcYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const fetchDate = userSpecifiedDate || utcYesterday
 
     console.info('Date calculation with configurable timezone:', {
       utcNow: now.toISOString(),
-      displayDate: `${displayDate} (用於內容標題和存儲)`,
+      displayDate: `${displayDate} (用於內容標題和儲存)`,
       fetchDate: `${fetchDate} (用於抓取 HN 內容)`,
       variant,
     })
@@ -455,7 +455,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
       const { text, usage, finishReason } = await generateText({
         model: openai(this.env.OPENAI_MODEL!),
-        system: `${summarizeStoryPrompt}\n\n請為每篇文章生成摘要。**重要：你必須為所有 ${expectedCount} 篇文章都生成摘要**。請用 <story-summary id="文章ID"> 標籤包裹每個摘要，確保數量正確。`,
+        system: `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
         prompt: combinedContent,
         maxTokens: summarizationMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
@@ -504,10 +504,14 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
       const dialoguePlan = getDialoguePlan(allStoryContents.length)
+      const targetMinChars = Math.min(5600, Math.max(4800, allStoryContents.length * 430))
+      const targetMaxChars = Math.min(6500, Math.max(5600, allStoryContents.length * 500))
 
       console.info('Dynamic dialogue lines calculation:', {
         storyCount: allStoryContents.length,
         ...dialoguePlan,
+        targetMinChars,
+        targetMaxChars,
       })
 
       const storyList = allStoryContents.map((story, index) =>
@@ -537,9 +541,12 @@ ${storyList}
 【動態對話展開要求】
 - 目標 ${dialoguePlan.targetLines} 段發言，允許範圍 ${dialoguePlan.minLines}-${dialoguePlan.maxLines} 段；JSON dialogue 中的一個項目就是一段發言
 - 每個故事至少要有一個完整來回：Cordelia 與 David 都必須針對該故事各發言至少一次
-- 最重要或爭議最大的故事應展開 2-3 個來回；資訊較少的故事仍須解釋其價值或不足，不得略過
+- David 在每個故事都要補充技術背景或核心原理；最重要的故事至少安排一段完整機制解說，不能只做質疑與評論
+- 最重要或最有爭議的 2-3 個故事可以增加來回；資訊較少的故事仍須解釋其價值或不足，不得略過
 - 每段只深入一個故事；相關故事可以自然銜接，但順帶提及不算完成討論
-- 每段控制在 220-360 字，避免超過單一 TTS segment；在此範圍內優先保留具體事實、技術細節與評論觀點
+- 以目前 TTS 語速製作約 15-20 分鐘節目，參考總字數 ${targetMinChars}-${targetMaxChars} 字；請靠具體內容達成，不要重複資訊或加入空話湊字數
+- 實質討論通常控制在 220-360 字；必要的開場、追問或轉場可使用 100-180 字，但整集最多四段這類短發言；任何發言不得超過 ${MAX_DIALOGUE_LINE_CHARS} 字
+- 不要為了湊互動增加無資訊短句；每個 dialogue 項目都會產生一次 TTS 請求，應在有限段數內優先保留具體事實、技術細節與有根據的觀點
 
 <story-metadata>${JSON.stringify(storyMetadata)}</story-metadata>
 
@@ -589,7 +596,7 @@ ${fullContentString}
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
         const { text } = await generateText({
           model: openai(this.env.OPENAI_MODEL!),
-          system: `你是 ${podcastTitle} 的總編輯。請為今天的播客內容生成一個極具吸引力、驚悚且符合 SEO 的標題。\n格式："[日期] [驚悚標題1]、[驚悚標題2]"。\n例如："2026-01-17 網路大崩潰前兆？X 平台無預警死機、手機輻射正在殺死我們？"`,
+          system: `你是 ${podcastTitle} 的總編輯。請根據提供的故事摘要，產生一個具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或災難性結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
           prompt: `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
           maxRetries: AI_SDK_MAX_RETRIES,
         })

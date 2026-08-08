@@ -2,8 +2,8 @@ import type { WorkflowStepConfig } from 'cloudflare:workers'
 import type { Story } from './types'
 
 export const AI_SDK_MAX_RETRIES = 0
-export const MAX_DIALOGUE_LINES = 40
-export const MAX_DIALOGUE_LINE_CHARS = 2000
+export const MAX_DIALOGUE_LINES = 34
+export const MAX_DIALOGUE_LINE_CHARS = 380
 export const MAX_TTS_SEGMENT_CHARS = 400
 export const STORY_CONTENT_CHECKPOINT_ROOT = 'workflow-state/story-content/'
 

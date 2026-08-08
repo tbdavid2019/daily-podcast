@@ -1,8 +1,8 @@
 # RSS Feed 修復說明
 
-> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [配置指南](./CONFIG-GUIDE.md) | [安全指南](./SECURITY.md)
+> 📖 **文件導覽**：[← 回到 README](../README.md) | [設定指南](./CONFIG-GUIDE.md) | [安全指南](./SECURITY.md)
 
-本文檔說明 RSS Feed 的修復過程，包括 Byte-range 支援和 Podcast namespace 的實施。
+本文件說明 RSS Feed 的修復過程，包括 Byte-range 支援和 Podcast namespace 的實作。
 
 ---
 
@@ -10,20 +10,20 @@
 
 RSS feed 驗證器報告了兩個問題：
 
-1. ❌ **缺少 Byte-range support**：音頻檔案不支援部分內容請求（串流功能）
-2. ❌ **缺少 Podcast namespace**：RSS feed 缺少播客命名空間
+1. ❌ **缺少 Byte-range support**：音訊檔案不支援部分內容請求（串流功能）
+2. ❌ **缺少 Podcast namespace**：RSS feed 缺少 Podcast 命名空間
 
 ## 修復內容
 
-### 1. 添加 Podcast Namespace ✅
+### 1. 新增 Podcast Namespace ✅
 
 **檔案**: `app/rss.xml/route.ts`
 
-添加了 `customNamespaces` 配置：
+新增 `customNamespaces` 設定：
 
 ```typescript
 const feed = new Podcast({
-  // ...其他配置
+  // ...其他設定
   customNamespaces: {
     podcast: 'https://podcastindex.org/namespace/1.0',
   },
@@ -34,7 +34,7 @@ const feed = new Podcast({
 
 - RSS feed 現在包含 `xmlns:podcast="https://podcastindex.org/namespace/1.0"`
 - 符合 PSP-1 (Podcast Standards Project Phase 1) 規範
-- 支援現代播客功能（章節、轉錄等）
+- 支援現代 Podcast 功能（章節、逐字稿等）
 
 ### 2. 實施 Byte-range Support ✅
 
@@ -57,7 +57,7 @@ const feed = new Podcast({
      const file = await env.HACKER_NEWS_R2.get(filePath, {
        range: request.headers,
      })
-     // 返回 206 Partial Content
+     // 回傳 206 Partial Content
    }
    ```
 
@@ -78,7 +78,7 @@ const feed = new Podcast({
 
 #### 效果：
 
-- ✅ 播客 App 可以串流播放音頻
+- ✅ Podcast App 可以串流播放音訊
 - ✅ 支援快轉/後退功能
 - ✅ 節省頻寬（只下載需要的部分）
 - ✅ 符合 Apple Podcasts 要求
@@ -87,7 +87,7 @@ const feed = new Podcast({
 
 **檔案**: `public/_headers`
 
-添加了音頻檔案的 headers：
+新增音訊檔案的 headers：
 
 ```
 /*.mp3
@@ -131,7 +131,7 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
 
 ### 3. 使用驗證器
 
-訪問以下網站驗證你的 RSS feed：
+前往以下網站驗證 RSS feed：
 
 - **Cast Feed Validator**: https://castfeedvalidator.com/
 
@@ -147,7 +147,7 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
   - 提交你的 RSS feed
   - 檢查是否有錯誤或警告
 
-### 4. 在播客 App 中測試
+### 4. 在 Podcast App 中測試
 
 1. **Apple Podcasts**
 
@@ -157,18 +157,18 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
 
 2. **Pocket Casts**
 
-   - 搜尋或手動添加 RSS feed
+   - 搜尋或手動新增 RSS feed
    - 測試串流播放
 
 3. **Overcast**
-   - 添加自訂 RSS feed
+   - 新增自訂 RSS feed
    - 測試播放控制
 
 ## 技術細節
 
 ### HTTP Range 請求流程
 
-1. **客戶端請求**
+1. **用戶端請求**
 
    ```
    GET /static/audio/2025-10-01.mp3
@@ -184,10 +184,10 @@ curl https://podcast.david888.com/rss.xml | grep 'xmlns:podcast'
    Accept-Ranges: bytes
    Content-Length: 1024
 
-   [音頻資料的前 1024 bytes]
+   [音訊資料的前 1024 bytes]
    ```
 
-3. **客戶端繼續請求**
+3. **用戶端繼續請求**
    ```
    GET /static/audio/2025-10-01.mp3
    Range: bytes=1024-2047
@@ -209,7 +209,7 @@ const file = await env.HACKER_NEWS_R2.get(filePath, {
 
 ### Podcast Namespace 功能
 
-添加 `podcast` namespace 後，你可以使用以下進階功能：
+新增 `podcast` namespace 後，可以使用以下進階功能：
 
 ```xml
 <!-- 章節標記 -->
@@ -231,13 +231,13 @@ const file = await env.HACKER_NEWS_R2.get(filePath, {
 
 1. **頻寬節省**
 
-   - 用戶只下載實際播放的部分
+   - 使用者只下載實際播放的部分
    - 快轉/後退不需重新下載整個檔案
 
 2. **載入速度**
 
    - 播放可以立即開始（不需等待完整下載）
-   - 改善用戶體驗
+   - 改善使用者體驗
 
 3. **成本降低**
    - R2 egress 費用降低（只傳輸必要的資料）
@@ -249,20 +249,20 @@ const file = await env.HACKER_NEWS_R2.get(filePath, {
 'Cache-Control': 'public, max-age=31536000, immutable'
 ```
 
-- 音頻檔案被標記為不可變（immutable）
+- 音訊檔案被標記為不可變（immutable）
 - CDN 和瀏覽器可以安全快取一年
 - 減少重複請求
 
 ## 故障排除
 
-### 問題 1: Range 請求返回 200 而非 206
+### 問題 1：Range 請求回傳 200 而非 206
 
 **症狀**：雖然發送了 Range header，但得到完整檔案
 
 **原因**：
 
 - R2 binding 設定錯誤
-- Worker 路由配置問題
+- Worker 路由設定問題
 
 **解決**：
 
@@ -275,7 +275,7 @@ pnpx wrangler deployments list
 
 ### 問題 2: Content-Range header 格式錯誤
 
-**症狀**：播客 App 無法正確處理 Range 回應
+**症狀**：Podcast App 無法正確處理 Range 回應
 
 **原因**：Content-Range 格式不符合規範
 
@@ -294,7 +294,7 @@ Content-Range: bytes 0-1023          ❌ 缺少總大小
 
 ### 問題 3: CORS 錯誤
 
-**症狀**：瀏覽器無法播放音頻
+**症狀**：瀏覽器無法播放音訊
 
 **解決**：確認 R2 CORS 設定（見主 README）
 
@@ -317,7 +317,7 @@ Content-Range: bytes 0-1023          ❌ 缺少總大小
 
 ## 未來改進
 
-可以考慮添加的功能：
+可以考慮新增的功能：
 
 1. **章節標記**
 
@@ -331,7 +331,7 @@ Content-Range: bytes 0-1023          ❌ 缺少總大小
    <podcast:transcript url="https://example.com/transcript.srt"/>
    ```
 
-3. **多個音頻格式**
+3. **多種音訊格式**
 
    ```xml
    <podcast:alternateEnclosure type="audio/opus">
@@ -347,4 +347,4 @@ Content-Range: bytes 0-1023          ❌ 缺少總大小
 
 ---
 
-**✅ 修復完成！你的播客 RSS feed 現在完全符合現代播客標準。**
+**✅ 修復完成！你的 RSS feed 現在已符合現代 Podcast 標準。**

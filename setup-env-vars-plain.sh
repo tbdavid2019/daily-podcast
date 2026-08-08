@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # 設定明文環境變數到 wrangler.jsonc (不推薦 - 安全性低)
-# 此腳本將敏感信息寫入配置文件，可能會被意外提交到 Git
+# 此腳本會將敏感資訊寫入設定檔，可能被意外提交到 Git
 
-echo "⚠️  警告：此腳本將敏感信息以明文形式寫入 wrangler.jsonc"
-echo "   這些文件可能會被意外提交到版本控制系統"
+echo "⚠️  警告：此腳本會將敏感資訊以明文寫入 wrangler.jsonc"
+echo "   這些檔案可能被意外提交到版本控制系統"
 echo "   建議只在開發環境使用，或確保 .gitignore 正確設定"
 echo ""
 
@@ -28,8 +28,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
-# 生成主應用 vars
-echo "生成主應用 vars..."
+# 產生主要應用程式 vars
+echo "產生主要應用程式 vars..."
 VARS=""
 while IFS='=' read -r key value; do
     [[ $key =~ ^#.*$ ]] && continue
@@ -45,14 +45,14 @@ if grep -q '"vars":' wrangler.jsonc; then
   "vars": {\
 '"$VARS"'  },' wrangler.jsonc
 else
-    # 添加 vars 字段
+    # 新增 vars 欄位
     sed -i '' '/"keep_vars": true,/a\
   "vars": {\
 '"$VARS"'  },' wrangler.jsonc
 fi
 
-# 生成 Worker vars
-echo "生成 Worker vars..."
+# 產生 Worker vars
+echo "產生 Worker vars..."
 WORKER_VARS=""
 while IFS='=' read -r key value; do
     [[ $key =~ ^#.*$ ]] && continue

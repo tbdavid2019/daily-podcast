@@ -1,21 +1,21 @@
 # 🔒 安全指南
 
-> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [配置指南](./CONFIG-GUIDE.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
+> 📖 **文件導覽**：[← 回到 README](../README.md) | [設定指南](./CONFIG-GUIDE.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
 
-本文檔提供完整的安全指南，包括 Worker URL 保護、API 密鑰管理、認證機制實施等內容。
+本文件提供完整的安全指南，包括 Worker URL 保護、API 金鑰管理與驗證機制等內容。
 
 ---
 
 ## ⚠️ 重要安全警告
 
-本專案包含敏感的 Worker URL 和 API 密鑰，如果洩露可能導致：
+本專案包含敏感的 Worker URL 和 API 金鑰，若外洩可能導致：
 
 - 🚨 API 配額被濫用（OpenAI、TTS 等）
 - 💸 產生意外的費用
 - ⚡ 觸發 Cloudflare Workers 限制
 - 🔥 服務中斷
 
-## 🔐 必須保密的信息
+## 🔐 必須保密的資訊
 
 ### 1. Worker URL 與觸發 Token
 
@@ -28,11 +28,11 @@ URL 可以減少掃描與無效請求。
 
 **保護方法**:
 
-- 不要在 README、文檔中使用真實 URL
+- 不要在 README 或文件中使用真實 URL
 - 不要在 Git 提交中包含
 - 使用已實作的 API Token 認證（見下方）
 
-### 2. API 密鑰
+### 2. API 金鑰
 
 ```
 ❌ 不要公開:
@@ -42,22 +42,22 @@ URL 可以減少掃描與無效請求。
 
 **保護方法**:
 
-- 使用 `wrangler secret put` 存儲
+- 使用 `wrangler secret put` 儲存
 - 永遠不要提交到 Git
-- 定期輪換密鑰
+- 定期更換金鑰
 
 ## 🛡️ 已實作的安全措施
 
 ### API Token 認證
 
-#### 步驟 1: 生成強密鑰
+#### 步驟 1：產生高強度金鑰
 
 ```bash
-# 產生隨機密鑰並建立權限 0600 的本機設定
+# 產生隨機金鑰並建立權限 0600 的本機設定
 pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
 ```
 
-#### 步驟 2: 設定密鑰
+#### 步驟 2：設定金鑰
 
 ```bash
 pnpm workflow:secret
@@ -105,13 +105,13 @@ Token。
    - Subdomain: `your-worker`
    - Domain: `workers.dev`
 
-#### 步驟 2: 設定訪問規則
+#### 步驟 2：設定存取規則
 
 1. 選擇 **One-time PIN** 或 **Email**
-2. 添加你的電子郵件地址
+2. 新增你的電子郵件地址
 3. 儲存設定
 
-現在訪問 Worker 時需要先登入！
+現在存取 Worker 時需要先登入！
 
 ### 方案 3: IP 白名單
 
@@ -204,7 +204,7 @@ pnpx wrangler tail --cwd worker
 ### 3. 設定 Cloudflare Alerts
 
 1. 進入 Cloudflare Dashboard → **Notifications**
-2. 創建新的 Alert：
+2. 建立新的 Alert：
    - Workers 請求量異常
    - 錯誤率過高
    - CPU 使用率過高
@@ -233,7 +233,7 @@ pnpm workflow:secret
 
 同步更新本機 `.env.workflow.local` 中的 `PODCAST_WORKFLOW_TOKEN`。
 
-#### 2. 發現 AI/TTS API Key 洩漏時輪換相關密鑰
+#### 2. 發現 AI/TTS API Key 外洩時更換相關金鑰
 
 ```bash
 # OpenAI / OpenAI TTS / Gemini TTS
@@ -241,7 +241,7 @@ pnpm exec wrangler secret put --cwd worker OPENAI_API_SECRET
 pnpm exec wrangler secret put --cwd worker OPENAI_TTS_API_SECRET
 pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 
-# 其他密鑰...
+# 其他金鑰...
 ```
 
 #### 3. 檢查使用量
@@ -250,14 +250,14 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 - 查看 Cloudflare Workers 請求量
 - 確認是否有異常費用
 
-### 如果懷疑 API 密鑰洩露
+### 如果懷疑 API 金鑰外洩
 
-#### 1. 立即停用舊密鑰
+#### 1. 立即停用舊金鑰
 
 - OpenAI: 前往 API Keys 頁面刪除
 - 其他服務: 同樣停用
 
-#### 2. 生成新密鑰並更新
+#### 2. 產生新金鑰並更新
 
 ```bash
 pnpm exec wrangler secret put --cwd worker OPENAI_API_SECRET
@@ -275,10 +275,10 @@ pnpm run deploy
 
 部署前檢查：
 
-- [ ] 所有敏感信息使用 `wrangler secret` 存儲
-- [ ] `.gitignore` 包含 `.env*` 文件
-- [ ] README 和文檔中沒有真實的 Worker URL
-- [ ] README 和文檔中沒有真實的 API 密鑰
+- [ ] 所有敏感資訊都使用 `wrangler secret` 儲存
+- [ ] `.gitignore` 包含 `.env*` 檔案
+- [ ] README 和文件中沒有真實的 Worker URL
+- [ ] README 和文件中沒有真實的 API 金鑰
 - [ ] 已實施至少一種認證方案
 - [ ] 已設定速率限制
 - [ ] 已設定 Cloudflare Alerts
@@ -288,33 +288,33 @@ pnpm run deploy
 - [ ] 檢查 Worker 日誌是否有異常
 - [ ] 檢查 API 使用量是否正常
 - [ ] 檢查 Cloudflare Analytics
-- [ ] 考慮輪換 API 密鑰
+- [ ] 考慮更換 API 金鑰
 
 ## 💡 最佳實踐
 
 1. **最小權限原則**
 
-   - 只給 API 密鑰必要的權限
+   - 只授予 API 金鑰必要權限
    - OpenAI: 設定使用限制和預算
 
 2. **分離環境**
 
-   - 開發環境使用不同的密鑰
-   - 生產環境密鑰更嚴格保護
+   - 開發環境使用不同的金鑰
+   - 正式環境的金鑰採用更嚴格的保護
 
 3. **監控和告警**
 
    - 設定自動告警
    - 定期檢查日誌
 
-4. **文檔安全**
+4. **文件安全**
 
    - 使用佔位符替代真實值
-   - 明確標註哪些是敏感信息
+   - 明確標註哪些是敏感資訊
 
 5. **定期審計**
-   - 每 3-6 個月輪換密鑰
-   - 檢查訪問日誌
+   - 每 3-6 個月更換金鑰
+   - 檢查存取紀錄
    - 更新安全措施
 
 ## 📞 報告安全問題

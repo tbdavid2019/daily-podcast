@@ -65,13 +65,18 @@ describe('workflow retry budgets', () => {
     assert.deepEqual(getDialoguePlan(13), {
       targetLines: 30,
       minLines: 26,
-      maxLines: 40,
+      maxLines: 34,
     })
     assert.ok(getDialoguePlan(100).maxLines <= MAX_DIALOGUE_LINES)
+    assert.ok(MAX_DIALOGUE_LINE_CHARS <= MAX_TTS_SEGMENT_CHARS)
 
     const source = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
     assert.match(source, /每個故事至少要有一個完整來回/)
-    assert.match(source, /每段控制在 220-360 字/)
+    assert.match(source, /David 在每個故事都要補充技術背景或核心原理/)
+    assert.match(source, /約 15-20 分鐘節目/)
+    assert.match(source, /參考總字數 \$\{targetMinChars\}-\$\{targetMaxChars\} 字/)
+    assert.match(source, /任何發言不得超過 \$\{MAX_DIALOGUE_LINE_CHARS\} 字/)
+    assert.match(source, /每個 dialogue 項目都會產生一次 TTS 請求/)
     assert.doesNotMatch(source, /每輪專注討論 2-3 個故事/)
   })
 

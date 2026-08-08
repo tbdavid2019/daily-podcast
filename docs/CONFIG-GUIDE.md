@@ -1,12 +1,12 @@
-# 配置使用指南
+# 設定指南
 
-> 📖 **文檔導航**: [← 返回主文檔](../README.md) | [安全指南](./SECURITY.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
+> 📖 **文件導覽**：[← 回到 README](../README.md) | [安全指南](./SECURITY.md) | [RSS 修復指南](./RSS-FIX-GUIDE.md)
 
-本文檔提供詳細的配置說明，包括天數限制、環境變數、域名對應等內容。
+本文件提供詳細設定說明，包括天數限制、環境變數與網域對應等內容。
 
 ---
 
-## 📅 天數限制配置
+## 📅 天數限制設定
 
 ### 為什麼需要限制天數？
 
@@ -15,13 +15,13 @@ Cloudflare Workers 對每次調用有 **subrequest 限制**：
 - **免費方案**: 最多 50 個子請求
 - **付費方案**: 最多 1000 個子請求
 
-每次從 KV 讀取數據都算一個子請求，如果 `keepDays` 設置過大（例如 3650 天），會導致：
+每次從 KV 讀取資料都算一個子請求。如果 `keepDays` 設定過大（例如 3650 天），可能導致：
 
 ```
 Error: Too many API requests by single worker invocation.
 ```
 
-### 配置文件位置
+### 設定檔位置
 
 編輯 `config.ts`：
 
@@ -36,15 +36,15 @@ export const sitemapDays = 365
 export const rssDays = 10
 ```
 
-### 配置說明
+### 設定說明
 
-| 配置項        | 預設值 | 建議範圍  | 用途     | 說明                                 |
+| 設定項目        | 預設值 | 建議範圍  | 用途     | 說明                                 |
 | ------------- | ------ | --------- | -------- | ------------------------------------ |
 | `keepDays`    | 30 天  | 7-30 天   | 首頁顯示 | 直接影響首頁載入速度和 KV 讀取次數   |
-| `sitemapDays` | 365 天 | 90-365 天 | SEO 優化 | 不會在每次訪問時觸發，可以設置較大值 |
-| `rssDays`     | 10 天  | 7-30 天   | 播客訂閱 | 播客 App 通常不需要太多歷史內容      |
+| `sitemapDays` | 365 天 | 90-365 天 | SEO 最佳化 | 不會在每次存取時觸發，可以設定較大值 |
+| `rssDays`     | 10 天  | 7-30 天   | Podcast 訂閱 | Podcast App 通常不需要太多歷史內容      |
 
-### 推薦配置方案
+### 建議設定方案
 
 #### 🚀 快速載入方案（免費方案推薦）
 
@@ -89,7 +89,7 @@ export const rssDays = 10 // 十天 RSS
 
 #### 💪 最大內容方案（付費方案）
 
-適合：付費用戶、需要最大歷史內容
+適合：付費使用者、需要最多歷史內容
 
 ```typescript
 export const keepDays = 90 // 三個月內容
@@ -107,9 +107,9 @@ export const rssDays = 30 // 一個月 RSS
 - 需要付費方案
 - 載入速度較慢
 
-### 如何修改配置
+### 如何修改設定
 
-1. **編輯配置文件**：
+1. **編輯設定檔**：
 
    ```bash
    vim config.ts
@@ -130,18 +130,18 @@ export const rssDays = 30 // 一個月 RSS
    ```
 
 4. **驗證**：
-   訪問你的網站，檢查是否正常顯示
+   開啟網站，檢查是否正常顯示
 
 ---
 
-## 🌐 環境變數配置
+## 🌐 環境變數設定
 
 ### Worker 應用環境變數
 
 | 變數名                      | 說明             | 範例值                                            | 必需 |
 | --------------------------- | ---------------- | ------------------------------------------------- | ---- |
-| `WORKER_ENV`                | 運行環境         | `production`                                      | ✅   |
-| `HACKER_NEWS_WORKER_URL`    | 後端 Worker 域名 | `https://your-worker.workers.dev` ⚠️ **不要公開** | ✅   |
+| `WORKER_ENV`                | 執行環境         | `production`                                      | ✅   |
+| `HACKER_NEWS_WORKER_URL`    | 後端 Worker 網域 | `https://your-worker.workers.dev` ⚠️ **不要公開** | ✅   |
 | `HACKER_NEWS_R2_BUCKET_URL` | R2 公開 URL      | `https://podcast.david888.com`                    | ✅   |
 | `OPENAI_API_SECRET`         | OpenAI API 金鑰（Cloudflare Secret） | `sk-...`                              | ✅   |
 | `OPENAI_BASE_URL`           | OpenAI API 端點  | `https://api.openai.com/v1`                       | ✅   |
@@ -153,44 +153,44 @@ export const rssDays = 30 // 一個月 RSS
 
 | 變數名                 | 說明         | 範例值                         | 必需 |
 | ---------------------- | ------------ | ------------------------------ | ---- |
-| `NEXTJS_ENV`           | 運行環境     | `production`                   | ✅   |
-| `NEXT_PUBLIC_BASE_URL` | 前端網站域名 | `https://podcast.david888.com` | ✅   |
-| `NEXT_STATIC_HOST`     | R2 CDN 域名  | `https://podcast.david888.com` | ✅   |
+| `NEXTJS_ENV`           | 執行環境     | `production`                   | ✅   |
+| `NEXT_PUBLIC_BASE_URL` | 前端網站網域 | `https://podcast.david888.com` | ✅   |
+| `NEXT_STATIC_HOST`     | R2 CDN 網域  | `https://podcast.david888.com` | ✅   |
 
 ### 環境變數用途說明
 
 #### `HACKER_NEWS_WORKER_URL`
 
 - **設定在**: Worker 應用
-- **用途**: Workflow 內部呼叫後端 Worker API（例如音頻合併）
+- **用途**：Workflow 內部呼叫後端 Worker API（例如音訊合併）
 - **範例**: `https://your-worker.workers.dev`
-- **如何獲取**: 部署 Worker 後，Cloudflare 會提供的域名
-- **安全說明**: URL 本身不是憑證；公開入口仍由 Bearer Token 保護。避免在文件中使用真實 URL 可減少掃描與無效請求。
+- **如何取得**：部署 Worker 後，由 Cloudflare 提供網域
+- **安全說明**：URL 本身不是憑證；公開入口仍由 Bearer Token 保護。避免在文件中使用真實 URL，可減少掃描與無效請求。
 
 #### `HACKER_NEWS_R2_BUCKET_URL`
 
 - **設定在**: Worker 應用
-- **用途**: Workflow 寫入音頻檔案路徑到 KV 時使用
+- **用途**：Workflow 將音訊檔案路徑寫入 KV 時使用
 - **範例**: `https://podcast.david888.com`
-- **如何獲取**:
-  1. 在 Cloudflare R2 設定自訂域名
+- **如何取得**：
+  1. 在 Cloudflare R2 設定自訂網域
   2. 或使用 R2 的公開 URL
 
 #### `NEXT_PUBLIC_BASE_URL`
 
 - **設定在**: Web 應用
-- **用途**: 生成 RSS、Sitemap、OpenGraph 等絕對 URL
+- **用途**：產生 RSS、Sitemap、OpenGraph 等絕對 URL
 - **範例**: `https://podcast.david888.com`
-- **注意**: 必須是你的網站域名，不是 Worker 域名
+- **注意**：必須是網站網域，不是 Worker 網域
 
 #### `NEXT_STATIC_HOST`
 
 - **設定在**: Web 應用
-- **用途**: 前端播放器組合音頻檔案完整 URL
+- **用途**：前端播放器組合音訊檔案完整 URL
 - **範例**: `https://podcast.david888.com`
 - **組合方式**: `NEXT_STATIC_HOST + '/' + audio`
 
-### 域名對應關係
+### 網域對應關係
 
 ```
 你的架構：
@@ -203,7 +203,7 @@ export const rssDays = 30 // 一個月 RSS
    ├─ 環境變數: HACKER_NEWS_WORKER_URL=https://your-worker.workers.dev
    └─ 環境變數: HACKER_NEWS_R2_BUCKET_URL=https://podcast.david888.com
 
-3. R2 存儲: 透過自訂域名 https://podcast.david888.com 訪問
+3. R2 儲存：透過自訂網域 https://podcast.david888.com 存取
 ```
 
 ### 如何設定環境變數
@@ -214,7 +214,7 @@ export const rssDays = 30 // 一個月 RSS
 ./setup-env-vars.sh
 ```
 
-按提示輸入各項配置。
+依提示輸入各項設定。
 
 #### 方法二：手動設定
 
@@ -248,7 +248,7 @@ pnpx wrangler secret list
 
 #### ❌ 錯誤 1: CORS 錯誤
 
-**症狀**: 前端無法播放音頻，瀏覽器控制台顯示 CORS 錯誤
+**症狀**：前端無法播放音訊，瀏覽器主控台顯示 CORS 錯誤
 
 **原因**: R2 CORS 未正確設定
 
@@ -256,7 +256,7 @@ pnpx wrangler secret list
 
 1. 進入 Cloudflare Dashboard → R2 → 你的 Bucket
 2. 點擊 Settings → CORS Policy
-3. 添加：
+3. 新增：
    ```json
    [
      {
@@ -270,33 +270,33 @@ pnpx wrangler secret list
    ]
    ```
 
-#### ❌ 錯誤 2: 音頻 URL 404
+#### ❌ 錯誤 2：音訊 URL 404
 
-**症狀**: 音頻檔案無法訪問，返回 404
+**症狀**：音訊檔案無法存取，回傳 404
 
 **原因**: `NEXT_STATIC_HOST` 與 `HACKER_NEWS_R2_BUCKET_URL` 不一致
 
-**解決**: 確保兩者指向同一個域名（你的 R2 公開 URL）
+**解決**：確認兩者指向同一個網域（R2 公開 URL）
 
 #### ❌ 錯誤 3: RSS Feed 連結錯誤
 
-**症狀**: RSS 中的連結指向錯誤的域名
+**症狀**：RSS 中的連結指向錯誤網域
 
 **原因**: `NEXT_PUBLIC_BASE_URL` 設定錯誤
 
-**解決**: 確保設定為你的網站域名，不是 Worker 域名
+**解決**：確認設定為網站網域，而不是 Worker 網域
 
 ---
 
-## 🎙️ TTS 語速配置
+## 🎙️ TTS 語速設定
 
 ### AUDIO_SPEED 參數說明
 
-`AUDIO_SPEED` 控制所有 TTS 提供者的語音播放速度，讓你可以調整播客的節奏。
+`AUDIO_SPEED` 控制所有 TTS 提供者的語音播放速度，讓你可以調整 Podcast 的節奏。
 
 #### 設定位置
 
-在 `worker/wrangler.jsonc` 中配置：
+在 `worker/wrangler.jsonc` 中設定：
 
 ```jsonc
 {
@@ -327,7 +327,7 @@ pnpx wrangler secret list
 
 #### 修改語速步驟
 
-1. **編輯配置文件**：
+1. **編輯設定檔**：
 
    ```bash
    vim worker/wrangler.jsonc
@@ -348,7 +348,7 @@ pnpx wrangler secret list
    ```
 
 4. **驗證**：
-   下次生成的播客會使用新的語速
+   下次產生的 Podcast 會使用新的語速
 
 #### 語速對文稿長度的影響
 
@@ -370,10 +370,10 @@ pnpx wrangler secret list
 
 ## 🔄 完整部署流程
 
-### 1. 修改配置
+### 1. 修改設定
 
 ```bash
-# 編輯天數配置
+# 編輯天數設定
 vim config.ts
 ```
 
@@ -415,9 +415,9 @@ curl https://podcast.david888.com/rss.xml
 
 ### 5. 測試功能
 
-1. 訪問網站首頁
-2. 檢查播客列表是否顯示
-3. 測試音頻播放
+1. 開啟網站首頁
+2. 檢查 Podcast 清單是否顯示
+3. 測試音訊播放
 4. 檢查 RSS 訂閱
 
 ---
@@ -429,14 +429,14 @@ curl https://podcast.david888.com/rss.xml
 Worker URL 本身不是憑證。`POST /workflow` 已使用 Bearer Token 保護；Token
 洩漏後，外部人員可能：
 
-- 觸發 workflow 生成播客
+- 觸發 workflow 產生 Podcast
 - 消耗你的 API 配額（OpenAI、TTS 等）
 - 產生不必要的成本
 - 可能觸發 Cloudflare Workers 的限制
 
 **解決方案**：
 
-#### 1. 避免在公開文檔中暴露 Worker URL
+#### 1. 避免在公開文件中揭露 Worker URL
 
 ❌ **錯誤做法**：
 
@@ -452,7 +452,7 @@ Worker URL 本身不是憑證。`POST /workflow` 已使用 Bearer Token 保護�
 
 #### 2. 設定已實作的 API 認證
 
-建立並設定密鑰：
+建立並設定金鑰：
 
 ```bash
 pnpm workflow:setup --worker-url https://your-generation-worker.workers.dev
@@ -466,7 +466,7 @@ pnpm workflow:secret
 #### 3. 使用 Cloudflare Access（最安全）
 
 1. 在 Cloudflare Dashboard 中設定 Access 規則
-2. 只允許特定 IP 或電子郵件訪問
+2. 只允許特定 IP 或電子郵件存取
 3. 完全免費且易於設定
 
 #### 4. 限制請求頻率
@@ -501,7 +501,7 @@ pnpm logs:worker
 
 ### 🔐 環境變數安全最佳實踐
 
-1. **永遠不要提交包含密鑰的文件到 Git**
+1. **永遠不要將含有金鑰的檔案提交到 Git**
 
    ```bash
    # .gitignore 中應包含：
@@ -513,15 +513,15 @@ pnpm logs:worker
 2. **使用 Cloudflare Secrets 而不是環境變數**
 
    ```bash
-   # 使用 wrangler secret（加密存儲）
+   # 使用 wrangler secret（加密儲存）
    pnpx wrangler secret put API_KEY
 
    # 而不是在 wrangler.toml 中明文設定
    ```
 
-3. **定期輪換密鑰**
+3. **定期更換金鑰**
 
-   - 每 3-6 個月更換一次 API 密鑰
+   - 每 3-6 個月更換一次 API 金鑰
    - 如果懷疑洩露，立即更換
 
 4. **使用最小權限原則**
@@ -558,7 +558,7 @@ pnpm logs:worker
 
 ---
 
-## �📞 獲取幫助
+## 📞 取得協助
 
 如果遇到問題：
 
@@ -587,4 +587,4 @@ pnpm logs:worker
 
 ---
 
-**🎉 配置完成後，你的播客系統就可以正常運作了！**
+**🎉 完成設定後，你的 Podcast 系統就可以正常運作了！**

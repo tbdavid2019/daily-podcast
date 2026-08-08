@@ -148,7 +148,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
           <Tabs defaultValue="summary" className="w-full">
             <TabsList className="bg-zinc-100/50 p-1">
               <TabsTrigger value="summary" className="font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">總結</TabsTrigger>
-              <TabsTrigger value="podcast" className="font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">播客</TabsTrigger>
+              <TabsTrigger value="podcast" className="font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">Podcast</TabsTrigger>
               <TabsTrigger value="references" className="font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">參考</TabsTrigger>
             </TabsList>
             <TabsContent value="summary" className="prose prose-zinc max-w-none py-6 prose-a:no-underline hover:prose-a:underline prose-p:leading-relaxed">

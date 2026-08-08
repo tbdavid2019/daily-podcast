@@ -161,7 +161,7 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
   console.info(`[Content Fetch] Processing story: ${story.title}`)
   console.info(`[Content Fetch] Source: ${story.source}, URL: ${story.url}`)
 
-  // 根據來源類型處理不同的內容獲取邏輯
+  // 根據來源類型使用不同的內容取得方式
   if (story.source === 'hacker-news') {
     console.info(`[Hacker News] Fetching article and comments for story ID: ${story.id}`)
 
@@ -223,7 +223,7 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
     let comments = ''
     let isSelfPost = false
 
-    // 1. 嘗試透過 JSON API 獲取內容 (如果是 Self Post) 與評論
+    // 1. 嘗試透過 JSON API 取得內容（如果是 Self Post）與留言
     // 這是比 Markdown 閱讀器更清晰的資料來源，特別是針對純文字討論
     const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
 
@@ -314,7 +314,7 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
     ].filter(Boolean).join('\n\n---\n\n')
   }
   else {
-    // 對於其他來源（Product Hunt, GitHub, Dev.to, Reddit），獲取主要內容
+    // 對於其他來源（Product Hunt、GitHub、Dev.to、Reddit），取得主要內容
     console.info(`[${story.source}] Fetching content for: ${story.title}`)
 
     let article = ''
@@ -335,7 +335,7 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
     if (!article || article.trim().length < 50) {
       console.error(`[${story.source}] ⚠️ SKIP: No content for "${story.title}" - story will be filtered out`)
       console.error(`[${story.source}] URL: ${story.url}`)
-      return '' // 返回空字串，讓上層過濾
+      return '' // 回傳空字串，讓上層過濾
     }
 
     console.info(`[${story.source}] ✅ Successfully fetched content - length: ${article.length}`)
@@ -356,8 +356,8 @@ export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, {
 
   console.info('start concat audio files', audioFiles)
   const fileUrl = await page.evaluate(async (audioFiles: string[]) => {
-    // 此处 JS 运行在浏览器中
-    // @ts-expect-error 浏览器内的对象
+    // 這段 JS 在瀏覽器中執行
+    // @ts-expect-error 瀏覽器內的物件
     const blob = await concatAudioFilesOnBrowser(audioFiles)
 
     const result = new Promise((resolve, reject) => {
@@ -380,7 +380,7 @@ export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, {
 export async function getGitHubTrendingStories() {
   // GitHub Trending 抓取設定
   const GITHUB_CONFIG = {
-    MAX_REPOS: 10, // 最多返回的 repo 數量
+    MAX_REPOS: 10, // 最多回傳的 repo 數量
     USE_DEEPWIKI: false, // 暫時關閉 deepwiki，直接使用 GitHub 原始連結
   }
 
@@ -432,7 +432,7 @@ export async function getProductHuntStories() {
 
   // Product Hunt 抓取設定
   const PRODUCT_HUNT_CONFIG = {
-    MAX_PRODUCTS: 5, // 最多返回的產品數量
+    MAX_PRODUCTS: 5, // 最多回傳的產品數量
     REMOVE_RANKING: true, // 是否移除標題中的排名編號
   }
 
@@ -517,7 +517,7 @@ export async function getProductHuntStories() {
   const stories: Story[] = products.map((i: number, el: any) => {
     const $el = $(el)
 
-    // 找第一個鏈接，這通常是產品鏈接
+    // 找第一個連結，這通常是產品連結
     const firstLink = $el.find('a').first()
     const href = firstLink.attr('href')
     let title = firstLink.text().trim()
@@ -527,14 +527,14 @@ export async function getProductHuntStories() {
       title = title.replace(/^\d+\.\s*/, '')
     }
 
-    // 尋找投票按鈕獲取投票數
+    // 尋找投票按鈕並取得投票數
     const votesText = $el.find('[data-test*="vote-button"]').text().trim()
     const votes = Number.parseInt(votesText) || 0
 
     // 嘗試找描述 - 可能在不同的位置
     let description = $el.find('[data-test*="post-description"]').text().trim()
     if (!description) {
-      // 如果沒有描述，嘗試從其他地方獲取
+      // 如果沒有描述，嘗試從其他地方取得
       description = $el.find('.text-sm, .description, p').first().text().trim()
     }
 
@@ -572,7 +572,7 @@ export async function getProductHuntStories() {
 export async function getDevToStories() {
   // Dev.to 抓取設定
   const DEV_TO_CONFIG = {
-    MAX_ARTICLES: 10, // 最多返回的文章數量
+    MAX_ARTICLES: 10, // 最多回傳的文章數量
     ENABLE_FILTER: true, // 是否啟用活動文章過濾
     // 需要過濾的關鍵字 - 活動、挑戰、比賽類型文章
     FILTER_KEYWORDS: [
@@ -812,7 +812,7 @@ export async function getRedditStories(options: { excludeRedditIds?: Set<string>
     'coding', // 專注程式設計，無水文
     'netsec', // 網路安全 Hacker News 等級
     'sysadmin', // 系統管理實務
-    'dataengineering', // 數據架構深度討論
+    'dataengineering', // 資料架構深度討論
   ]
 
   const politicalKeywords = [

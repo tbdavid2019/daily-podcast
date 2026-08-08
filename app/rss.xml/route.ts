@@ -40,7 +40,7 @@ export async function OPTIONS() {
 export async function GET() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
 
-  // 如果没有缓存，生成新的响应
+  // 如果沒有快取，產生新的回應
   const feed = new Podcast({
     title: podcastTitle,
     description: podcastDescription,

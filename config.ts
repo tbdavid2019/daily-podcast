@@ -1,6 +1,6 @@
 export const podcastTitle = 'DAVID888 Daily 每日放送'
 
-export const podcastDescription = '多元科技新聞播客,每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容,自動生成繁體中文摘要並轉換為播客節目 david888.com。'
+export const podcastDescription = '多元科技新聞 Podcast，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動產生台灣繁體中文摘要與 Podcast 節目。'
 
 // Podcast 擁有者資訊 (YouTube Podcast 等平台需要)
 export const podcastOwner = {

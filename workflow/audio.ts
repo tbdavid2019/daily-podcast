@@ -31,7 +31,7 @@ interface Env extends CloudflareEnv {
   MAN_VOICE_ID?: string
   WOMAN_VOICE_ID?: string
   AUDIO_SPEED?: string
-  // 新增時區配置
+  // 新增時區設定
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
   // Gemini TTS

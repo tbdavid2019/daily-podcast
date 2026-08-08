@@ -1,6 +1,6 @@
 # SoundOn Podcast 整合方案
 
-本文整理了三種把 SoundOn 節目整合進既有每日播客專案的作法，方便後續討論與選擇。
+本文整理三種將 SoundOn 節目整合到既有每日 Podcast 專案的作法，供後續討論與選擇。
 
 ## 方案 A：新增 Workflow + 內容落地 R2/KV
 

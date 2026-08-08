@@ -1,6 +1,6 @@
 # DAVID888 Daily 每日放送
 
-基於原始專案 [Hacker News 每日播報](https://github.com/ccbikai/hacker-news) 擴展開發的 AI 科技播客系統。
+以原始專案 [Hacker News 每日播報](https://github.com/ccbikai/hacker-news) 為基礎擴充的 AI 科技 Podcast 系統。
 
 **專案倉庫**: https://github.com/tbdavid2019/daily-podcast
 
@@ -16,53 +16,53 @@
 - **⚡ Web Worker 邊緣快取與 KV 去重 (2026-07-20)**：啟用 Cloudflare Workers Cache，在 Worker invocation 前快取 HTML 與 RSS；HTML 的 Edge TTL 為 10 分鐘、瀏覽器為 60 秒，RSC／router payload 則在外層 Worker 強制 `private, no-store`。移除會累積完整 Podcast script 的全域 `Map`，改用 React request-scoped cache 去除同一 SSR 的重複 KV reads，並新增實際 header 與 build gate 回歸測試。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🛡️ Next.js 與 production dependencies 安全更新 (2026-07-20)**：Next.js 由 15.4.6 升至 15.5.20，React 升至 19.2.7、OpenNext Cloudflare adapter 升至 1.20.1，並同步更新 Puppeteer、Cheerio、Radix 與 build tooling。Production audit 已由 60 項降至 4 項，Critical／High 均為 0；AI SDK 保持既有 `ai` 4.x／`@ai-sdk/openai` 1.x major。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🎧 音訊合併改為 bounded-memory R2 Multipart (2026-07-20)**：最終 Podcast 不再一次下載所有 batch 或建立整集 combined buffer；現在以 5 MiB 固定 Part、R2 range stream 與 `FixedLengthStream` 直接上傳，WAV 只保留一個正確總檔 header。每個 Part 可獨立重試，失敗會 abort，解決 128MB 峰值記憶體風險。詳見 [CHANGELOG.md](CHANGELOG.md)。
-- **⚙️ Workflow Free Plan 成本與恢復性優化 (2026-07-20)**：將文章內容改為單篇 durable step，原文以 4 天 R2 checkpoint 保存、step state 只保留短 key；AI 最壞嘗試由 20 次降為 2 次，TTS 以 deterministic segment/batch checkpoint 避免成功片段被重做，Reddit 去重的日常 KV 讀取由 7 次降為 1 次。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **⚙️ Workflow Free Plan 成本與恢復性最佳化 (2026-07-20)**：將文章內容改為單篇 durable step，原文以 4 天 R2 checkpoint 保存、step state 只保留短 key；AI 最壞嘗試由 20 次降為 2 次，TTS 以 deterministic segment/batch checkpoint 避免成功片段被重做，Reddit 去重的日常 KV 讀取由 7 次降為 1 次。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **✅ TypeScript 與前後端 Build Gate (2026-07-20)**：修復 10 個既有 TypeScript 錯誤，Next build 不再跳過 lint／型別 failure；新增 `pnpm check` 與 GitHub Actions，在 push／PR 自動驗證 OpenNext 前端及 Generation Worker bundle。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🔐 Workflow 認證、冪等與安全重跑 (2026-07-20)**：`POST /workflow` 已加入 Bearer Token 認證與 fail-closed 保護；一般執行採固定 instance ID，強制重跑使用 `Idempotency-Key`，避免網路重試或並行請求重複消耗 AI/TTS 額度。另新增 Token 首次設定、輪換、文稿重產與聲音重產指令，並將 AI/TTS 金鑰遷移至 Cloudflare Secrets。詳見 [CHANGELOG.md](CHANGELOG.md)。
-- **📌 播放器懸浮固定與 RSS 格式優化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；優化 RSS feed 以置頂回連網址，並藉由限制內文大小，徹底解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG.md](CHANGELOG.md)。
-- **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文檔與腳本。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **📌 播放器懸浮固定與 RSS 格式最佳化 (2026-07-08)**：修復了網頁端播放器在滾動時無法固定在頂部的問題；頁尾版權聲明更改為「由 david888.com 製作」；調整 RSS feed，將回連網址置頂，並限制內文大小，解決 YouTube Podcast 匯入時描述過長的警告。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文件與腳本。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🤖 Agent Discovery / robots.txt / Markdown for Agents (2026-07-07)**：新增正式 `robots.txt`（含 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 wildcard 規則）、`Content-Signal`、首頁 `Link` discovery headers、`/.well-known/api-catalog`、`/.well-known/agent-skills/index.json`、`/openapi.json`、`/api/status` 與 `/docs/api`。同時支援首頁與文章頁在 `Accept: text/markdown` 時回傳 Markdown，並已部署至 `https://podcast.david888.com`。詳見 [CHANGELOG.md](CHANGELOG.md)。
-- **🖼️ Bing 背景與 Bento 視覺優化 (2026-04-24)**：導入了動態 Bing 桌布背景功能，支援從 GitHub 源隨機抓取歷史桌布，並套用平滑的呼吸動畫。同時全面套用 **Bento 設計風格**，引入毛玻璃質感 (`backdrop-blur`)、現代 `Inter` 字體與精緻的間距系統。背景開關預設調整為 **開啟 (ON)**，使用者仍可於右上角手動切換。
-- **🗣️ Edge TTS 台灣優化 (2026-02-05)**：預設 Edge TTS 聲線已從中國普通話切換為 **台灣繁體中文聲線**，採用最自然的 `zh-TW-HsiaoChenNeural` (女聲/曉臻) 與 `zh-TW-YunJheNeural` (男聲/雲哲)。生成的 Podcast 將擁有道地的台灣口音，聽感更親切自然。此功能為免費且預設啟用，無需額外設定。
+- **🖼️ Bing 背景與 Bento 視覺最佳化 (2026-04-24)**：加入動態 Bing 桌布背景功能，支援從 GitHub 來源隨機抓取歷史桌布，並套用平滑的呼吸動畫。同時全面套用 **Bento 設計風格**，加入毛玻璃質感 (`backdrop-blur`)、現代 `Inter` 字體與精緻的間距系統。背景開關預設調整為 **開啟 (ON)**，使用者仍可於右上角手動切換。
+- **🗣️ Edge TTS 台灣用語調整 (2026-02-05)**：預設 Edge TTS 聲線已從中國普通話切換為 **台灣繁體中文聲線**，採用 `zh-TW-HsiaoChenNeural`（女聲／曉臻）與 `zh-TW-YunJheNeural`（男聲／雲哲）。產生的 Podcast 會使用台灣口音。此功能免費且預設啟用，不需額外設定。
 - **🎙️ OpenAI TTS 語速調整 (2026-02-05)**：新增 OpenAI TTS 的 `speed` 參數支援，預設語速調整為 **1.3 倍**（快 30%），大幅縮短播放時間。這讓文稿可以更長、內容更豐富，同時保持合理的播放時長。可透過 `AUDIO_SPEED` 環境變數自訂（範圍 0.25-4.0，建議 1.0-1.5）。
-- **🔧 Reddit Self Post 修復 (2026-02-05)**：移除了 `!postData.is_self` 過濾條件，解決 Reddit 返回 0 篇文章的問題。之前的邏輯會過濾掉所有純文字討論貼文，導致 r/sysadmin (10/10) 和 r/dataengineering (9/10) 的文章幾乎全部被排除。現在 self posts 可以透過 JSON API 正確提取 selftext 內容，大幅增加 Reddit 來源的文章數量與討論深度。
-- **Reddit 來源優化**：全面替換來源為高含金量技術版面 (LocalLLaMA, coding, netsec, sysadmin, dataengineering)，移除政治相關與淺層討論版。
-- **Force 重新生成**：啟用 force 參數時會清除 script/content/story-contents 的 KV 快取，確保重跑會重新產生新標題與內容。
+- **🔧 Reddit Self Post 修復 (2026-02-05)**：移除了 `!postData.is_self` 過濾條件，解決 Reddit 回傳 0 篇文章的問題。之前的邏輯會過濾掉所有純文字討論貼文，導致 r/sysadmin (10/10) 和 r/dataengineering (9/10) 的文章幾乎全部被排除。現在 self posts 可以透過 JSON API 正確擷取 selftext 內容，大幅增加 Reddit 來源的文章數量與討論深度。
+- **Reddit 來源最佳化**：改用資訊密度較高的技術版面（LocalLLaMA、coding、netsec、sysadmin、dataengineering），移除政治相關與較淺的討論版。
+- **Force 重新產生**：啟用 force 參數時會清除 script/content/story-contents 的 KV 快取，確保重跑會重新產生新標題與內容。
 - **Reddit 去重機制**：新增跨天排除（讀取近 7 天已播清單），避免熱門貼文連續出現。
 - **Reddit 討論串**：改抓取 Reddit comments JSON，摘要與腳本可讀到社群觀點。
 - **Reddit 選題機制**：每版保留前 K 名後再隨機抽樣，降低重複又保留熱門度。
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
 - **自架內容閱讀器**：依序使用 `https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083` 取得文章與討論內容；每篇故事獨立 fallback，不會因單篇 reader 失敗而跳過後續故事。
-- **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用高品質的 **Fenrir (男)** 與 **Leda (女)** 聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需配置 Cloudflare Secret `GEMINI_TTS_API_SECRET`。此功能提供更自然的語音合成效果，且可作為 OpenAI TTS 的替代方案。
-- **TTS 故障自動轉移 (Fallback) (2026-02-08)**：實作 TTS 容錯機制。當主選的 TTS 服務商（如 Gemini/OpenAI）發生錯誤時，系統會自動降級並切換至免費的 **Edge TTS** 繼續生成，確保 Podcast 每日更新不中斷。
+- **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用 **Fenrir（男）**與 **Leda（女）**聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需設定 Cloudflare Secret `GEMINI_TTS_API_SECRET`，可作為 OpenAI TTS 的替代方案。
+- **TTS 故障自動轉移（Fallback）(2026-02-08)**：實作 TTS 容錯機制。當主要 TTS 服務供應商（如 Gemini／OpenAI）發生錯誤時，系統會改用免費的 **Edge TTS** 繼續產生音訊，確保 Podcast 每日更新不中斷。
 
 ---
 
-## 📚 文檔導航
+## 📚 文件導覽
 
-本專案功能豐富，為保持文檔清晰，詳細說明已拆分：
+本專案功能較多，詳細說明已拆分成不同文件：
 
-| 文檔 | 說明 | 適合對象 |
+| 文件 | 說明 | 適合對象 |
 |------|------|----------|
 | [README.md](./README.md) | **專案綜覽 & 快速開始** | 所有使用者 |
-| [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) | **詳細配置指南** (天數、參數、環境變數) | 部署與維護者 |
-| [SECURITY.md](docs/SECURITY.md) | **安全指南** (認證、密鑰保護) | 系統管理員 |
-| [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md) | **RSS 修復與規範** | 播客開發者 |
+| [CONFIG-GUIDE.md](docs/CONFIG-GUIDE.md) | **詳細設定指南**（天數、參數、環境變數） | 部署與維護者 |
+| [SECURITY.md](docs/SECURITY.md) | **安全指南**（認證、金鑰保護） | 系統管理員 |
+| [RSS-FIX-GUIDE.md](docs/RSS-FIX-GUIDE.md) | **RSS 修復與規範** | Podcast 開發者 |
 | [CHANGELOG.md](./CHANGELOG.md) | **更新日誌與修復記錄** | 所有使用者、開發者、維護者 |
-| [DOCS-INDEX.md](docs/DOCS-INDEX.md) | **完整文檔索引** | 進階使用者 |
+| [DOCS-INDEX.md](docs/DOCS-INDEX.md) | **完整文件索引** | 進階使用者 |
 
 ---
 
 ## 🌟 核心特色
 
-- ⚡️ **驚悚標題生成**：AI 自動生成符合 SEO 與點擊率的「震驚體」標題 (Clickbait Title)，提升傳播力。
+- ⚡️ **節目標題**：AI 根據當日素材產生具體、易懂且適合搜尋的標題，不加入素材無法支持的聳動結論。
 - 💰 **AdSense 整合**：內建 PC 雙側邊欄 (Sidebar) 與 Mobile 列表廣告穿插機制。
 - 🤖 **多源聚合**：Hacker News, Reddit, GitHub, Product Hunt, Dev.to
-- 🧠 **AI 智慧摘要**：自動生成繁體中文摘要與講稿 (OpenAI / Gemini)
+- 🧠 **AI 智慧摘要**：自動產生台灣繁體中文摘要與講稿（OpenAI／Gemini）
 - 🎙️ **語音合成**：Edge TTS / OpenAI TTS / Minimax 多種選擇
 - 🎯 **Reddit 熱門隨機化**：每版保留前 K 名後再隨機抽樣，避免熱門貼文長期霸榜
-- ☁️ **全雲端運行**：部署於 Cloudflare Workers，無需自建伺服器
+- ☁️ **全雲端執行**：部署於 Cloudflare Workers，不需要自建伺服器
 
 ## 📅 內容排程
 
@@ -87,19 +87,19 @@
 ## 🔄 自動化 Workflow 機制
 
 ### Workflow 自動串接
-系統採用「文稿生成 -> 自動觸發語音」的設計：
+系統採用「產生文稿 → 自動觸發語音」的設計：
 1. **排程觸發 (Cron)**：每天固定時間 (00:30) 觸發 `PodcastScriptWorkflow`。
-2. **文稿生成**：抓取新聞、整理摘要、生成逐字稿，並存入 KV。
-3. **自動接續**：文稿生成完畢後，**自動呼叫** `PodcastAudioWorkflow`。
-4. **語音生成**：根據逐字稿產出 MP3 並上傳至 R2。
+2. **產生文稿**：抓取新聞、整理摘要、產生逐字稿，並存入 KV。
+3. **自動接續**：文稿完成後，**自動呼叫** `PodcastAudioWorkflow`。
+4. **產生語音**：根據逐字稿產出 MP3 並上傳至 R2。
 
 這種設計確保了：
-- **不用擔心時間差**：不需要預估文稿要跑多久，完成後自然會接續語音生成。
-- **節省資源**：如果文稿生成失敗（例如爬蟲掛了），就不會觸發語音生成，避免浪費 TTS 資源。
+- **不用擔心時間差**：不需要預估文稿要執行多久，完成後會接續產生語音。
+- **節省資源**：如果文稿產生失敗（例如來源抓取失敗），就不會觸發語音，避免浪費 TTS 資源。
 
 ### YouTube 的「排程」（消費者）：
 - YouTube 不知道你的 Workflow 幾點跑完。
-- YouTube 自己的機器人（Crawler）有它自己的時間表，它會定期來訪問你的網址 `https://你的網域/rss.xml`。
+- YouTube 的 Crawler 有自己的排程，會定期存取 `https://你的網域/rss.xml`。
 
 > **保護機制說明**：為了避免 YouTube 在音檔還沒好時就抓取導致報錯，系統已在前端 (`rss.xml`) 加入檢查：只有當 **R2 音檔確實存在** 時，該集數才會顯示在 RSS 中。
 
@@ -119,7 +119,7 @@ cd daily-podcast
 pnpm install
 ```
 
-### 3. 一鍵配置 (推薦)
+### 3. 一鍵設定（建議）
 我們提供了一個互動式腳本，幫您產生所有必要的環境變數檔案 (不需手動建立 `.env`)：
 
 ```bash
@@ -156,11 +156,11 @@ npx wrangler tail daily-podcast-worker
 
 ---
 
-## ⚙️ 進階配置
+## ⚙️ 進階設定
 
 關於 **天數限制 (Keep Days)**、**詳細環境變數說明**、**自訂排程邏輯** 等進階設定，請務必閱讀：
 
-👉 **[詳細配置指南 (CONFIG-GUIDE.md)](docs/CONFIG-GUIDE.md)**
+👉 **[詳細設定指南（CONFIG-GUIDE.md）](docs/CONFIG-GUIDE.md)**
 
 ---
 
@@ -170,10 +170,10 @@ npx wrangler tail daily-podcast-worker
 
 | 服務商 (Provider) | 設定值 (`TTS_PROVIDER`) | 必填變數 (Required Vars) | 說明 |
 | :--- | :--- | :--- | :--- |
-| **Gemini** (推薦) | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 2.5 Flash 生成高品質中文語音 (Fenrir/Leda)。 |
+| **Gemini**（建議） | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 2.5 Flash 產生中文語音（Fenrir／Leda）。 |
 | **OpenAI** | `openai` | `OPENAI_TTS_API_SECRET` (或 `OPENAI_API_SECRET`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
 | **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_SECRET` | 使用 Minimax 語音模型。 |
-| **Edge TTS** (預設) | `edge` (或留空) | 無 | 使用微軟免費 Edge TTS，台灣腔調優化 (zh-TW-HsiaoChenNeural)。 |
+| **Edge TTS**（預設） | `edge`（或留空） | 無 | 使用微軟免費 Edge TTS 與台灣聲線（zh-TW-HsiaoChenNeural）。 |
 
 ### Gemini TTS 設定範例
 
@@ -209,7 +209,7 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 
 ### 🛡️ 自動故障轉移 (Fallback Mechanism)
 
-若配置的付費 TTS 服務商（如 `gemini`, `openai`, `minimax`）發生錯誤（例如額度用盡、API 異常或網路問題），系統會自動捕捉錯誤並**降級切換至免費的 Edge TTS**，確保 Podcast 音檔能順利生成，不會因為單一服務商故障而中斷流程。
+若設定的付費 TTS 服務（如 `gemini`、`openai`、`minimax`）發生錯誤，例如額度用盡、API 異常或網路問題，系統會自動處理錯誤並**改用免費的 Edge TTS**，確保 Podcast 音檔能順利產生，不會因單一服務故障而中斷流程。
 
 ---
 
