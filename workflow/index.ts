@@ -17,6 +17,7 @@ import {
   getDateDaysBefore,
   getDialoguePlan,
   getExcludedRedditIds,
+  getScheduledStoryLimits,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
   parseRedditDedupeIndex,
@@ -282,25 +283,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       ? parsedBudget
       : undefined
 
-    const getStoryLimits = () => {
-      const limits: Record<string, number> = {
-        'hacker-news': 7,
-        'reddit': 3,
-        // 增加頻率：週一、週四抓 GitHub
-        'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0,
-        // 增加頻率：週二、週五抓 Product Hunt
-        'product-hunt': (dayOfWeek === 2 || dayOfWeek === 5) ? 2 : 0,
-        // 週三維持 Dev.to
-        'dev-to': dayOfWeek === 3 ? 3 : 0,
-      }
-
-      if (!storyBudget) {
-        return limits
-      }
-      return applyStoryBudget(limits, storyBudget, SOURCE_PRIORITY)
-    }
-
-    const storyLimits = getStoryLimits()
+    const scheduledStoryLimits = getScheduledStoryLimits(dayOfWeek)
+    const storyLimits = storyBudget
+      ? applyStoryBudget(scheduledStoryLimits, storyBudget, SOURCE_PRIORITY)
+      : scheduledStoryLimits
 
     const getRecentDates = (baseDate: string, days: number) => {
       const base = new Date(`${baseDate}T00:00:00Z`)

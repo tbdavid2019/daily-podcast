@@ -13,6 +13,16 @@ export interface DialoguePlan {
   maxLines: number
 }
 
+export function getScheduledStoryLimits(dayOfWeek: number): Record<NonNullable<Story['source']>, number> {
+  return {
+    'hacker-news': dayOfWeek === 0 ? 10 : 7,
+    'reddit': 3,
+    'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0,
+    'product-hunt': (dayOfWeek === 2 || dayOfWeek === 5) ? 2 : 0,
+    'dev-to': dayOfWeek === 3 ? 3 : 0,
+  }
+}
+
 export function getDialoguePlan(storyCount: number): DialoguePlan {
   const count = Math.max(1, Math.floor(storyCount))
   const targetLines = Math.min(32, Math.max(8, count * 2 + 4))

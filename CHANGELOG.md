@@ -10,6 +10,9 @@
 - AI 與 TTS Workflow step 的 `retries.limit` 由 2 改為 1，使 Cloudflare 的實際執行從最多三次降為最多兩次總嘗試；AI SDK 內層仍不重試。
 - 新增 schema 漂移、標點切段、無標點長句與重試預算的回歸測試。
 - Generation Worker version：`02b1b7fd-9821-4c79-8d21-bc48feb1e110`；部署時未手動觸發 AI 或 TTS。
+- 週日的 Hacker News 配額由 7 篇提高為 10 篇；其他星期與來源配額不變，且不重跑已完成的 2026-08-09 節目。
+- 確認 Reddit 候選清單仍直接呼叫 Reddit JSON API；目前該端點回傳 `403`。`create360.ai` 用於入選後的文章內文備援，但代抓 Reddit 頁面時同樣取得封鎖頁，不能取代正式的 Reddit API 授權。
+- 週日配額版 Generation Worker：`3f3ff96f-f26b-4170-bfaf-06d2f37823ff`；部署時未觸發任何 AI 或 TTS Workflow。
 
 ---
 

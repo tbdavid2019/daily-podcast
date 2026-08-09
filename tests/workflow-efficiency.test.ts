@@ -18,6 +18,7 @@ import {
   getExcludedRedditIds,
   getDateDaysBefore,
   getDialoguePlan,
+  getScheduledStoryLimits,
   isAudioCheckpointForInstance,
   parseStoryContentCheckpoint,
   splitDialogueText,
@@ -97,6 +98,19 @@ describe('workflow retry budgets', () => {
     assert.doesNotMatch(source, /text: z\.string\(\)\.min\(1\)\.max\(MAX_DIALOGUE_LINE_CHARS\)/)
     assert.doesNotMatch(source, /\}\)\)\.min\(1\)\.max\(MAX_DIALOGUE_LINES\)/)
     assert.doesNotMatch(source, /每輪專注討論 2-3 個故事/)
+  })
+
+  it('uses ten Hacker News stories on Sunday without expanding weekday quotas', () => {
+    assert.deepEqual(getScheduledStoryLimits(0), {
+      'hacker-news': 10,
+      'reddit': 3,
+      'github-trending': 0,
+      'product-hunt': 0,
+      'dev-to': 0,
+    })
+    assert.equal(getScheduledStoryLimits(1)['hacker-news'], 7)
+    assert.equal(getScheduledStoryLimits(1)['github-trending'], 2)
+    assert.equal(getScheduledStoryLimits(3)['dev-to'], 3)
   })
 
 })
