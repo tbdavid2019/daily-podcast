@@ -275,6 +275,10 @@ export function buildStoryContentCheckpointKey(cacheKey: string, instanceId: str
   return `${buildStoryContentCheckpointPrefix(match[1])}${safePathPart(instanceId)}/${match[2]}.json`
 }
 
+export function buildStoryArticleCheckpointKey(cacheKey: string, instanceId: string): string {
+  return buildStoryContentCheckpointKey(cacheKey, instanceId).replace(/\.json$/, '.primary.md')
+}
+
 export function buildStoryContentCheckpointPrefix(date: string): string {
   return `${STORY_CONTENT_CHECKPOINT_ROOT}${date.replaceAll('-', '/')}/`
 }

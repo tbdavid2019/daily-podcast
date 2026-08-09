@@ -22,6 +22,99 @@ const SELF_HOSTED_MARKDOWN_NODES = [
   'http://60.248.142.126:8083', // Fallback
 ]
 
+const PRIMARY_READER_BATCH_URL = 'https://create360.ai/v1/batch'
+const MIN_READER_CONTENT_CHARS = 50
+
+interface BatchReaderPage {
+  url?: unknown
+  content?: unknown
+  warning?: unknown
+}
+
+function normalizeReaderUrl(value: string): string {
+  try {
+    return new URL(value).toString()
+  }
+  catch {
+    return value
+  }
+}
+
+function parseBatchReaderPages(value: unknown): BatchReaderPage[] {
+  if (!value || typeof value !== 'object') {
+    return []
+  }
+  const outerData = (value as { data?: unknown }).data
+  const pages = outerData && typeof outerData === 'object'
+    ? (outerData as { data?: unknown }).data
+    : undefined
+  return Array.isArray(pages) ? pages as BatchReaderPage[] : []
+}
+
+export async function getContentFromReaderBatch(urls: readonly string[]): Promise<Map<string, string>> {
+  const uniqueUrls = [...new Set(urls.filter(Boolean))]
+  if (uniqueUrls.length < 2) {
+    return new Map()
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 45000)
+  try {
+    const response = await fetch(PRIMARY_READER_BATCH_URL, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Respond-With': 'markdown',
+        'X-Retain-Images': 'none',
+      },
+      body: JSON.stringify({ urls: uniqueUrls }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      console.warn('[Reader batch] Primary node failed:', response.status, response.statusText)
+      return new Map()
+    }
+
+    const pages = parseBatchReaderPages(await response.json())
+    const contents = new Map<string, string>()
+    for (const [index, page] of pages.entries()) {
+      const requestedUrl = uniqueUrls[index]
+      const content = typeof page?.content === 'string' ? page.content.trim() : ''
+      if (!requestedUrl || content.length < MIN_READER_CONTENT_CHARS) {
+        if (requestedUrl) {
+          console.warn('[Reader batch] Insufficient content for URL', {
+            url: requestedUrl,
+            warning: typeof page?.warning === 'string' ? page.warning : undefined,
+          })
+        }
+        continue
+      }
+
+      contents.set(requestedUrl, content)
+      contents.set(normalizeReaderUrl(requestedUrl), content)
+      const returnedUrl = typeof page?.url === 'string' ? normalizeReaderUrl(page.url) : ''
+      if (returnedUrl) {
+        contents.set(returnedUrl, content)
+      }
+    }
+
+    console.info('[Reader batch] Primary node completed', {
+      requested: uniqueUrls.length,
+      successful: uniqueUrls.filter(url => contents.has(normalizeReaderUrl(url))).length,
+    })
+    return contents
+  }
+  catch (error) {
+    console.warn('[Reader batch] Primary node error:', error)
+    return new Map()
+  }
+  finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 async function getContentFromReader(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }) {
   const readerHeaders: HeadersInit = {
     'X-Retain-Images': 'none',
@@ -57,7 +150,7 @@ async function getContentFromReader(url: string, format: 'html' | 'markdown', se
 
       if (response.ok) {
         const text = await response.text()
-        if (text.trim().length >= 50) {
+        if (text.trim().length >= MIN_READER_CONTENT_CHARS) {
           return text
         }
         console.warn(`Self-hosted reader node ${node} returned insufficient content`)
@@ -166,7 +259,12 @@ export async function getHackerNewsTopStories(today: string) {
   return filteredStories
 }
 
-export async function getHackerNewsStory(story: Story, maxTokens: number, _config?: unknown) {
+export async function getHackerNewsStory(
+  story: Story,
+  maxTokens: number,
+  _config?: unknown,
+  prefetchedArticle = '',
+) {
   console.info(`[Content Fetch] Processing story: ${story.title}`)
   console.info(`[Content Fetch] Source: ${story.source}, URL: ${story.url}`)
 
@@ -175,18 +273,24 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
     console.info(`[Hacker News] Fetching article and comments for story ID: ${story.id}`)
 
     // 先嘗試抓取原始文章內容
-    let article = ''
-    try {
-      console.info(`[Hacker News] Trying self-hosted reader for article: ${story.url}`)
-      article = await getContentFromReader(story.url!, 'markdown', {})
-      if (!article || article.trim().length < 50) {
-        throw new Error('Self-hosted readers returned empty or too short content')
-      }
-      console.info(`[Hacker News] Self-hosted reader success - article length: ${article.length}`)
+    let article = prefetchedArticle.trim()
+    if (article.length >= MIN_READER_CONTENT_CHARS) {
+      console.info(`[Hacker News] Using batch-fetched article - length: ${article.length}`)
     }
-    catch (readerError) {
-      console.warn(`[Hacker News] Self-hosted readers failed for article: ${readerError}`)
+    else {
       article = ''
+      try {
+        console.info(`[Hacker News] Trying self-hosted reader for article: ${story.url}`)
+        article = await getContentFromReader(story.url!, 'markdown', {})
+        if (!article || article.trim().length < MIN_READER_CONTENT_CHARS) {
+          throw new Error('Self-hosted readers returned empty or too short content')
+        }
+        console.info(`[Hacker News] Self-hosted reader success - article length: ${article.length}`)
+      }
+      catch (readerError) {
+        console.warn(`[Hacker News] Self-hosted readers failed for article: ${readerError}`)
+        article = ''
+      }
     }
 
     // 再抓取 Hacker News 評論（評論可選，失敗不影響文章處理）
@@ -293,18 +397,24 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
     // 對於其他來源（Product Hunt、GitHub、Dev.to、Reddit），取得主要內容
     console.info(`[${story.source}] Fetching content for: ${story.title}`)
 
-    let article = ''
-    try {
-      console.info(`[${story.source}] Trying self-hosted reader for: ${story.url}`)
-      article = await getContentFromReader(story.url!, 'markdown', {})
-      if (!article || article.trim().length < 50) {
-        throw new Error('Self-hosted readers returned empty or too short content')
-      }
-      console.info(`[${story.source}] Self-hosted reader success - length: ${article.length}`)
+    let article = prefetchedArticle.trim()
+    if (article.length >= MIN_READER_CONTENT_CHARS) {
+      console.info(`[${story.source}] Using batch-fetched article - length: ${article.length}`)
     }
-    catch (readerError) {
-      console.warn(`[${story.source}] Self-hosted readers failed: ${readerError}`)
+    else {
       article = ''
+      try {
+        console.info(`[${story.source}] Trying self-hosted reader for: ${story.url}`)
+        article = await getContentFromReader(story.url!, 'markdown', {})
+        if (!article || article.trim().length < MIN_READER_CONTENT_CHARS) {
+          throw new Error('Self-hosted readers returned empty or too short content')
+        }
+        console.info(`[${story.source}] Self-hosted reader success - length: ${article.length}`)
+      }
+      catch (readerError) {
+        console.warn(`[${story.source}] Self-hosted readers failed: ${readerError}`)
+        article = ''
+      }
     }
 
     // 對於非 Hacker News 來源，如果抓取失敗也直接過濾掉

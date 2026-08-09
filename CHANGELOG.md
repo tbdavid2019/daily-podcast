@@ -17,6 +17,9 @@
 - 入選的 Reddit 故事改讀單篇 Atom RSS，直接取得 self post 正文與最多 20 則留言；連結貼文的外部文章才交給自架 reader。Reddit RSS 請求之間以 40 秒 Workflow 持久化等待遵守匿名 rate limit，不占用 Worker CPU。
 - 實際 smoke test：合併 RSS 單次取得 25 篇候選；單篇 RSS 取得 785 字原文與 20 則、共 4,035 字留言。create360 的 URL 陣列與換行批次均確認不受支援。
 - Reddit RSS 架構版 Generation Worker：`49428aff-94c7-41dd-9c1b-09391358880a`；部署時未觸發任何 AI 或 TTS Workflow。
+- 一般外部文章的 primary reader 改用 create360 `/v1/batch`，每批最多 5 篇；成功內容先寫入獨立 R2 checkpoint，後續故事步驟只讀 checkpoint 再抓留言，避免大文章進入 Workflow step state。
+- batch 項目失敗、內容過短或服務異常時，個別故事仍照既有 create360／第二台／第三台 reader fallback；Reddit 保持 RSS 架構，不併入 batch 以避開 `429`。
+- create360 batch 架構版 Generation Worker：`7944324f-d162-47e2-9acf-f7707d32ed36`；部署時未觸發任何 AI 或 TTS Workflow。
 
 ---
 

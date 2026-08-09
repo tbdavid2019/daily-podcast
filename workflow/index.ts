@@ -10,6 +10,7 @@ import { buildChildWorkflowInstanceId, createIdempotentWorkflowInstance } from '
 import {
   AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
+  buildStoryArticleCheckpointKey,
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
@@ -28,7 +29,7 @@ import {
 } from './efficiency'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
-import { getAllStories, getHackerNewsStory } from './utils'
+import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
   OPENAI_BASE_URL: string
@@ -357,6 +358,62 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     // Fetch one story per durable step so a failure cannot replay every source item.
     // Large content is checkpointed in strongly-consistent R2; step state stores only keys.
+    const storyContentPlan = await Promise.all(stories.map(async (story) => {
+      const cacheKey = await buildStoryContentCacheKey(rawContentKey, story)
+      return {
+        cacheKey,
+        contentCheckpointKey: buildStoryContentCheckpointKey(cacheKey, event.instanceId),
+        articleCheckpointKey: buildStoryArticleCheckpointKey(cacheKey, event.instanceId),
+        story,
+      }
+    }))
+    const primaryArticleCandidateIndexes = await step.do('plan primary article batches', IO_STEP_CONFIG, async () => {
+      const indexes: number[] = []
+      for (const [index, plan] of storyContentPlan.entries()) {
+        if (plan.story.source === 'reddit' || !plan.story.url) {
+          continue
+        }
+        if (await this.env.HACKER_NEWS_R2.head(plan.contentCheckpointKey)) {
+          continue
+        }
+        if (await this.env.HACKER_NEWS_R2.head(plan.articleCheckpointKey)) {
+          continue
+        }
+        const cached = await kvGet(plan.cacheKey)
+        if (cached) {
+          try {
+            if (parseStoryContentCheckpoint(JSON.parse(cached))) {
+              continue
+            }
+          }
+          catch (error) {
+            console.warn('failed to parse cached story content while planning batch', { cacheKey: plan.cacheKey, error })
+          }
+        }
+        indexes.push(index)
+      }
+      return indexes
+    })
+
+    const PRIMARY_READER_BATCH_SIZE = 5
+    for (let offset = 0; offset < primaryArticleCandidateIndexes.length; offset += PRIMARY_READER_BATCH_SIZE) {
+      const batchIndexes = primaryArticleCandidateIndexes.slice(offset, offset + PRIMARY_READER_BATCH_SIZE)
+      const batchPlans = batchIndexes.map(index => storyContentPlan[index])
+      if (batchPlans.length < 2) {
+        continue
+      }
+      await step.do(`fetch primary article batch ${offset / PRIMARY_READER_BATCH_SIZE + 1}`, CONTENT_FETCH_STEP_CONFIG, async () => {
+        const articles = await getContentFromReaderBatch(batchPlans.map(plan => plan.story.url!))
+        await Promise.all(batchPlans.map(async (plan) => {
+          const article = articles.get(plan.story.url!)
+          if (article) {
+            await this.env.HACKER_NEWS_R2.put(plan.articleCheckpointKey, article)
+          }
+        }))
+        return { requested: batchPlans.length, stored: batchPlans.filter(plan => articles.has(plan.story.url!)).length }
+      })
+    }
+
     const allStoryContents: StoryContentCheckpoint[] = []
     let redditStoryIndex = 0
 
@@ -366,8 +423,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         await step.sleep(`wait for reddit rss ${redditStoryIndex}`, REDDIT_RSS_RATE_LIMIT_DELAY)
       }
       const stepName = `get story content ${storyIndex + 1}`
-      const cacheKey = await buildStoryContentCacheKey(rawContentKey, story)
-      const contentCheckpointKey = buildStoryContentCheckpointKey(cacheKey, event.instanceId)
+      const { cacheKey, contentCheckpointKey, articleCheckpointKey } = storyContentPlan[storyIndex]
 
       kvRequestLogger.checkpoint(`before ${stepName}`)
       const checkpointKey = await step.do(stepName, CONTENT_FETCH_STEP_CONFIG, async () => {
@@ -391,7 +447,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         }
 
         if (!storyRecord) {
-          const storyContent = await getHackerNewsStory(story, maxTokens, this.env)
+          const prefetchedArticle = await this.env.HACKER_NEWS_R2.get(articleCheckpointKey)
+          const storyContent = await getHackerNewsStory(
+            story,
+            maxTokens,
+            this.env,
+            prefetchedArticle ? await prefetchedArticle.text() : '',
+          )
           if (!storyContent || storyContent.trim().length < 50) {
             console.warn(`⚠️ FILTERED OUT: Story "${story.title}" has no content - excluding from podcast`)
             return null

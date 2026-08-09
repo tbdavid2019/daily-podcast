@@ -12,6 +12,7 @@ import {
   buildAudioBatchKey,
   buildAudioMultipartStateKey,
   buildAudioSegmentKey,
+  buildStoryArticleCheckpointKey,
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
@@ -137,6 +138,10 @@ describe('workflow compact checkpoints', () => {
       /^workflow-state\/story-content\/2026\/07\/20\/workflow-instance-1\/[a-f0-9]{24}\.json$/,
     )
     assert.notEqual(checkpoint, buildStoryContentCheckpointKey(first, 'workflow-instance-2'))
+    assert.equal(
+      buildStoryArticleCheckpointKey(first, 'workflow-instance-1'),
+      checkpoint.replace(/\.json$/, '.primary.md'),
+    )
     assert.equal(buildStoryContentCheckpointPrefix('2026-07-16'), 'workflow-state/story-content/2026/07/16/')
     assert.equal(STORY_CONTENT_CHECKPOINT_ROOT, 'workflow-state/story-content/')
     assert.equal(getDateDaysBefore('2026-07-20', 4), '2026-07-16')

@@ -92,4 +92,15 @@ describe('Reddit RSS ingestion', () => {
     assert.match(workflowSource, /wait for reddit rss/)
     assert.match(workflowSource, /REDDIT_RSS_RATE_LIMIT_DELAY/)
   })
+
+  it('uses bounded primary-reader batches without changing Reddit RSS ingestion', async () => {
+    const utilsSource = await readFile(new URL('../workflow/utils.ts', import.meta.url), 'utf8')
+    const workflowSource = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
+
+    assert.match(utilsSource, /PRIMARY_READER_BATCH_URL = 'https:\/\/create360\.ai\/v1\/batch'/)
+    assert.match(utilsSource, /JSON\.stringify\(\{ urls: uniqueUrls \}\)/)
+    assert.match(workflowSource, /PRIMARY_READER_BATCH_SIZE = 5/)
+    assert.match(workflowSource, /fetch primary article batch/)
+    assert.match(workflowSource, /wait for reddit rss/)
+  })
 })
