@@ -19,9 +19,9 @@ import {
   getExcludedRedditIds,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
-  MAX_DIALOGUE_LINES,
   parseRedditDedupeIndex,
   parseStoryContentCheckpoint,
+  splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateRedditDedupeIndex,
 } from './efficiency'
@@ -564,9 +564,9 @@ ${fullContentString}
         schema: z.object({
           title: z.string().optional(),
           dialogue: z.array(z.object({
-            speaker: z.enum(['男', '女']),
-            text: z.string().min(1).max(MAX_DIALOGUE_LINE_CHARS),
-          })).min(1).max(MAX_DIALOGUE_LINES),
+            speaker: z.string().min(1),
+            text: z.string().min(1),
+          })).min(1),
         }),
       })
 
@@ -577,13 +577,21 @@ ${fullContentString}
         dialogueLength: object.dialogue.length,
       })
 
-      const sanitizedDialogue = object.dialogue.map((line, index) => {
-        const speaker = typeof line?.speaker === 'string' ? line.speaker.trim() : ''
+      const sanitizedDialogue = object.dialogue.flatMap((line, index) => {
+        const rawSpeaker = typeof line?.speaker === 'string' ? line.speaker.trim() : ''
         const text = typeof line?.text === 'string' ? line.text.trim() : ''
-        if (!speaker || !['男', '女'].includes(speaker as any) || !text) {
+        const speaker = rawSpeaker === '女' || rawSpeaker.toLowerCase() === 'cordelia'
+          ? '女'
+          : rawSpeaker === '男' || rawSpeaker.toLowerCase() === 'david'
+            ? '男'
+            : null
+        if (!speaker || !text) {
           throw new Error(`invalid dialogue line at index ${index}`)
         }
-        return { speaker: speaker as PodcastDialogueLine['speaker'], text }
+        return splitDialogueText(text).map(chunk => ({
+          speaker: speaker as PodcastDialogueLine['speaker'],
+          text: chunk,
+        }))
       })
 
       return { title: object.title, dialogue: sanitizedDialogue } as PodcastScriptResponse

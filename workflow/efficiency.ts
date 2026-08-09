@@ -22,6 +22,59 @@ export function getDialoguePlan(storyCount: number): DialoguePlan {
   return { targetLines, minLines, maxLines }
 }
 
+export function splitDialogueText(text: string, maxChars = MAX_DIALOGUE_LINE_CHARS): string[] {
+  if (!Number.isInteger(maxChars) || maxChars < 1) {
+    throw new Error('maxChars must be a positive integer')
+  }
+
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return []
+  }
+  if (normalized.length <= maxChars) {
+    return [normalized]
+  }
+
+  const sentences = normalized.match(/[^。！？!?；;]+[。！？!?；;]?/gu) || [normalized]
+  const segments: string[] = []
+  let current = ''
+
+  for (const sentence of sentences) {
+    const trimmedSentence = sentence.trim()
+    if (!trimmedSentence) {
+      continue
+    }
+
+    if ((current + trimmedSentence).length <= maxChars) {
+      current += trimmedSentence
+      continue
+    }
+
+    if (current) {
+      segments.push(current)
+      current = ''
+    }
+
+    if (trimmedSentence.length <= maxChars) {
+      current = trimmedSentence
+      continue
+    }
+
+    for (let offset = 0; offset < trimmedSentence.length; offset += maxChars) {
+      const chunk = trimmedSentence.slice(offset, offset + maxChars).trim()
+      if (chunk) {
+        segments.push(chunk)
+      }
+    }
+  }
+
+  if (current) {
+    segments.push(current)
+  }
+
+  return segments
+}
+
 export const IO_STEP_CONFIG = {
   retries: {
     limit: 3,
@@ -42,7 +95,7 @@ export const CONTENT_FETCH_STEP_CONFIG = {
 
 export const AI_STEP_CONFIG = {
   retries: {
-    limit: 2,
+    limit: 1,
     delay: '20 seconds',
     backoff: 'exponential',
   },
@@ -51,7 +104,7 @@ export const AI_STEP_CONFIG = {
 
 export const AUDIO_BATCH_STEP_CONFIG = {
   retries: {
-    limit: 2,
+    limit: 1,
     delay: '10 seconds',
     backoff: 'exponential',
   },

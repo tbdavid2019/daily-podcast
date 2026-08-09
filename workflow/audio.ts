@@ -14,6 +14,7 @@ import {
   IO_STEP_CONFIG,
   isAudioCheckpointForInstance,
   MAX_TTS_SEGMENT_CHARS,
+  splitDialogueText,
 } from './efficiency'
 import synthesize, { pcmToWav } from './tts'
 
@@ -62,55 +63,6 @@ function parseAudioMultipartCheckpoint(value: unknown, podcastKey: string): Audi
     return null
   }
   return checkpoint as AudioMultipartCheckpoint
-}
-
-function chunkDialogueText(text: string, maxChars = MAX_TTS_SEGMENT_CHARS) {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (!normalized) {
-    return []
-  }
-  if (normalized.length <= maxChars) {
-    return [normalized]
-  }
-
-  const sentences = normalized.match(/[^。！？!?；;]+[。！？!?；;]?/gu) || [normalized]
-  const segments: string[] = []
-  let current = ''
-
-  for (const sentence of sentences) {
-    const trimmedSentence = sentence.trim()
-    if (!trimmedSentence) {
-      continue
-    }
-
-    if ((current + trimmedSentence).length <= maxChars) {
-      current += trimmedSentence
-      continue
-    }
-
-    if (current) {
-      segments.push(current.trim())
-      current = ''
-    }
-
-    if (trimmedSentence.length <= maxChars) {
-      current = trimmedSentence
-      continue
-    }
-
-    for (let i = 0; i < trimmedSentence.length; i += maxChars) {
-      const chunk = trimmedSentence.slice(i, i + maxChars).trim()
-      if (chunk) {
-        segments.push(chunk)
-      }
-    }
-  }
-
-  if (current) {
-    segments.push(current.trim())
-  }
-
-  return segments
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -223,7 +175,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       const text = line.text.trim()
       if (!text)
         continue
-      const chunks = chunkDialogueText(text)
+      const chunks = splitDialogueText(text, MAX_TTS_SEGMENT_CHARS)
       for (const chunk of chunks) {
         allSegments.push({ text: chunk, speaker: line.speaker })
       }

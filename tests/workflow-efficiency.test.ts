@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, it } from 'node:test'
 import {
   AI_SDK_MAX_RETRIES,
+  AI_STEP_CONFIG,
   AUDIO_BATCH_STEP_CONFIG,
   CONTENT_FETCH_STEP_CONFIG,
   MAX_DIALOGUE_LINES,
@@ -19,6 +20,7 @@ import {
   getDialoguePlan,
   isAudioCheckpointForInstance,
   parseStoryContentCheckpoint,
+  splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateRedditDedupeIndex,
 } from '../workflow/efficiency'
@@ -26,9 +28,24 @@ import {
 describe('workflow retry budgets', () => {
   it('keeps expensive AI and TTS work to one retry layer', () => {
     assert.equal(AI_SDK_MAX_RETRIES, 0)
+    assert.equal(AI_STEP_CONFIG.retries?.limit, 1)
     assert.equal(CONTENT_FETCH_STEP_CONFIG.retries?.limit, 2)
-    assert.equal(AUDIO_BATCH_STEP_CONFIG.retries?.limit, 2)
+    assert.equal(AUDIO_BATCH_STEP_CONFIG.retries?.limit, 1)
     assert.ok(MAX_DIALOGUE_LINES * Math.ceil(MAX_DIALOGUE_LINE_CHARS / MAX_TTS_SEGMENT_CHARS) < 1000)
+  })
+
+  it('accepts model length drift and splits dialogue locally for TTS', () => {
+    const sentences = `${'甲'.repeat(250)}。${'乙'.repeat(250)}！`
+    const punctuationChunks = splitDialogueText(sentences)
+    assert.ok(punctuationChunks.length > 1)
+    assert.ok(punctuationChunks.every(chunk => chunk.length <= MAX_DIALOGUE_LINE_CHARS))
+    assert.equal(punctuationChunks.join(''), sentences)
+
+    const longSentence = '測'.repeat(MAX_DIALOGUE_LINE_CHARS * 2 + 17)
+    const hardChunks = splitDialogueText(longSentence)
+    assert.deepEqual(hardChunks.map(chunk => chunk.length), [380, 380, 17])
+
+    assert.deepEqual(splitDialogueText('  保留   合理空白。 '), ['保留 合理空白。'])
   })
 
   it('derives replay-sensitive dates from the durable Workflow event', async () => {
@@ -77,6 +94,8 @@ describe('workflow retry budgets', () => {
     assert.match(source, /參考總字數 \$\{targetMinChars\}-\$\{targetMaxChars\} 字/)
     assert.match(source, /任何發言不得超過 \$\{MAX_DIALOGUE_LINE_CHARS\} 字/)
     assert.match(source, /每個 dialogue 項目都會產生一次 TTS 請求/)
+    assert.doesNotMatch(source, /text: z\.string\(\)\.min\(1\)\.max\(MAX_DIALOGUE_LINE_CHARS\)/)
+    assert.doesNotMatch(source, /\}\)\)\.min\(1\)\.max\(MAX_DIALOGUE_LINES\)/)
     assert.doesNotMatch(source, /每輪專注討論 2-3 個故事/)
   })
 
