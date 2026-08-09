@@ -13,6 +13,10 @@
 - 週日的 Hacker News 配額由 7 篇提高為 10 篇；其他星期與來源配額不變，且不重跑已完成的 2026-08-09 節目。
 - 確認 Reddit 候選清單仍直接呼叫 Reddit JSON API；目前該端點回傳 `403`。`create360.ai` 用於入選後的文章內文備援，但代抓 Reddit 頁面時同樣取得封鎖頁，不能取代正式的 Reddit API 授權。
 - 週日配額版 Generation Worker：`3f3ff96f-f26b-4170-bfaf-06d2f37823ff`；部署時未觸發任何 AI 或 TTS Workflow。
+- Reddit 候選來源由五個必定回傳 `403` 的 JSON API 請求，改為一個涵蓋 LocalLLaMA、coding、netsec、sysadmin、dataengineering 的合併 Atom RSS；選文依日期輪替 subreddit 順序，同一天重跑仍維持相同結果。
+- 入選的 Reddit 故事改讀單篇 Atom RSS，直接取得 self post 正文與最多 20 則留言；連結貼文的外部文章才交給自架 reader。Reddit RSS 請求之間以 40 秒 Workflow 持久化等待遵守匿名 rate limit，不占用 Worker CPU。
+- 實際 smoke test：合併 RSS 單次取得 25 篇候選；單篇 RSS 取得 785 字原文與 20 則、共 4,035 字留言。create360 的 URL 陣列與換行批次均確認不受支援。
+- Reddit RSS 架構版 Generation Worker：`49428aff-94c7-41dd-9c1b-09391358880a`；部署時未觸發任何 AI 或 TTS Workflow。
 
 ---
 

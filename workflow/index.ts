@@ -27,6 +27,7 @@ import {
   updateRedditDedupeIndex,
 } from './efficiency'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
+import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
 import { getAllStories, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
@@ -357,8 +358,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // Fetch one story per durable step so a failure cannot replay every source item.
     // Large content is checkpointed in strongly-consistent R2; step state stores only keys.
     const allStoryContents: StoryContentCheckpoint[] = []
+    let redditStoryIndex = 0
 
     for (const [storyIndex, story] of stories.entries()) {
+      if (story.source === 'reddit') {
+        redditStoryIndex += 1
+        await step.sleep(`wait for reddit rss ${redditStoryIndex}`, REDDIT_RSS_RATE_LIMIT_DELAY)
+      }
       const stepName = `get story content ${storyIndex + 1}`
       const cacheKey = await buildStoryContentCacheKey(rawContentKey, story)
       const contentCheckpointKey = buildStoryContentCheckpointKey(cacheKey, event.instanceId)

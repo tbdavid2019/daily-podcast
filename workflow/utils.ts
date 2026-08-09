@@ -1,5 +1,14 @@
 import puppeteer from '@cloudflare/puppeteer'
 import * as cheerio from 'cheerio'
+import {
+  buildRedditCombinedFeedUrl,
+  buildRedditPostFeedUrl,
+  isPoliticalRedditStory,
+  isRedditUrl,
+  parseRedditListingFeed,
+  parseRedditPostFeed,
+  selectRedditStories,
+} from './reddit'
 
 type StorySource = NonNullable<Story['source']>
 interface StoryFetchOptions {
@@ -221,73 +230,40 @@ export async function getHackerNewsStory(story: Story, maxTokens: number, _confi
 
     let article = ''
     let comments = ''
-    let isSelfPost = false
 
-    // 1. 嘗試透過 JSON API 取得內容（如果是 Self Post）與留言
-    // 這是比 Markdown 閱讀器更清晰的資料來源，特別是針對純文字討論
-    const sourceUrl = story.sourceUrl ? story.sourceUrl.replace(/\/$/, '') : ''
-
-    if (sourceUrl) {
-      try {
-        const redditJsonUrl = `${sourceUrl}.json?sort=top&limit=30`
-        console.info('[Reddit] Fetching JSON:', redditJsonUrl)
-
-        const response = await fetch(redditJsonUrl, {
-          headers: {
-            'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
-          },
-        })
-
-        if (response.ok) {
-          const json = await response.json() as any
-
-          // 處理文章本體 (Self Text)
-          const postData = Array.isArray(json) ? json[0]?.data?.children?.[0]?.data : null
-          if (postData) {
-            if (postData.is_self && postData.selftext) {
-              article = postData.selftext
-              isSelfPost = true
-              console.info(`[Reddit] Used selftext from JSON - length: ${article.length}`)
-            }
-          }
-
-          // 處理評論
-          const commentListing = Array.isArray(json) ? json[1]?.data?.children || [] : []
-          const commentLines = commentListing
-            .filter((item: any) => item?.kind === 't1' && item?.data?.body)
-            .map((item: any) => {
-              const body = item.data?.body || ''
-              const score = item.data?.score
-              const sanitizedBody = body.replace(/\s+/g, ' ').trim()
-              if (!sanitizedBody)
-                return null
-              if (typeof score === 'number') {
-                return `- (${score}) ${sanitizedBody}`
-              }
-              return `- ${sanitizedBody}`
-            })
-            .filter(Boolean)
-            .slice(0, 20)
-
-          comments = commentLines.join('\n')
-          if (comments.trim().length > 0) {
-            console.info(`[Reddit] Comments fetched successfully - count: ${commentLines.length}`)
-          }
-        }
+    try {
+      const redditFeedUrl = buildRedditPostFeedUrl(story)
+      console.info('[Reddit] Fetching post and comments RSS:', redditFeedUrl)
+      const response = await fetch(redditFeedUrl, {
+        headers: {
+          'Accept': 'application/atom+xml',
+          'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`Reddit RSS returned ${response.status}; retry after ${response.headers.get('x-ratelimit-reset') || 'unknown'} seconds`)
       }
-      catch (error) {
-        console.warn(`[Reddit] JSON fetch failed: ${error}`)
-      }
+      const feedContent = parseRedditPostFeed(await response.text())
+      article = feedContent.article
+      comments = feedContent.comments
+      console.info('[Reddit] RSS content fetched', {
+        articleLength: article.length,
+        commentsLength: comments.length,
+      })
+    }
+    catch (error) {
+      console.warn(`[Reddit] RSS fetch failed: ${error}`)
     }
 
-    // 2. 如果 JSON 沒抓到文章內容 (例如是連結貼文，或 JSON 失敗)，則使用自架閱讀器抓取外部連結
-    if (!article && !isSelfPost && story.url) {
+    // 連結貼文的 RSS 只有貼文資訊；外部文章正文仍由自架 reader 取得。
+    if (story.url && !isRedditUrl(story.url)) {
       try {
         console.info('[Reddit] Trying self-hosted reader for article:', story.url)
-        article = await getContentFromReader(story.url!, 'markdown', {})
-        if (!article || article.trim().length < 50) {
+        const externalArticle = await getContentFromReader(story.url, 'markdown', {})
+        if (!externalArticle || externalArticle.trim().length < 50) {
           throw new Error('Self-hosted readers returned empty or too short content')
         }
+        article = externalArticle
         console.info(`[Reddit] Self-hosted reader success - article length: ${article.length}`)
       }
       catch (readerError) {
@@ -750,7 +726,7 @@ export async function getAllStories(today: string, _config: unknown, options: St
         })
       : Promise.resolve([]),
     'reddit': shouldFetchSource('reddit')
-      ? getRedditStories({ excludeRedditIds }).catch((err) => {
+      ? getRedditStories({ excludeRedditIds, today }).catch((err) => {
           console.error('Failed to get Reddit stories:', err)
           return []
         })
@@ -790,140 +766,33 @@ export async function getAllStories(today: string, _config: unknown, options: St
   ]
 }
 
-export async function getRedditStories(options: { excludeRedditIds?: Set<string> } = {}) {
+export async function getRedditStories(options: { excludeRedditIds?: Set<string>, today: string }) {
   console.info('Fetching Reddit stories...')
 
-  const { excludeRedditIds } = options
-
-  // Reddit 抓取設定 - 統一管理所有數量參數
-  const REDDIT_CONFIG = {
-    API_LIMIT: 10, // 每次請求抓少一點，我們只需要頭幾名
-    FINAL_TOP_STORIES: 6, // 最終總共要幾篇 (依照使用者需求 5~6 篇)
-    MIN_UPVOTES: 50, // 最低 upvotes 門檻
-    TOP_PER_SUBREDDIT: 3, // 每個版面保留前幾名，避免太隨機
+  const { excludeRedditIds, today } = options
+  const feedUrl = buildRedditCombinedFeedUrl()
+  console.info('[Reddit] Fetching combined subreddit RSS:', feedUrl)
+  const response = await fetch(feedUrl, {
+    headers: {
+      'Accept': 'application/atom+xml',
+      'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`Reddit combined RSS returned ${response.status}; retry after ${response.headers.get('x-ratelimit-reset') || 'unknown'} seconds`)
   }
 
-  // 選擇科技相關的熱門 subreddits
-  // 調整順序：將較為專業/硬技術的版面放在前面，確保它們優先入選
-  // 選擇含金量高的技術討論版 (High Signal Technical Subreddits)
-  // 替換掉原本容易有政治口水或太淺的版面
-  const subreddits = [
-    'LocalLLaMA', // AI/LLM 最前線，深度夠
-    'coding', // 專注程式設計，無水文
-    'netsec', // 網路安全 Hacker News 等級
-    'sysadmin', // 系統管理實務
-    'dataengineering', // 資料架構深度討論
-  ]
+  const candidates = parseRedditListingFeed(await response.text())
+    .filter(story => !excludeRedditIds?.has(story.id || ''))
+    .filter(story => !isPoliticalRedditStory(story))
+  const selectedStories = selectRedditStories(candidates, today)
 
-  const politicalKeywords = [
-    'trump',
-    'donald trump',
-    'biden',
-    'white house',
-    '共和黨',
-    '民主黨',
-    '川普',
-    '特朗普',
-    '拜登',
-    '白宮',
-    'gop',
-    'maga',
-    'election',
-    '選舉',
-    '大選',
-    'congress',
-    'senate',
-    'house speaker',
-    'impeachment',
-  ]
-
-  const isPoliticalPost = (title: string, url: string) => {
-    const haystack = `${title} ${url}`.toLowerCase()
-    return politicalKeywords.some(keyword => haystack.includes(keyword.toLowerCase()))
-  }
-
-  const storiesBySubreddit: Record<string, Story[]> = {}
-
-  // 隨機選擇排序方式，避免連續幾天抓到一樣的熱門文章
-  const sortMethods = ['hot', 'rising', 'top']
-  const selectedSort = sortMethods[Math.floor(Math.random() * sortMethods.length)]
-  const timeQuery = selectedSort === 'top' ? '&t=day' : ''
-
-  console.info(`[Reddit] Fetching stories with sort: ${selectedSort}${timeQuery}`)
-
-  for (const subreddit of subreddits) {
-    try {
-      // 建構 URL
-      const url = `https://www.reddit.com/r/${subreddit}/${selectedSort}/.json?limit=${REDDIT_CONFIG.API_LIMIT}${timeQuery}`
-      console.info(`Fetching from r/${subreddit} (${selectedSort})...`)
-
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
-        },
-      })
-
-      if (!response.ok) {
-        console.warn(`Failed to fetch r/${subreddit}: ${response.status}`)
-        continue
-      }
-
-      const data = await response.json() as any
-      const posts = data?.data?.children || []
-
-      const stories: Story[] = posts
-        .filter((post: any) => {
-          const postData = post.data
-          const title = postData.title || ''
-          const url = postData.url || ''
-          return !postData.stickied // 排除置頂
-            && !postData.distinguished // 排除管理員發文
-            && !postData.removed_by_category // 排除被移除的
-            && url
-            && postData.ups > REDDIT_CONFIG.MIN_UPVOTES
-            && !isPoliticalPost(title, url)
-            && !(excludeRedditIds?.has(postData.id))
-        })
-        .map((post: any) => {
-          const postData = post.data
-          return {
-            id: postData.id,
-            title: `${postData.title} (r/${subreddit})`,
-            url: postData.url,
-            source: 'reddit' as const,
-            sourceUrl: `https://www.reddit.com${postData.permalink}`,
-            description: postData.selftext?.substring(0, 200) || '',
-            upvotes: postData.ups,
-            subreddit,
-          }
-        })
-
-      if (stories.length > 0) {
-        // 雖然 Reddit 預設就是熱門排序，但保險起見還是該版面內排一次
-        storiesBySubreddit[subreddit] = stories.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0))
-        console.info(`Fetched ${stories.length} candidates from r/${subreddit}`)
-      }
-    }
-    catch (error) {
-      console.error(`Error fetching r/${subreddit}:`, error)
-    }
-  }
-
-  const storyPool = subreddits.flatMap(subreddit =>
-    (storiesBySubreddit[subreddit] || []).slice(0, REDDIT_CONFIG.TOP_PER_SUBREDDIT),
-  )
-  for (let i = storyPool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[storyPool[i], storyPool[j]] = [storyPool[j], storyPool[i]]
-  }
-
-  const selectedStories = storyPool.slice(0, REDDIT_CONFIG.FINAL_TOP_STORIES)
-
-  console.info('Reddit stories processed (Randomized):', selectedStories.length)
-  // 列印選出的來源分佈，方便觀察
+  console.info('Reddit stories processed from combined RSS:', {
+    candidates: candidates.length,
+    selected: selectedStories.length,
+  })
   const distribution = selectedStories.reduce((acc, story) => {
-    const title = story.title || ''
-    const sub = title.match(/\(r\/(.*?)\)/)?.[1] || 'unknown'
+    const sub = story.subreddit || 'unknown'
     acc[sub] = (acc[sub] || 0) + 1
     return acc
   }, {} as Record<string, number>)
