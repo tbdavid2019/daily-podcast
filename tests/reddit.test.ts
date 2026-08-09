@@ -97,7 +97,7 @@ describe('Reddit RSS ingestion', () => {
     const utilsSource = await readFile(new URL('../workflow/utils.ts', import.meta.url), 'utf8')
     const workflowSource = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
 
-    assert.match(utilsSource, /PRIMARY_READER_BATCH_URL = 'https:\/\/create360\.ai\/v1\/batch'/)
+    assert.match(utilsSource, /PRIMARY_READER_BATCH_URL = 'https:\/\/2md\.aiurl\.tw\/v1\/batch'/)
     assert.match(utilsSource, /JSON\.stringify\(\{ urls: uniqueUrls \}\)/)
     assert.match(workflowSource, /PRIMARY_READER_BATCH_SIZE = 5/)
     assert.match(workflowSource, /fetch primary article batch/)

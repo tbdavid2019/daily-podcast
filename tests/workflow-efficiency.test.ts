@@ -64,9 +64,9 @@ describe('workflow retry budgets', () => {
     const readerEnd = source.indexOf('export async function getHackerNewsTopStories')
     const readerSource = source.slice(readerStart, readerEnd)
 
+    assert.match(source, /'https:\/\/2md\.aiurl\.tw'/)
+    assert.match(source, /'https:\/\/2md\.glsoft\.ai'/)
     assert.match(source, /'https:\/\/create360\.ai'/)
-    assert.match(source, /'http:\/\/git\.glsoft\.ai:8083'/)
-    assert.match(source, /'http:\/\/60\.248\.142\.126:8083'/)
     assert.doesNotMatch(source, /r\.jina\.ai/)
     assert.doesNotMatch(source, /Firecrawl|FIRECRAWL|firecrawl/)
     assert.doesNotMatch(readerSource, /Authorization/)

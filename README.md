@@ -33,7 +33,7 @@
 - **Reddit 選題機制**：每版保留前 K 名後再隨機抽樣，降低重複又保留熱門度。
 - **內容過濾**：新增政治相關關鍵字過濾。
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
-- **內容來源**：一般文章先以 create360 的 `/v1/batch` 每批最多取得 5 篇，再個別 fallback 至 `https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`；Hacker News 留言仍逐篇取得。Reddit 以一個合併 subreddit RSS 取得候選，再以單篇 RSS 取得正文與留言，外部文章才使用自架 reader。
+- **內容來源**：一般文章先以 `http://2md.aiurl.tw` 的 `/v1/batch` 每批最多取得 5 篇，再個別 fallback 至 `http://2md.aiurl.tw`、`https://2md.glsoft.ai`、`https://create360.ai`；Hacker News 留言仍逐篇取得。Reddit 以一個合併 subreddit RSS 取得候選，再以單篇 RSS 取得正文與留言，外部文章才使用自架 reader。
 - **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用 **Fenrir（男）**與 **Leda（女）**聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需設定 Cloudflare Secret `GEMINI_TTS_API_SECRET`，可作為 OpenAI TTS 的替代方案。
 - **TTS 故障自動轉移（Fallback）(2026-02-08)**：實作 TTS 容錯機制。當主要 TTS 服務供應商（如 Gemini／OpenAI）發生錯誤時，系統會改用免費的 **Edge TTS** 繼續產生音訊，確保 Podcast 每日更新不中斷。
 

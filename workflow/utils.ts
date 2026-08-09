@@ -17,12 +17,12 @@ interface StoryFetchOptions {
 }
 
 const SELF_HOSTED_MARKDOWN_NODES = [
-  'https://create360.ai', // Primary
-  'http://git.glsoft.ai:8083', // Secondary
-  'http://60.248.142.126:8083', // Fallback
+  'https://2md.aiurl.tw', // Primary
+  'https://2md.glsoft.ai', // Secondary
+  'https://create360.ai', // Fallback
 ]
 
-const PRIMARY_READER_BATCH_URL = 'https://create360.ai/v1/batch'
+const PRIMARY_READER_BATCH_URL = 'https://2md.aiurl.tw/v1/batch'
 const MIN_READER_CONTENT_CHARS = 50
 
 interface BatchReaderPage {
