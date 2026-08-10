@@ -33,14 +33,17 @@ describe('llms.txt & llms-full.txt discovery standards', () => {
     assert.match(content, /## 維護團隊與聯絡資訊 \(Maintenance & Contact\)/)
   })
 
-  it('provides static files in public/ matching canonical URLs', async () => {
+  it('provides static files in public/ matching canonical URLs and specifies UTF-8 headers', async () => {
     const llmsTxt = await readFile(new URL('public/llms.txt', rootUrl), 'utf8')
     const llmsFullTxt = await readFile(new URL('public/llms-full.txt', rootUrl), 'utf8')
+    const headers = await readFile(new URL('public/_headers', rootUrl), 'utf8')
 
     assert.match(llmsTxt, /# DAVID888 Daily 每日放送/)
     assert.match(llmsTxt, /https:\/\/podcast\.david888\.com\/llms\.txt/)
     assert.match(llmsFullTxt, /# DAVID888 Daily 每日放送 - LLM 完整網站與 API 說明/)
     assert.match(llmsFullTxt, /https:\/\/podcast\.david888\.com\/llms-full\.txt/)
+    assert.match(headers, /\/llms\.txt[\s\S]*?Content-Type: text\/markdown; charset=utf-8/)
+    assert.match(headers, /\/llms-full\.txt[\s\S]*?Content-Type: text\/markdown; charset=utf-8/)
   })
 
   it('does not contain forbidden mainland/simplified terms in llms.txt or llms-full.txt', () => {

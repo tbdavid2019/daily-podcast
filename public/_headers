@@ -12,3 +12,13 @@
   Accept-Ranges: bytes
   Cache-Control: public,max-age=86400
   Content-Type: image/png
+
+# LLM 機器讀取檔 (指定 UTF-8 編碼避免瀏覽器亂碼)
+/llms.txt
+  Cache-Control: public,max-age=3600
+  Content-Type: text/markdown; charset=utf-8
+
+/llms-full.txt
+  Cache-Control: public,max-age=3600
+  Content-Type: text/markdown; charset=utf-8
+
