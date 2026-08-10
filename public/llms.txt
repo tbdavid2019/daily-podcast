@@ -1,0 +1,34 @@
+# DAVID888 Daily 每日放送
+
+> 多元科技新聞 Podcast，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動產生台灣繁體中文摘要與 Podcast 節目。
+
+## 核心服務與頁面 (Core Pages & Services)
+
+- [DAVID888 Daily 每日放送首頁](https://podcast.david888.com/): 展示最新 30 天每日科技新聞摘要與 Podcast 音訊播放器。
+- [節目文章頁面](https://podcast.david888.com/post/{date}): 包含指定日期（如 https://podcast.david888.com/post/2026-08-10）的完整報導內文、故事導讀與延伸參考連結。
+- [Podcast RSS Feed](https://podcast.david888.com/rss.xml): 提供適用於各大 Podcast 播放器的標準 RSS 訂閱源。
+- [Sitemap](https://podcast.david888.com/sitemap.xml): 完整網站頁面索引與搜尋檢索地圖。
+
+## AI Agent & API Discovery
+
+- [llms.txt](https://podcast.david888.com/llms.txt): LLM 與 AI Agent 的精簡網站結構與資源索引。
+- [llms-full.txt](https://podcast.david888.com/llms-full.txt): 完整網站架構、路由說明與 API 詳細規範檔案。
+- [Agent Skills 索引目錄](https://podcast.david888.com/.well-known/agent-skills/index.json): 機器可讀的 Agent Skills 清單與 SHA-256 驗證雜湊。
+- [API Catalog](https://podcast.david888.com/.well-known/api-catalog): 符合 RFC 9727 規範的 API 服務鏈結目錄。
+- [OpenAPI Specification](https://podcast.david888.com/openapi.json): 標準 OpenAPI 3.1.0 介面規範。
+- [API 服務說明文件](https://podcast.david888.com/docs/api): 提供 AI Agent 呼叫之公開 API 節點與 HTTP 標頭說明。
+
+## 內容協商與語法 (Content Negotiation)
+
+- 支持在首頁與文章頁面（`/` 與 `/post/{date}`）發送 `Accept: text/markdown` 請求標頭，直接取得乾淨的 Markdown 格式內文。
+
+## 研發團隊與維護資訊 (Development & Maintenance)
+
+> 本站點與 AI Agent 服務由 DAVID888 團隊設計、開發與維護。
+
+- [DAVID888 官方專案庫](https://github.com/tbdavid2019/daily-podcast): 專案開源程式碼與開發說明。
+- [DAVID888 (ok@vip.david888.com)](mailto:ok@vip.david888.com): 主要維護者與 Podcast 擁有者。
+
+## 延伸說明
+
+- [LLMs Full Documentation](https://podcast.david888.com/llms-full.txt): 完整網站結構、詳細 API 參數與延伸說明檔案。

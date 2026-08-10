@@ -20,7 +20,7 @@
     "logs:worker": "wrangler tail --cwd worker",
     "test:workflow-trigger": "node --test tests/trigger-workflow-script.test.mjs",
     "test:workflow-security": "tsx --test tests/workflow-security.test.ts tests/workflow-efficiency.test.ts tests/audio-multipart.test.ts tests/reddit.test.ts",
-    "test:web-cache": "tsx --test tests/web-cache-policy.test.ts tests/playback-share.test.ts",
+    "test:web-cache": "tsx --test tests/web-cache-policy.test.ts tests/playback-share.test.ts tests/llms-txt.test.ts",
     "test:pwa": "node --test tests/pwa.test.mjs",
     "test:build-gate": "node --test tests/build-gate.test.mjs tests/normalize-generated-types.test.mjs",
     "tests": "wrangler dev --cwd tests --remote",

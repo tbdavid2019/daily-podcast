@@ -1,0 +1,63 @@
+# DAVID888 Daily 每日放送 - LLM 完整網站與 API 說明
+
+> 多元科技新聞 Podcast，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動產生台灣繁體中文摘要與 Podcast 節目。
+
+## 系統架構簡介 (System Architecture)
+
+本系統部署於 Cloudflare Workers，前端基於 Next.js App Router 與 OpenNext 建構，後端採用 Cloudflare Workflows 自動處理每日科技新聞抓取、摘要彙整與 TTS 語音合成。
+
+## 完整路由與頁面說明 (Route Directory)
+
+### 1. 首頁 (`https://podcast.david888.com/`)
+- **功能**: 展示近 30 天的 Podcast 集數列表與線上音訊播放器。
+- **內容協商**: 發送 `Accept: text/markdown` 可直接取得 Markdown 格式之當日重點與摘要。
+
+### 2. 單集文章頁面 (`https://podcast.david888.com/post/{date}` 或 `https://podcast.david888.com/post/{date}/{variant}`)
+- **功能**: 單一日期（例如 `2026-08-10`）的完整新聞報導與對話逐字稿。
+- **內容協商**: 發送 `Accept: text/markdown` 標頭取得對應 Markdown 內文。
+- **變體預設**: 預設變體為 `hacker-news`（可別名 `main`）。
+
+### 3. Podcast RSS 訂閱源 (`https://podcast.david888.com/rss.xml`)
+- **功能**: 提供符合 PodcastIndex 規範的 RSS XML，包含音訊檔 enclosure 與文章連結。
+- **快取策略**: 邊緣快取 10 分鐘，支援跨網域 CORS GET 請求。
+
+### 4. 網站地圖 (`https://podcast.david888.com/sitemap.xml`)
+- **功能**: 輸出最近 30 天內所有文章的 XML 地圖供 AI 爬蟲與檢索機器人索引。
+
+### 5. API 狀態節點 (`https://podcast.david888.com/api/status`)
+- **功能**: 提供輕量級 JSON 狀態，包含服務名稱、當前狀態與 RSS URL。
+
+## AI Agent 探索與協定規範 (Agent & Protocol Discovery)
+
+- **llms.txt**: `https://podcast.david888.com/llms.txt` (標準 Markdown 清單)
+- **llms-full.txt**: `https://podcast.david888.com/llms-full.txt` (完整規格檔案)
+- **Agent Skills 索引**: `https://podcast.david888.com/.well-known/agent-skills/index.json`
+- **RFC 9727 API Catalog**: `https://podcast.david888.com/.well-known/api-catalog`
+- **OpenAPI 3.1.0 Specification**: `https://podcast.david888.com/openapi.json`
+- **API 說明網頁**: `https://podcast.david888.com/docs/api`
+
+## HTTP Content Negotiation 說明
+
+AI Agent 可在存取頁面時帶入 `Accept: text/markdown` 標頭：
+```http
+GET /post/2026-08-10 HTTP/1.1
+Host: podcast.david888.com
+Accept: text/markdown
+```
+伺服器將提供：
+- `Content-Type: text/markdown; charset=utf-8`
+- `Vary: Accept`
+- `X-Markdown-Tokens`: 預估 Markdown Token 數量
+
+## 爬蟲政策與 Content Signals (Robots Policy)
+
+本站點於 `robots.txt` 宣告下列 Content Signals 標頭與爬蟲規則：
+- `ai-train=no`: 不允許做為 AI 模型訓練集數據。
+- `search=yes`: 允許檢索機器人檢索。
+- `ai-input=yes`: 允許做為 RAG / AI Agent 即時輸入來源。
+
+## 維護團隊與聯絡資訊 (Maintenance & Contact)
+
+- **專案團隊**: DAVID888
+- **聯絡 Email**: ok@vip.david888.com
+- **專案 GitHub 倉庫**: https://github.com/tbdavid2019/daily-podcast

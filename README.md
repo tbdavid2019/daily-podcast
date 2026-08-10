@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **📄 llms.txt / llms-full.txt AI 規範整合 (2026-08-10)**：遵循 llmstxt.org 標準新增 `/llms.txt` 與 `/llms-full.txt`，提供 LLM 與 AI Agent 的精簡與完整網站結構索引、API 說明與探索鏈結。同時注入 `Link: </llms.txt>; rel="llms-txt"; type="text/markdown"` HTTP 探索標頭。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🧪 自架來源、完整 Podcast 對話與 Free Plan 驗證 (2026-08-02)**：文章全文與討論內容依序由三台自架 Markdown reader 取得：`https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`。Podcast 腳本維持直接閱讀完整原始內容，不改成只吃摘要；每個成功取得的故事都必須有男女主持人的完整觀點交換，重要故事再展開 2–3 個來回。正式重跑結果為 7 則故事、19 段對話、6,059 字純對話；23 個 Gemini TTS segment 分成 5 批，每批最多 5 次外部請求，未超過 Cloudflare Workers Free Plan 的 50 次限制。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **⚡ Web Worker 邊緣快取與 KV 去重 (2026-07-20)**：啟用 Cloudflare Workers Cache，在 Worker invocation 前快取 HTML 與 RSS；HTML 的 Edge TTL 為 10 分鐘、瀏覽器為 60 秒，RSC／router payload 則在外層 Worker 強制 `private, no-store`。移除會累積完整 Podcast script 的全域 `Map`，改用 React request-scoped cache 去除同一 SSR 的重複 KV reads，並新增實際 header 與 build gate 回歸測試。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🛡️ Next.js 與 production dependencies 安全更新 (2026-07-20)**：Next.js 由 15.4.6 升至 15.5.20，React 升至 19.2.7、OpenNext Cloudflare adapter 升至 1.20.1，並同步更新 Puppeteer、Cheerio、Radix 與 build tooling。Production audit 已由 60 項降至 4 項，Critical／High 均為 0；AI SDK 保持既有 `ai` 4.x／`@ai-sdk/openai` 1.x major。詳見 [CHANGELOG.md](CHANGELOG.md)。

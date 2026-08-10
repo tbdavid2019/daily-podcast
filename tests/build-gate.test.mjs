@@ -43,6 +43,8 @@ describe('build gate configuration', () => {
       'config.ts',
       'components/article-card.tsx',
       'public/manifest.webmanifest',
+      'public/llms.txt',
+      'public/llms-full.txt',
     ]
     const copy = (await Promise.all(paths.map(path => readFile(new URL(path, rootUrl), 'utf8')))).join('\n')
 

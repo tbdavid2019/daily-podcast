@@ -2,6 +2,15 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-08-10] llms.txt 與 llms-full.txt 規範支援
+
+- 依據 llmstxt.org 標準實作 `/llms.txt` 與 `/llms-full.txt` 端點（同時提供 `public/` 靜態檔案與 App Router 動態路由）。
+- 提供精簡與完整的網站結構索引、文章路由格式、RSS/Sitemap 鏈結、AI Agent Skills 索引、OpenAPI 規範與維護團隊資訊。
+- 在 `lib/discovery.ts` 與 `middleware.ts` 首頁探索標頭中加入 `Link: </llms.txt>; rel="llms-txt"; type="text/markdown"`。
+- 在 `skillDocuments` 中新增 `llms-txt` 說明文件，並更新 `robots.txt` 與 `OpenAPI` 規格。
+
+---
+
 ## [2026-08-09] 修正 Podcast 腳本 schema 與付費步驟重試次數
 
 - 移除對 LLM 結構化輸出的單段 380 字與總段數硬性 schema 上限，避免模型只因些微超出提示詞目標，就讓整份有效 JSON 觸發 `AI_NoObjectGeneratedError`。
