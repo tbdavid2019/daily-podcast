@@ -12,6 +12,7 @@
 
 ## 🆕 最近更新
 
+- **🧩 WebMCP AI Agent 工具支援 (2026-08-23)**：網站現在會在支援 WebMCP 的 Chrome 瀏覽器中註冊 `list_recent_episodes`、`get_episode` 與 `open_episode` 工具，讓瀏覽器內的 AI Agent 可以探索近期集數、取得指定日期內容並開啟 Podcast 頁面。詳見下方的 [WebMCP 使用方式](#webmcp-使用方式) 與 [CHANGELOG.md](CHANGELOG.md)。
 - **📄 llms.txt / llms-full.txt AI 規範整合 (2026-08-10)**：遵循 llmstxt.org 標準新增 `/llms.txt` 與 `/llms-full.txt`，提供 LLM 與 AI Agent 的精簡與完整網站結構索引、API 說明與探索鏈結。同時注入 `Link: </llms.txt>; rel="llms-txt"; type="text/markdown"` HTTP 探索標頭。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🧪 自架來源、完整 Podcast 對話與 Free Plan 驗證 (2026-08-02)**：文章全文與討論內容依序由三台自架 Markdown reader 取得：`https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`。Podcast 腳本維持直接閱讀完整原始內容，不改成只吃摘要；每個成功取得的故事都必須有男女主持人的完整觀點交換，重要故事再展開 2–3 個來回。正式重跑結果為 7 則故事、19 段對話、6,059 字純對話；23 個 Gemini TTS segment 分成 5 批，每批最多 5 次外部請求，未超過 Cloudflare Workers Free Plan 的 50 次限制。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **⚡ Web Worker 邊緣快取與 KV 去重 (2026-07-20)**：啟用 Cloudflare Workers Cache，在 Worker invocation 前快取 HTML 與 RSS；HTML 的 Edge TTL 為 10 分鐘、瀏覽器為 60 秒，RSC／router payload 則在外層 Worker 強制 `private, no-store`。移除會累積完整 Podcast script 的全域 `Map`，改用 React request-scoped cache 去除同一 SSR 的重複 KV reads，並新增實際 header 與 build gate 回歸測試。詳見 [CHANGELOG.md](CHANGELOG.md)。
@@ -64,6 +65,16 @@
 - 🎙️ **語音合成**：Edge TTS / OpenAI TTS / Minimax 多種選擇
 - 🎯 **Reddit 熱門隨機化**：每版保留前 K 名後再隨機抽樣，避免熱門貼文長期霸榜
 - ☁️ **全雲端執行**：部署於 Cloudflare Workers，不需要自建伺服器
+
+## 🧩 WebMCP 使用方式
+
+網站支援 Chrome WebMCP 命令式 API。當瀏覽器提供 `document.modelContext` 時，頁面會註冊以下工具：
+
+- `list_recent_episodes`：列出近期 Podcast 集數，支援第 1–10 頁。
+- `get_episode`：依 `YYYY-MM-DD` 取得指定集數的繁體中文 Markdown 內容。
+- `open_episode`：開啟指定集數頁面，方便使用者查看與播放音訊。
+
+WebMCP 目前仍是實驗性功能。本機測試可在 Chrome 開啟 `chrome://flags/#enable-webmcp-testing`，啟用後重新啟動瀏覽器，再開啟網站。也可以使用 Chrome 的 Model Context Tool Inspector 檢查工具註冊與執行結果。
 
 ## 📅 內容排程
 

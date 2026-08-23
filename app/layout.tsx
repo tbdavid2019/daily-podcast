@@ -9,6 +9,7 @@ import { BingBackground } from '@/components/bing-background'
 import { GoogleAd } from '@/components/google-ad'
 import { PwaInstallButton } from '@/components/pwa-install-button'
 import { PwaServiceWorker } from '@/components/pwa-service-worker'
+import { WebMcpProvider } from '@/components/webmcp-provider'
 import { podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
 
@@ -104,6 +105,7 @@ export default function RootLayout({
         className={`${jetbrainsMono.variable} ${genJyuuGothic.variable} font-sans antialiased`}
       >
         <PwaServiceWorker />
+        <WebMcpProvider />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

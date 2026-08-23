@@ -2,6 +2,18 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-08-23] WebMCP AI Agent 工具支援
+
+- 在全站 layout 加入 WebMCP client provider；支援的 Chrome 會透過 `document.modelContext.registerTool()` 註冊網站工具，不支援的瀏覽器則維持原有功能並自動降級。
+- 新增 `list_recent_episodes`，讓 AI Agent 讀取分頁後的近期集數、日期、摘要與音訊連結。
+- 新增 `get_episode`，讓 AI Agent 依日期與變體取得既有 Markdown 文章內容；`main` 會正規化為 `hacker-news`。
+- 新增 `open_episode`，讓 AI Agent 開啟指定 Podcast 集數頁面供使用者查看與播放。
+- 所有工具輸入都會驗證日期、變體與頁碼；外部新聞內容標記為不受信任資料，工具輸出限制為 1,500 字元，避免無界內容進入模型上下文。
+- 新增 WebMCP helper 測試，並將 `test:webmcp` 納入 `pnpm check`。
+- Web Worker version：`81bff5d6-92a4-4c21-bc8e-4673dd546658`；已部署至 `https://podcast.david888.com` 對應的 Cloudflare Worker。
+
+---
+
 ## [2026-08-10] llms.txt 與 llms-full.txt 規範支援
 
 - 依據 llmstxt.org 標準實作 `/llms.txt` 與 `/llms-full.txt` 端點（同時提供 `public/` 靜態檔案與 App Router 動態路由）。
