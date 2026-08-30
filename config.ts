@@ -11,6 +11,7 @@ export const podcastOwner = {
 // 首頁顯示的天數 (以分頁形式呈現)
 export const keepDays = 60
 
-// Sitemap 和 RSS 可以保留更長時間的內容
-export const sitemapDays = 90 // Sitemap 顯示最近 90 天
-export const rssDays = 90 // RSS 顯示最近 90 天
+// RSS 保留天數 (提供最近 90 天 / 一季之最新節目)
+export const rssDays = 90
+// Sitemap 永久收錄所有歷史集數（全量無天數上限）
+export const sitemapDays = Number.POSITIVE_INFINITY

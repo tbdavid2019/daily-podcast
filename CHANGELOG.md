@@ -15,10 +15,10 @@
   - 補齊 CORS 標頭與 `OPTIONS` 預檢回應支援。
 - **更新 `public/_headers`**：
   - 在 `/*.mp3` 規則中補齊 `Access-Control-Allow-Origin: *` 與 `Access-Control-Expose-Headers`。
-- **重構 Sitemap 動態過濾機制（解決 404 虛假死連結問題）**：
-  - 原先 `app/sitemap.ts` 盲目產生 365 天日期網址，導致搜尋引擎與爬蟲爬取到已過期不存在的 404 頁面，傷害 SEO。
-  - 重構 `app/sitemap.ts`，使其動態透過 `getArticleByDate` 驗證，**僅輸出實際存在於 KV 的集數網址**，達成 100% 有效連結，徹底杜絕 404 死連結。
-- **取消腳本過期限制，改為 KV 永久保存**：
+- **重構 Sitemap 為全量歷史永久收錄（0 死連結、無天數上限）**：
+  - 徹底移除 Sitemap 的天數限制，直接透過 `HACKER_NEWS_KV.list()` 動態檢索整個資料庫（含現代與歷史集數），**永久收錄有史以來的每一集節目（無 90 天或 365 天限制，永遠不過期）**。
+  - 僅收錄資料庫中真實存在的文章頁面，達到 100% 有效連結，徹底杜絕 404 死連結，提升 Google SEO 權重。
+- **取消腳本過期限制，改為 KV 永久典藏**：
   - 將網站首頁分頁保留天數 `keepDays` 設定為 60 天（共 10 頁，每頁 6 篇，由分頁機制保護）。
   - 將 Podcast RSS Feed 保留天數 `rssDays` 設定為 90 天（一季約 90 集），提供完整收聽歷史且在 10 分鐘 Edge CDN 快取保護下極速回應。
   - 徹底移除 `workflow/index.ts` 中 `save script to kv` 的 `expirationTtl`（原先設定為 7 天過期，導致歷史節目在 7 天後被 Cloudflare KV 自動清除），改為**永久保存（無過期時間）**，並同步清除線上既有集數的 TTL 限制，實現永久典藏。
