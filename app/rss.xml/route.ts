@@ -1,10 +1,10 @@
-import process from 'node:process'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
 import { getArticleByDate } from '@/lib/content'
+import { getBaseUrl } from '@/lib/discovery'
 import { getArticleTimestamp, getPastDays } from '@/lib/utils'
 import { EDGE_CACHE_CONTROL } from '@/lib/web-cache-policy'
 
@@ -38,7 +38,7 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
+  const baseUrl = getBaseUrl()
 
   // 如果沒有快取，產生新的回應
   const feed = new Podcast({

@@ -1,5 +1,7 @@
 import { getBaseUrl } from '@/lib/discovery'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   return Response.json({
     service: 'daily-podcast',
