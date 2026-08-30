@@ -1,14 +1,15 @@
 import type { MetadataRoute } from 'next'
-import process from 'node:process'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { sitemapDays } from '@/config'
 import { getArticleByDate } from '@/lib/content'
+import { getBaseUrl } from '@/lib/discovery'
 import { getPastDays } from '@/lib/utils'
 
+export const dynamic = 'force-dynamic'
 export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
+  const baseUrl = getBaseUrl()
   const { env } = await getCloudflareContext({ async: true })
   const candidateDays = getPastDays(sitemapDays, 8)
 
