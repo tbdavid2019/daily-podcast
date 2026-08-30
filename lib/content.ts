@@ -1,7 +1,6 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { cache } from 'react'
-import { keepDays } from '@/config'
-import { getPastDays, mapScriptToArticle } from '@/lib/utils'
+import { mapScriptToArticle } from '@/lib/utils'
 
 interface ContentEnv {
   HACKER_NEWS_KV: KVNamespace
@@ -31,11 +30,38 @@ export const getRequestArticleByDate = cache(async (date: string, variant = 'hac
 
 export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6) {
   const variant = 'hacker-news'
-  const allPastDays = getPastDays(keepDays, 8)
-  const totalItems = allPastDays.length
-  const totalPages = Math.ceil(totalItems / pageSize)
+  const runEnv = env.NEXTJS_ENV || 'production'
+
+  const dateSet = new Set<string>()
+
+  // 1. 抓取所有現代 script: 格式的歷史集數（全量無上限、永久保存）
+  const scriptList = await env.HACKER_NEWS_KV.list({ prefix: `script:${runEnv}:hacker-news:` })
+  for (const key of scriptList.keys) {
+    const date = key.name.split(':').pop()
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      dateSet.add(date)
+    }
+  }
+
+  // 2. 抓取所有舊版 content: 格式的歷史集數（全量無上限、永久保存）
+  const contentList = await env.HACKER_NEWS_KV.list({ prefix: `content:${runEnv}:hacker-news:` })
+  for (const key of contentList.keys) {
+    if (key.name.includes(':story-contents:')) {
+      continue
+    }
+    const parts = key.name.split(':')
+    const date = parts[3]
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      dateSet.add(date)
+    }
+  }
+
+  // 由新到舊排序所有歷史集數
+  const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a))
+  const totalItems = sortedDates.length
+  const totalPages = Math.ceil(totalItems / pageSize) || 1
   const startIndex = (currentPage - 1) * pageSize
-  const currentDays = allPastDays.slice(startIndex, startIndex + pageSize)
+  const currentDays = sortedDates.slice(startIndex, startIndex + pageSize)
 
   const posts = (await Promise.all(
     currentDays.map(async (day) => {
