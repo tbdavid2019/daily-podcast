@@ -74,26 +74,26 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
     <nav
       aria-label="分頁導航"
       className={cn(
-        'w-full flex flex-col md:flex-row items-center justify-between gap-4 py-8 px-2',
+        'w-full flex flex-col items-center justify-center gap-3.5 py-8 px-2',
         className,
       )}
     >
-      {/* 核心分頁導航按鈕列 */}
-      <div className="flex flex-wrap items-center justify-center gap-1 p-1.5 rounded-2xl glass backdrop-blur-xl bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/60 dark:border-zinc-800/60 shadow-lg shadow-zinc-950/5 max-w-full overflow-x-auto">
+      {/* 第 1 行：核心分頁導航列（不折行，保持整齊單行） */}
+      <div className="flex items-center justify-center gap-1 sm:gap-1.5 p-1.5 rounded-2xl glass backdrop-blur-xl bg-white/75 dark:bg-zinc-900/75 border border-zinc-200/60 dark:border-zinc-800/60 shadow-lg shadow-zinc-950/5 max-w-full overflow-x-auto">
         {/* 第一頁按鈕 */}
         {hasPrev
           ? (
               <Link
                 href="/?page=1"
                 title="前往第一頁"
-                className="inline-flex items-center justify-center size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
                 aria-label="第一頁"
               >
                 <ChevronsLeft className="size-4" />
               </Link>
             )
           : (
-              <span className="inline-flex items-center justify-center size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
                 <ChevronsLeft className="size-4" />
               </span>
             )}
@@ -104,7 +104,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               <Link
                 href={`/?page=${currentPage - 1}`}
                 title="上一頁"
-                className="inline-flex items-center gap-1 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
                 aria-label="上一頁"
               >
                 <ChevronLeft className="size-4" />
@@ -112,7 +112,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               </Link>
             )
           : (
-              <span className="inline-flex items-center gap-1 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
                 <ChevronLeft className="size-4" />
                 <span className="hidden sm:inline">上一頁</span>
               </span>
@@ -163,7 +163,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               <Link
                 href={`/?page=${currentPage + 1}`}
                 title="下一頁"
-                className="inline-flex items-center gap-1 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
                 aria-label="下一頁"
               >
                 <span className="hidden sm:inline">下一頁</span>
@@ -171,7 +171,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               </Link>
             )
           : (
-              <span className="inline-flex items-center gap-1 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
                 <span className="hidden sm:inline">下一頁</span>
                 <ChevronRight className="size-4" />
               </span>
@@ -183,25 +183,25 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               <Link
                 href={`/?page=${totalPages}`}
                 title={`前往最後一頁 (第 ${totalPages} 頁)`}
-                className="inline-flex items-center justify-center size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
                 aria-label="最後一頁"
               >
                 <ChevronsRight className="size-4" />
               </Link>
             )
           : (
-              <span className="inline-flex items-center justify-center size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
                 <ChevronsRight className="size-4" />
               </span>
             )}
       </div>
 
-      {/* 快速跳頁輸入工具 (Jump to Page) */}
+      {/* 第 2 行：快速跳頁輸入工具（獨立置中） */}
       <form
         onSubmit={handleJumpSubmit}
-        className="flex items-center gap-2 px-3.5 py-2 rounded-2xl glass backdrop-blur-xl bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/60 dark:border-zinc-800/60 shadow-sm text-xs font-medium text-zinc-600 dark:text-zinc-400"
+        className="flex items-center gap-2 px-4 py-2 rounded-2xl glass backdrop-blur-xl bg-white/75 dark:bg-zinc-900/75 border border-zinc-200/60 dark:border-zinc-800/60 shadow-sm text-xs font-medium text-zinc-600 dark:text-zinc-400"
       >
-        <span className="whitespace-nowrap">跳至</span>
+        <span className="whitespace-nowrap">跳至第</span>
         <div className="relative flex items-center">
           <input
             type="number"
@@ -215,7 +215,8 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
           />
         </div>
         <span className="whitespace-nowrap">
-          /
+          頁 / 共
+          {' '}
           {totalPages}
           {' '}
           頁
@@ -223,9 +224,10 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         <button
           type="submit"
           disabled={!jumpPage.trim()}
-          className="inline-flex items-center justify-center size-7 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 cursor-pointer"
+          className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 cursor-pointer"
           title="前往指定頁數"
         >
+          <span>前往</span>
           <CornerDownLeft className="size-3.5" />
         </button>
       </form>
