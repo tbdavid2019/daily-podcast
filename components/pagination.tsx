@@ -70,30 +70,41 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
     }
   }
 
+  // 統一按鈕基礎樣式（確保所有按鈕顏色、字體、高度 100% 一致）
+  const baseBtnClass
+    = 'inline-flex items-center justify-center h-9 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500'
+  const enabledBtnClass
+    = 'hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90 hover:text-zinc-950 dark:hover:text-zinc-50 cursor-pointer active:scale-95'
+  const disabledBtnClass
+    = 'opacity-30 cursor-not-allowed pointer-events-none select-none'
+
   return (
     <nav
       aria-label="分頁導航"
       className={cn(
-        'w-full flex flex-col items-center justify-center gap-3.5 py-8 px-2',
+        'w-full flex flex-col items-center justify-center gap-3 py-8 px-2',
         className,
       )}
     >
-      {/* 第 1 行：核心分頁導航列（不折行，保持整齊單行） */}
-      <div className="flex items-center justify-center gap-1 sm:gap-1.5 p-1.5 rounded-2xl glass backdrop-blur-xl bg-white/75 dark:bg-zinc-900/75 border border-zinc-200/60 dark:border-zinc-800/60 shadow-lg shadow-zinc-950/5 max-w-full overflow-x-auto">
+      {/* 第 1 行：核心分頁導航列（單行不折行、毛玻璃一致底色） */}
+      <div className="flex items-center justify-center gap-1 sm:gap-1.5 p-1.5 rounded-2xl glass backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800/80 shadow-md shadow-zinc-950/5 max-w-full overflow-x-auto">
         {/* 第一頁按鈕 */}
         {hasPrev
           ? (
               <Link
                 href="/?page=1"
-                title="前往第一頁"
-                className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                title="第一頁"
+                className={cn(baseBtnClass, enabledBtnClass, 'size-9')}
                 aria-label="第一頁"
               >
                 <ChevronsLeft className="size-4" />
               </Link>
             )
           : (
-              <span className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span
+                className={cn(baseBtnClass, disabledBtnClass, 'size-9')}
+                aria-hidden="true"
+              >
                 <ChevronsLeft className="size-4" />
               </span>
             )}
@@ -104,7 +115,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               <Link
                 href={`/?page=${currentPage - 1}`}
                 title="上一頁"
-                className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className={cn(baseBtnClass, enabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
                 aria-label="上一頁"
               >
                 <ChevronLeft className="size-4" />
@@ -112,7 +123,10 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               </Link>
             )
           : (
-              <span className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span
+                className={cn(baseBtnClass, disabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
+                aria-hidden="true"
+              >
                 <ChevronLeft className="size-4" />
                 <span className="hidden sm:inline">上一頁</span>
               </span>
@@ -140,7 +154,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
                   <span
                     key={item.key}
                     aria-current="page"
-                    className="inline-flex items-center justify-center min-w-8 sm:min-w-9 h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-md shadow-zinc-950/10 ring-2 ring-zinc-900/10 dark:ring-zinc-100/20 select-none"
+                    className="inline-flex items-center justify-center min-w-8 sm:min-w-9 h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm shadow-zinc-950/10 ring-1 ring-zinc-900/10 dark:ring-zinc-100/20 select-none"
                   >
                     {pageNum}
                   </span>
@@ -149,7 +163,11 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
                   <Link
                     key={item.key}
                     href={`/?page=${pageNum}`}
-                    className="inline-flex items-center justify-center min-w-8 sm:min-w-9 h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                    className={cn(
+                      baseBtnClass,
+                      enabledBtnClass,
+                      'min-w-8 sm:min-w-9 h-8 sm:h-9 px-2.5 sm:px-3 text-xs sm:text-sm',
+                    )}
                   >
                     {pageNum}
                   </Link>
@@ -163,7 +181,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               <Link
                 href={`/?page=${currentPage + 1}`}
                 title="下一頁"
-                className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-zinc-50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                className={cn(baseBtnClass, enabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
                 aria-label="下一頁"
               >
                 <span className="hidden sm:inline">下一頁</span>
@@ -171,7 +189,10 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               </Link>
             )
           : (
-              <span className="inline-flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-medium text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span
+                className={cn(baseBtnClass, disabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
+                aria-hidden="true"
+              >
                 <span className="hidden sm:inline">下一頁</span>
                 <ChevronRight className="size-4" />
               </span>
@@ -182,15 +203,18 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
           ? (
               <Link
                 href={`/?page=${totalPages}`}
-                title={`前往最後一頁 (第 ${totalPages} 頁)`}
-                className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                title={`最後一頁 (第 ${totalPages} 頁)`}
+                className={cn(baseBtnClass, enabledBtnClass, 'size-9')}
                 aria-label="最後一頁"
               >
                 <ChevronsRight className="size-4" />
               </Link>
             )
           : (
-              <span className="inline-flex items-center justify-center size-8 sm:size-9 rounded-xl text-zinc-300 dark:text-zinc-700 cursor-not-allowed">
+              <span
+                className={cn(baseBtnClass, disabledBtnClass, 'size-9')}
+                aria-hidden="true"
+              >
                 <ChevronsRight className="size-4" />
               </span>
             )}
@@ -199,7 +223,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
       {/* 第 2 行：快速跳頁輸入工具（獨立置中） */}
       <form
         onSubmit={handleJumpSubmit}
-        className="flex items-center gap-2 px-4 py-2 rounded-2xl glass backdrop-blur-xl bg-white/75 dark:bg-zinc-900/75 border border-zinc-200/60 dark:border-zinc-800/60 shadow-sm text-xs font-medium text-zinc-600 dark:text-zinc-400"
+        className="flex items-center gap-2 px-4 py-2 rounded-2xl glass backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm text-xs font-medium text-zinc-700 dark:text-zinc-300"
       >
         <span className="whitespace-nowrap">跳至第</span>
         <div className="relative flex items-center">
@@ -210,7 +234,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
             value={jumpPage}
             onChange={e => setJumpPage(e.target.value)}
             placeholder={String(currentPage)}
-            className="w-14 h-7 text-center text-xs font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-14 h-7 text-center text-xs font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-100/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             aria-label="跳至指定頁數"
           />
         </div>
@@ -224,7 +248,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         <button
           type="submit"
           disabled={!jumpPage.trim()}
-          className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 cursor-pointer"
+          className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 cursor-pointer active:scale-95"
           title="前往指定頁數"
         >
           <span>前往</span>
