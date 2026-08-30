@@ -6,6 +6,9 @@
   Accept-Ranges: bytes
   Cache-Control: public,max-age=31536000,immutable
   Content-Type: audio/mpeg
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges
 
 # Podcast 封面圖片
 /*.png

@@ -152,6 +152,7 @@ describe('audio multipart streaming', () => {
 
     assert.match(finalMerge, /createMultipartUpload/)
     assert.match(finalMerge, /uploadAudioMultipartPart/)
+    assert.match(finalMerge, /httpMetadata:\s*\{[^}]*contentType:/)
     assert.doesNotMatch(finalMerge, /\.arrayBuffer\(\)/)
     assert.doesNotMatch(finalMerge, /combineAudioBuffers/)
   })

@@ -53,4 +53,10 @@ describe('timestamped playback sharing', () => {
 
     assert.match(source, /navigator\.share\(\{ url \}\)/)
   })
+
+  it('does not enforce crossOrigin on media element for mobile compatibility', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+
+    assert.doesNotMatch(source, /crossOrigin=/)
+  })
 })

@@ -284,6 +284,10 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         }
 
         const multipart = await this.env.HACKER_NEWS_R2.createMultipartUpload(podcastKey, {
+          httpMetadata: {
+            contentType: isGeminiTTS ? 'audio/wav' : 'audio/mpeg',
+            cacheControl: 'public, max-age=31536000, immutable',
+          },
           customMetadata: { workflowInstanceId: event.instanceId },
         })
         const checkpoint: AudioMultipartCheckpoint = {

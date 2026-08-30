@@ -8,9 +8,9 @@ export const podcastOwner = {
   email: 'ok@vip.david888.com', // 請修改為您的實際 email
 }
 
-// 首頁顯示的天數 (建議 7-30 天,避免超過 Cloudflare Workers 的 subrequest 限制)
-export const keepDays = 30
+// 首頁顯示的天數 (以分頁形式呈現)
+export const keepDays = 60
 
 // Sitemap 和 RSS 可以保留更長時間的內容
 export const sitemapDays = 365 // Sitemap 顯示一年
-export const rssDays = 10 // RSS 顯示最近 10 天
+export const rssDays = 90 // RSS 顯示最近 90 天

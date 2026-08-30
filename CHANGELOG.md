@@ -2,6 +2,25 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-08-30] 修復手機版與行動端音訊無法播放問題 (Mobile Audio Playback Fix)
+
+- **移除 `<audio>` 標籤 `crossOrigin="anonymous"` 限制**：
+  - 前端 `podcast.david888.com` 與音訊儲存網域 `r2.david888.com` 為跨子網域；原本的 `crossOrigin="anonymous"` 會強制行動端瀏覽器（特別是 iOS Safari / WebKit WebViews）進入嚴格 CORS 檢查模式。因 R2 自訂網域未回傳 CORS 標頭，導致 iOS Safari AVPlayer 直接拋出錯誤並中斷播放。
+  - 移除 `crossOrigin` 屬性後，瀏覽器以標準 `no-cors` 媒體串流管道播放，全面相容 iOS Safari、Android Chrome 及各式 In-App Webview。
+- **補齊 R2 音訊 Multipart Upload 的 `httpMetadata` MIME 類型**：
+  - 在 `workflow/audio.ts` 中的 `createMultipartUpload` 設定正確的 `httpMetadata`（`contentType: isGeminiTTS ? 'audio/wav' : 'audio/mpeg'`, `cacheControl: 'public, max-age=31536000, immutable'`），確保音檔上傳至 R2 後具備標準 `Content-Type` 標頭，防止行動端播放器因判定為未知二進位流（`application/octet-stream`）而拒絕解碼。
+- **修正 `/static/[...path]` 串流代理之 RFC 7233 規範與 CORS 支援**：
+  - 修正 HTTP 206 Partial Content 回應中的 `Content-Length` 標頭計算，改為該 Range 切片的實際長度（而非整檔總大小 `file.size`），修復 iOS Safari 在探測位元組範圍（`Range: bytes=0-1`）時因長度不符而中止連線的 Bug。
+  - 增加依附副檔名（`.mp3`、`.wav`、`.png`、`.jpg`）自動解析 MIME 類型之邏輯。
+  - 補齊 CORS 標頭與 `OPTIONS` 預檢回應支援。
+- **更新 `public/_headers`**：
+  - 在 `/*.mp3` 規則中補齊 `Access-Control-Allow-Origin: *` 與 `Access-Control-Expose-Headers`。
+- **調整保留天數配置**：
+  - 將網站首頁分頁保留天數 `keepDays` 由 30 天擴增至 60 天（共 10 頁，每頁 6 篇，由分頁機制保護）。
+  - 將 Podcast RSS Feed 保留天數 `rssDays` 由 10 天擴增至 90 天（一季約 90 集），提供完整收聽歷史且在 10 分鐘 Edge CDN 快取保護下極速回應。
+
+---
+
 ## [2026-08-23] WebMCP AI Agent 工具支援
 
 - 在全站 layout 加入 WebMCP client provider；支援的 Chrome 會透過 `document.modelContext.registerTool()` 註冊網站工具，不支援的瀏覽器則維持原有功能並自動降級。

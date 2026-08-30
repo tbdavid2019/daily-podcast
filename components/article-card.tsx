@@ -125,7 +125,6 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
               src={audio}
               preload="metadata"
               playsInline
-              crossOrigin="anonymous"
               tabIndex={article.updatedAt || -1}
             />
           </AudioPlayer>
