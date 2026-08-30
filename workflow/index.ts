@@ -724,9 +724,7 @@ ${fullContentString}
     // Save the final script and the compact Reddit index together.
     await step.do('save script to kv', IO_STEP_CONFIG, async () => {
       await Promise.all([
-        kvPut(scriptKey, JSON.stringify(scriptData), {
-          expirationTtl: 60 * 60 * 24 * 180, // Keep for 180 days (6 months)
-        }),
+        kvPut(scriptKey, JSON.stringify(scriptData)), // Permanent storage, never expires
         kvPut(redditDedupeKey, JSON.stringify(nextRedditDedupeIndex), {
           expirationTtl: 60 * 60 * 24 * 14,
         }),

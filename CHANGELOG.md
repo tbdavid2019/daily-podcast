@@ -18,10 +18,10 @@
 - **重構 Sitemap 動態過濾機制（解決 404 虛假死連結問題）**：
   - 原先 `app/sitemap.ts` 盲目產生 365 天日期網址，導致搜尋引擎與爬蟲爬取到已過期不存在的 404 頁面，傷害 SEO。
   - 重構 `app/sitemap.ts`，使其動態透過 `getArticleByDate` 驗證，**僅輸出實際存在於 KV 的集數網址**，達成 100% 有效連結，徹底杜絕 404 死連結。
-- **調整保留天數與延長 KV 腳本保存期限**：
-  - 將網站首頁分頁保留天數 `keepDays` 由 30 天擴增至 60 天（共 10 頁，每頁 6 篇，由分頁機制保護）。
-  - 將 Podcast RSS Feed 保留天數 `rssDays` 由 10 天擴增至 90 天（一季約 90 集），提供完整收聽歷史且在 10 分鐘 Edge CDN 快取保護下極速回應。
-  - 修正 `workflow/index.ts` 中 `save script to kv` 的 `expirationTtl`（原先設定為 7 天過期，導致歷史節目在 7 天後被 Cloudflare KV 自動清除），延長為 180 天（半年），並同步更新線上既有集數之 TTL。
+- **取消腳本過期限制，改為 KV 永久保存**：
+  - 將網站首頁分頁保留天數 `keepDays` 設定為 60 天（共 10 頁，每頁 6 篇，由分頁機制保護）。
+  - 將 Podcast RSS Feed 保留天數 `rssDays` 設定為 90 天（一季約 90 集），提供完整收聽歷史且在 10 分鐘 Edge CDN 快取保護下極速回應。
+  - 徹底移除 `workflow/index.ts` 中 `save script to kv` 的 `expirationTtl`（原先設定為 7 天過期，導致歷史節目在 7 天後被 Cloudflare KV 自動清除），改為**永久保存（無過期時間）**，並同步清除線上既有集數的 TTL 限制，實現永久典藏。
 
 ---
 
