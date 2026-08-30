@@ -725,7 +725,7 @@ ${fullContentString}
     await step.do('save script to kv', IO_STEP_CONFIG, async () => {
       await Promise.all([
         kvPut(scriptKey, JSON.stringify(scriptData), {
-          expirationTtl: 60 * 60 * 24 * 7, // Keep for 1 week
+          expirationTtl: 60 * 60 * 24 * 180, // Keep for 180 days (6 months)
         }),
         kvPut(redditDedupeKey, JSON.stringify(nextRedditDedupeIndex), {
           expirationTtl: 60 * 60 * 24 * 14,

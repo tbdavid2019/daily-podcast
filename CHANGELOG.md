@@ -15,9 +15,10 @@
   - 補齊 CORS 標頭與 `OPTIONS` 預檢回應支援。
 - **更新 `public/_headers`**：
   - 在 `/*.mp3` 規則中補齊 `Access-Control-Allow-Origin: *` 與 `Access-Control-Expose-Headers`。
-- **調整保留天數配置**：
+- **調整保留天數與延長 KV 腳本保存期限**：
   - 將網站首頁分頁保留天數 `keepDays` 由 30 天擴增至 60 天（共 10 頁，每頁 6 篇，由分頁機制保護）。
   - 將 Podcast RSS Feed 保留天數 `rssDays` 由 10 天擴增至 90 天（一季約 90 集），提供完整收聽歷史且在 10 分鐘 Edge CDN 快取保護下極速回應。
+  - 修正 `workflow/index.ts` 中 `save script to kv` 的 `expirationTtl`（原先設定為 7 天過期，導致歷史節目在 7 天後被 Cloudflare KV 自動清除），延長為 180 天（半年），並同步更新線上既有集數之 TTL。
 
 ---
 
