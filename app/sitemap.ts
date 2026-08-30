@@ -1,17 +1,25 @@
 import type { MetadataRoute } from 'next'
 import process from 'node:process'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { sitemapDays } from '@/config'
+import { getArticleByDate } from '@/lib/content'
 import { getPastDays } from '@/lib/utils'
 
-export const revalidate = 86400
+export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ''
-  const posts = getPastDays(sitemapDays, 8).map((day) => {
-    return {
-      date: day,
-    }
-  })
+  const { env } = await getCloudflareContext({ async: true })
+  const candidateDays = getPastDays(sitemapDays, 8)
+
+  const existingDays = (
+    await Promise.all(
+      candidateDays.map(async (day) => {
+        const article = await getArticleByDate(env, day, 'hacker-news')
+        return article ? day : null
+      }),
+    )
+  ).filter(Boolean) as string[]
 
   return [
     {
@@ -20,9 +28,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily',
       priority: 1,
     },
-    ...posts.map(post => ({
-      url: `${baseUrl}/post/${post.date}`,
-      lastModified: new Date(post.date),
+    ...existingDays.map(day => ({
+      url: `${baseUrl}/post/${day}`,
+      lastModified: new Date(day),
       changeFrequency: 'weekly' as const,
       priority: 0.8,
     })),

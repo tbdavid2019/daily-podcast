@@ -12,5 +12,5 @@ export const podcastOwner = {
 export const keepDays = 60
 
 // Sitemap 和 RSS 可以保留更長時間的內容
-export const sitemapDays = 365 // Sitemap 顯示一年
+export const sitemapDays = 90 // Sitemap 顯示最近 90 天
 export const rssDays = 90 // RSS 顯示最近 90 天
