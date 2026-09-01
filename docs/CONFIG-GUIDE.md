@@ -143,11 +143,33 @@ export const rssDays = 30 // 一個月 RSS
 | `WORKER_ENV`                | 執行環境         | `production`                                      | ✅   |
 | `HACKER_NEWS_WORKER_URL`    | 後端 Worker 網域 | `https://your-worker.workers.dev` ⚠️ **不要公開** | ✅   |
 | `HACKER_NEWS_R2_BUCKET_URL` | R2 公開 URL      | `https://podcast.david888.com`                    | ✅   |
-| `OPENAI_API_SECRET`         | OpenAI API 金鑰（Cloudflare Secret） | `sk-...`                              | ✅   |
-| `OPENAI_BASE_URL`           | OpenAI API 端點  | `https://api.openai.com/v1`                       | ✅   |
-| `OPENAI_MODEL`              | OpenAI 模型      | `gpt-4o-mini`                                     | ✅   |
+| `LLM_PRIMARY_API_KEY`       | 主要 LLM API 金鑰（Cloudflare Secret） | `sk-...`                       | ✅   |
+| `LLM_PRIMARY_BASE_URL`      | 主要 LLM API 端點 | `https://api.openai.com/v1`                       | ✅   |
+| `LLM_PRIMARY_MODEL`         | 主要 LLM 模型 | `gpt-4o-mini`                                     | ✅   |
+| `LLM_PRIMARY_THINKING_MODEL` | 主要 LLM 思考模型 | `gpt-4o-mini`                                  | ⭕   |
 | `TTS_PROVIDER`              | 語音合成提供者   | `edge` / `openai` / `minimax`                     | ⭕   |
 | `AUDIO_SPEED`               | TTS 語速倍數     | `1.3`（快 30%）範圍：`0.25`-`4.0`                 | ⭕   |
+
+### LLM fallback 設定
+
+LLM 文字產生支援 primary 加上最多 10 組 fallback。每一個 AI 操作都會依序嘗試 primary、`LLM_FALLBACK_1`、`LLM_FALLBACK_2`……，成功後停止；因此主要金鑰失效或某個端點回傳 `400 Bad Request` 時，Workflow 可以繼續產生內容。
+
+每組 fallback 使用以下變數：
+
+```text
+LLM_FALLBACK_1_API_KEY          # Cloudflare Secret，必填
+LLM_FALLBACK_1_BASE_URL         # 選填，省略時沿用 LLM_PRIMARY_BASE_URL
+LLM_FALLBACK_1_MODEL            # 選填，省略時沿用 LLM_PRIMARY_MODEL
+LLM_FALLBACK_1_THINKING_MODEL   # 選填，省略時沿用該組 MODEL
+```
+
+將 `1` 改成 `2` 到 `10` 即可加入更多組。金鑰請使用 Secret，不要放入已提交的 `wrangler.jsonc`：
+
+```bash
+pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_1_API_KEY
+```
+
+舊版的 `OPENAI_API_SECRET`、`OPENAI_API_KEY`、`LLM_FALLBACK_1_API_SECRET` 與 `LLM_FALLBACK_1_KEY` 仍可相容讀取。這個 fallback 只涵蓋摘要、腳本、標題、文章與 intro 的文字 LLM；TTS 仍依 `TTS_PROVIDER` 的設定執行。
 
 ### Web 應用環境變數
 

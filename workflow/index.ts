@@ -1,7 +1,7 @@
+import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { StoryContentCheckpoint } from './efficiency'
 import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
-import { createOpenAI } from '@ai-sdk/openai'
 import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
@@ -27,15 +27,16 @@ import {
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateRedditDedupeIndex,
 } from './efficiency'
+import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
 import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
-  OPENAI_BASE_URL: string
+  OPENAI_BASE_URL?: string
   OPENAI_API_KEY?: string
   OPENAI_API_SECRET?: string
-  OPENAI_MODEL: string
+  OPENAI_MODEL?: string
   OPENAI_THINKING_MODEL?: string
   OPENAI_MAX_TOKENS?: string
   OPENAI_MAX_COMPLETION_TOKENS?: string
@@ -249,15 +250,14 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return { scriptKey, skipped: true }
     }
 
-    const openai = createOpenAI({
-      name: 'openai',
-      baseURL: this.env.OPENAI_BASE_URL!,
-      apiKey: this.env.OPENAI_API_SECRET || this.env.OPENAI_API_KEY || '',
-      headers: {
-        Authorization: `Bearer ${this.env.OPENAI_API_SECRET || this.env.OPENAI_API_KEY!}`,
-      },
-    })
-    const modelName = (this.env.OPENAI_MODEL || '').toLowerCase()
+    const llmClients = createLlmClients(this.env)
+    const runLlm = <T>(
+      operation: string,
+      kind: 'standard' | 'thinking',
+      run: (model: LanguageModel) => Promise<T>,
+    ) => runWithLlmFallback(llmClients, operation, client => run(getLlmModel(client, kind)))
+
+    const modelName = (llmClients[0]?.model || '').toLowerCase()
     const isGeminiModel = modelName.includes('gemini')
 
     const defaultMaxTokens = isGeminiModel ? 8192 : 4096
@@ -507,13 +507,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         `<story id="${story.id}" title="${story.title}" number="${index + 1}">\n${story.content}\n</story>`,
       ).join('\n\n---\n\n')
 
-      const { text, usage, finishReason } = await generateText({
-        model: openai(this.env.OPENAI_MODEL!),
+      const { text, usage, finishReason } = await runLlm('summarize all stories', 'standard', model => generateText({
+        model,
         system: `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
         prompt: combinedContent,
         maxTokens: summarizationMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
-      })
+      }))
 
       console.info('batch summarize all stories success', { usage, finishReason, responseLength: text.length })
 
@@ -609,8 +609,8 @@ ${fullContentString}
 </raw-story-content>
 `
 
-      const { object, usage, finishReason } = await generateObject({
-        model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
+      const { object, usage, finishReason } = await runLlm('generate podcast script', 'thinking', model => generateObject({
+        model,
         system: podcastScriptPrompt,
         prompt: enhancedPrompt,
         maxTokens: scriptMaxTokens,
@@ -622,7 +622,7 @@ ${fullContentString}
             text: z.string().min(1),
           })).min(1),
         }),
-      })
+      }))
 
       console.info('generate podcast script success', {
         usage,
@@ -656,12 +656,12 @@ ${fullContentString}
     if (!podcastScript.title || podcastScript.title.length < 5) {
       console.info('Title missing or too short, triggering dedicated beautification step')
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
-        const { text } = await generateText({
-          model: openai(this.env.OPENAI_MODEL!),
+        const { text } = await runLlm('beautify missing title', 'standard', model => generateText({
+          model,
           system: `你是 ${podcastTitle} 的總編輯。請根據提供的故事摘要，產生一個具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或災難性結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
           prompt: `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
           maxRetries: AI_SDK_MAX_RETRIES,
-        })
+        }))
         return text.trim().replace(/^"|"$/g, '')
       })
     }
@@ -672,13 +672,13 @@ ${fullContentString}
 
     const blogContent = await step.do('create blog content', AI_STEP_CONFIG, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
-      const { text, usage, finishReason } = await generateText({
-        model: openai(this.env.OPENAI_THINKING_MODEL || this.env.OPENAI_MODEL!),
+      const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => generateText({
+        model,
         system: summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
         maxTokens: blogMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
-      })
+      }))
       console.info(`create blog content success`, { usage, finishReason })
       return text
     })
@@ -691,12 +691,12 @@ ${fullContentString}
       const podcastDialogueLines = podcastScript.dialogue.map(line => `${line.speaker}：${line.text}`)
       const podcastContent = podcastDialogueLines.join('\n')
 
-      const { text, usage, finishReason } = await generateText({
-        model: openai(this.env.OPENAI_MODEL!),
+      const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({
+        model,
         system: introPrompt,
         prompt: podcastContent,
         maxRetries: AI_SDK_MAX_RETRIES,
-      })
+      }))
       console.info(`create intro content success`, { usage, finishReason })
       return text
     })

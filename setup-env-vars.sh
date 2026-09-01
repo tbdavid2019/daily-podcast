@@ -18,24 +18,24 @@ echo "# Worker 環境變數設定" > $WORKER_ENV_FILE
 echo "📡 設定 Worker 應用環境變數..."
 echo ""
 
-echo "1. 設定 OpenAI API Key (必需)"
-echo "   請前往 https://platform.openai.com/ 取得您的 API Key"
-read -p "   輸入您的 OpenAI API Key: " openai_key
-echo "OPENAI_API_SECRET=\"$openai_key\"" >> $WORKER_ENV_FILE
+echo "1. 設定主要 LLM API Key (必需)"
+echo "   請輸入目前主要 LLM 供應商的 API Key"
+read -p "   輸入主要 LLM API Key: " openai_key
+echo "LLM_PRIMARY_API_KEY=\"$openai_key\"" >> $WORKER_ENV_FILE
 
 echo ""
-echo "2. 設定 OpenAI 基礎 URL"
+echo "2. 設定主要 LLM 基礎 URL"
 echo "   通常為: https://api.openai.com/v1"
-read -p "   輸入 OpenAI 基礎 URL [https://api.openai.com/v1]: " openai_base
+read -p "   輸入主要 LLM 基礎 URL [https://api.openai.com/v1]: " openai_base
 openai_base=${openai_base:-"https://api.openai.com/v1"}
-echo "OPENAI_BASE_URL=\"$openai_base\"" >> $WORKER_ENV_FILE
+echo "LLM_PRIMARY_BASE_URL=\"$openai_base\"" >> $WORKER_ENV_FILE
 
 echo ""
-echo "3. 設定 OpenAI 模型"
+echo "3. 設定主要 LLM 模型"
 echo "   建議使用: gpt-4o-mini (性價比高)"
-read -p "   輸入 OpenAI 模型 [gpt-4o-mini]: " openai_model
+read -p "   輸入主要 LLM 模型 [gpt-4o-mini]: " openai_model
 openai_model=${openai_model:-"gpt-4o-mini"}
-echo "OPENAI_MODEL=\"$openai_model\"" >> $WORKER_ENV_FILE
+echo "LLM_PRIMARY_MODEL=\"$openai_model\"" >> $WORKER_ENV_FILE
 
 echo ""
 echo "4. 設定工作環境"
@@ -97,15 +97,49 @@ echo ""
 
 # 設定其他可選參數
 echo ""
-echo "設定其他 OpenAI 參數..."
+echo "設定其他 LLM 參數..."
 read -p "輸入思考模型 (可選，預設 gpt-4o): " thinking_model
 if [[ -n "$thinking_model" ]]; then
-    echo "OPENAI_THINKING_MODEL=\"$thinking_model\"" >> $WORKER_ENV_FILE
+        echo "LLM_PRIMARY_THINKING_MODEL=\"$thinking_model\"" >> $WORKER_ENV_FILE
 fi
 
 read -p "輸入最大 token 數 (可選，預設 4096): " max_tokens
 max_tokens=${max_tokens:-"4096"}
 echo "OPENAI_MAX_TOKENS=\"$max_tokens\"" >> $WORKER_ENV_FILE
+
+echo ""
+echo "設定 LLM fallback（可選，最多 10 組）..."
+read -p "要設定幾組 fallback？[0]: " llm_fallback_count
+llm_fallback_count=${llm_fallback_count:-"0"}
+if ! [[ "$llm_fallback_count" =~ ^[0-9]+$ ]] || (( llm_fallback_count > 10 )); then
+    echo "fallback 組數必須是 0 到 10，將使用 0 組"
+    llm_fallback_count=0
+fi
+
+for ((fallback_index = 1; fallback_index <= llm_fallback_count; fallback_index++)); do
+    echo ""
+    echo "LLM fallback #$fallback_index"
+    read -s -p "輸入 fallback #$fallback_index API Secret: " fallback_api_secret
+    echo ""
+    if [[ -z "$fallback_api_secret" ]]; then
+        echo "未輸入金鑰，跳過 fallback #$fallback_index"
+        continue
+    fi
+        echo "LLM_FALLBACK_${fallback_index}_API_KEY=\"$fallback_api_secret\"" >> $WORKER_ENV_FILE
+
+    read -p "輸入 fallback #$fallback_index Base URL [$openai_base]: " fallback_base_url
+    fallback_base_url=${fallback_base_url:-"$openai_base"}
+    echo "LLM_FALLBACK_${fallback_index}_BASE_URL=\"$fallback_base_url\"" >> $WORKER_ENV_FILE
+
+    read -p "輸入 fallback #$fallback_index Model [$openai_model]: " fallback_model
+    fallback_model=${fallback_model:-"$openai_model"}
+    echo "LLM_FALLBACK_${fallback_index}_MODEL=\"$fallback_model\"" >> $WORKER_ENV_FILE
+
+    read -p "輸入 fallback #$fallback_index Thinking Model（可選，沿用 Model）: " fallback_thinking_model
+    if [[ -n "$fallback_thinking_model" ]]; then
+        echo "LLM_FALLBACK_${fallback_index}_THINKING_MODEL=\"$fallback_thinking_model\"" >> $WORKER_ENV_FILE
+    fi
+done
 
 echo ""
 echo "📝 環境變數已寫入檔案："

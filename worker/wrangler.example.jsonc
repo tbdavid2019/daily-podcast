@@ -35,12 +35,19 @@
 
     // --- Other Services ---
     "HACKER_NEWS_WORKER_URL": "https://podcast.yourdomain.com",
-    // Store OPENAI_API_SECRET with `wrangler secret put --cwd worker OPENAI_API_SECRET`.
-    "OPENAI_BASE_URL": "https://api.openai.com/v1", // or gemini proxy
+    // Store LLM_PRIMARY_API_KEY with `wrangler secret put --cwd worker LLM_PRIMARY_API_KEY`.
+    "LLM_PRIMARY_BASE_URL": "https://api.openai.com/v1", // or Gemini proxy
     "OPENAI_MAX_COMPLETION_TOKENS": "1000000",
     "OPENAI_MAX_TOKENS": "1000000",
-    "OPENAI_MODEL": "gpt-4o",
-    "OPENAI_THINKING_MODEL": "gpt-4o",
+    "LLM_PRIMARY_MODEL": "gpt-4o",
+    "LLM_PRIMARY_THINKING_MODEL": "gpt-4o",
+
+    // Optional LLM fallbacks. Store each API secret with Wrangler, for example:
+    // pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_1_API_KEY
+    // Slots 1-10 are supported. Endpoint/model values inherit from primary when omitted.
+    "LLM_FALLBACK_1_BASE_URL": "https://api.openai.com/v1",
+    "LLM_FALLBACK_1_MODEL": "gpt-4o-mini",
+    "LLM_FALLBACK_1_THINKING_MODEL": "gpt-4o-mini",
 
     // OpenAI TTS Settings
     // Store OPENAI_TTS_API_SECRET with `wrangler secret put --cwd worker OPENAI_TTS_API_SECRET`.
