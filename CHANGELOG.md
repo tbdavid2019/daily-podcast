@@ -2,6 +2,16 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-09-01] 單集頁面頂部固定導航列優化 (Article Card Sticky Header Enhancement)
+
+- **整合標題、播放器與分頁列為統一頂部固定容器**：
+  - 重構 `components/article-card.tsx`，將**文章標題（`CardHeader`）**、**音訊播放器（`AudioPlayer` + 分享按鈕）**與**分頁切換列（`TabsList`：總結 / Podcast / 參考）**共同封裝進同一個頂部固定區塊（`sticky top-0 z-30 bg-white/90 backdrop-blur-md`）。
+  - 修復以往向下滾動長篇 Podcast 逐字稿或總結時，標題與 Tab 切換按鈕會被捲出可視範圍、只剩下播放器的問題。
+  - 滾動瀏覽內容時，使用者可隨時看見當前集數標題、控制播放進度，並直接切換「總結 / Podcast / 參考」分頁，無須再手動滑回頁面頂部。
+  - 在固定容器底部增加微細分隔線（`border-b border-zinc-200/30`），確保下方文字內容滾動穿過時視覺乾淨且層次分明。
+
+---
+
 ## [2026-08-30] 修復手機版與行動端音訊無法播放問題 (Mobile Audio Playback Fix)
 
 - **移除 `<audio>` 標籤 `crossOrigin="anonymous"` 限制**：
