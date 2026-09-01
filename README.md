@@ -121,7 +121,7 @@ WebMCP 目前仍是實驗性功能。本機測試可在 Chrome 開啟 `chrome://
 
 ### 1. 準備工作
 - 安裝 Node.js 24（專案以 `.node-version` 固定版本；Wrangler 需要 Node.js 22+）和 pnpm
-- 準備 OpenAI API Key
+- 準備任一支援 OpenAI-compatible API 的 LLM 金鑰（例如 Gemini 或 Groq）
 - Cloudflare 帳號 (需開通 Workers 與 R2)
 
 ### 2. 下載與安裝
@@ -143,8 +143,40 @@ pnpm install
 
 ```bash
 cp worker/wrangler.example.jsonc worker/wrangler.jsonc
-# 然後編輯 worker/wrangler.jsonc 填入您的 API Key
+# 然後編輯 worker/wrangler.jsonc 設定 endpoint 與 model
 ```
+
+### 3.1 LLM 主要與備援設定
+
+文字 LLM 使用統一的 primary/fallback 命名。每個 AI 操作會依序嘗試主要設定、fallback 1、fallback 2……；成功後停止。最多支援 10 組 fallback。
+
+在 `worker/wrangler.jsonc` 的 `vars` 設定 endpoint 與 model：
+
+```jsonc
+{
+  "LLM_PRIMARY_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "LLM_PRIMARY_MODEL": "models/gemini-flash-latest",
+  "LLM_PRIMARY_THINKING_MODEL": "models/gemini-flash-latest",
+
+  "LLM_FALLBACK_1_BASE_URL": "https://api.groq.com/openai/v1/",
+  "LLM_FALLBACK_1_MODEL": "openai/gpt-oss-120b",
+  "LLM_FALLBACK_1_THINKING_MODEL": "openai/gpt-oss-120b",
+
+  "LLM_FALLBACK_2_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "LLM_FALLBACK_2_MODEL": "models/gemini-flash-latest",
+  "LLM_FALLBACK_2_THINKING_MODEL": "models/gemini-flash-latest"
+}
+```
+
+API 金鑰必須使用 Cloudflare Secret，不要寫進 `wrangler.jsonc`：
+
+```bash
+pnpm exec wrangler secret put --cwd worker LLM_PRIMARY_API_KEY
+pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_1_API_KEY
+pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_2_API_KEY
+```
+
+`LLM_PRIMARY_THINKING_MODEL` 與各 fallback 的 thinking model 可省略，省略時會沿用該組一般 model。舊版 `OPENAI_API_SECRET`、`OPENAI_API_KEY`、`OPENAI_BASE_URL` 與 `OPENAI_MODEL` 仍可相容讀取，但新部署建議使用上述統一命名。`API_SECRET_TOKEN` 是 `/workflow` 的存取驗證 Token，與 LLM 金鑰不同。
 
 ### 4. 部署到 Cloudflare
 設定完成後，只需兩行指令即可部署：
