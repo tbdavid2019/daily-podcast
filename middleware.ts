@@ -2,8 +2,16 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { HOMEPAGE_LINK_HEADER } from '@/lib/discovery'
 
+const ROUTER_HEADERS = ['rsc', 'next-router-state-tree', 'next-router-prefetch', 'next-router-segment-prefetch']
+
 function wantsMarkdown(request: NextRequest) {
+  if (request.nextUrl.searchParams.has('_rsc') || ROUTER_HEADERS.some(h => request.headers.has(h))) {
+    return false
+  }
   const accept = request.headers.get('accept') || ''
+  if (/text\/markdown\s*;\s*q=0(?:\.0+)?(?=[,;]|$)/i.test(accept)) {
+    return false
+  }
   return accept.includes('text/markdown')
 }
 

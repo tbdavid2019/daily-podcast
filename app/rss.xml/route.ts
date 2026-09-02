@@ -19,6 +19,30 @@ function ensureDescriptionLength(value: string) {
   return `${value.slice(0, MAX_DESCRIPTION_LENGTH - 3).trimEnd()}...`
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function sanitizeUrl(url: string | undefined | null): string {
+  if (!url)
+    return ''
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return escapeHtml(parsed.href)
+    }
+  }
+  catch {
+    // invalid URL
+  }
+  return ''
+}
+
 export const revalidate = 600
 
 const rssHeaders = {
@@ -88,8 +112,14 @@ export async function GET() {
     const plainDescription = `${webLinkText}\n\n${introText}`
     const description = ensureDescriptionLength(plainDescription)
 
-    const introHtml = post.introContent ? `<p>${post.introContent}</p>` : ''
-    const links = post.stories.map((s: any) => `<li><a href="${s.hackerNewsUrl || s.url || ''}">${s.title || ''}</a></li>`).join('')
+    const introHtml = post.introContent ? `<p>${escapeHtml(post.introContent)}</p>` : ''
+    const links = post.stories
+      .map((s: any) => {
+        const targetUrl = sanitizeUrl(s.hackerNewsUrl || s.url)
+        const title = escapeHtml(s.title || '')
+        return targetUrl ? `<li><a href="${targetUrl}">${title}</a></li>` : `<li>${title}</li>`
+      })
+      .join('')
     const linkContent = `<p><b>相關連結：</b></p><ul>${links}</ul>`
     const finalContent = `<div>${webLinkHtml}${introHtml}<hr/>${linkContent}</div>`
     const updatedAt = getArticleTimestamp(post.date, post.updatedAt)

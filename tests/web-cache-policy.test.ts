@@ -63,14 +63,13 @@ describe('Web page cache policy', () => {
     assert.equal(response.headers.get('Cloudflare-CDN-Cache-Control'), PRIVATE_CACHE_CONTROL)
   })
 
-  it('caches the Markdown representation at the Worker boundary with Accept variance', () => {
+  it('isolates negotiated Markdown representation from shared Edge cache to prevent cache collapsing', () => {
     const upstream = new Response('# Podcast', {
       headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
     })
     const response = applyWebPageCacheHeaders(request('GET', { Accept: 'text/markdown' }), upstream)
 
-    assert.equal(response.headers.get('Cloudflare-CDN-Cache-Control'), EDGE_CACHE_CONTROL)
-    assert.match(response.headers.get('Vary') ?? '', /(?:^|, )Accept(?:,|$)/i)
+    assert.equal(response.headers.get('Cloudflare-CDN-Cache-Control'), 'private, no-store')
   })
 
   it('does not cache error pages while content may still be generated', () => {

@@ -35,26 +35,40 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
   const dateSet = new Set<string>()
 
   // 1. 抓取所有現代 script: 格式的歷史集數（全量無上限、永久保存）
-  const scriptList = await env.HACKER_NEWS_KV.list({ prefix: `script:${runEnv}:hacker-news:` })
-  for (const key of scriptList.keys) {
-    const date = key.name.split(':').pop()
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      dateSet.add(date)
+  let scriptCursor: string | undefined
+  do {
+    const scriptList = await env.HACKER_NEWS_KV.list({
+      prefix: `script:${runEnv}:hacker-news:`,
+      cursor: scriptCursor,
+    })
+    for (const key of scriptList.keys) {
+      const date = key.name.split(':').pop()
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        dateSet.add(date)
+      }
     }
-  }
+    scriptCursor = scriptList.list_complete ? undefined : scriptList.cursor
+  } while (scriptCursor)
 
   // 2. 抓取所有舊版 content: 格式的歷史集數（全量無上限、永久保存）
-  const contentList = await env.HACKER_NEWS_KV.list({ prefix: `content:${runEnv}:hacker-news:` })
-  for (const key of contentList.keys) {
-    if (key.name.includes(':story-contents:')) {
-      continue
+  let contentCursor: string | undefined
+  do {
+    const contentList = await env.HACKER_NEWS_KV.list({
+      prefix: `content:${runEnv}:hacker-news:`,
+      cursor: contentCursor,
+    })
+    for (const key of contentList.keys) {
+      if (key.name.includes(':story-contents:')) {
+        continue
+      }
+      const parts = key.name.split(':')
+      const date = parts[3]
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        dateSet.add(date)
+      }
     }
-    const parts = key.name.split(':')
-    const date = parts[3]
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      dateSet.add(date)
-    }
-  }
+    contentCursor = contentList.list_complete ? undefined : contentList.cursor
+  } while (contentCursor)
 
   // 由新到舊排序所有歷史集數
   const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a))

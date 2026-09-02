@@ -27,9 +27,11 @@ export function getWebPageCachePolicy(request: CachePolicyRequest) {
   const isRead = request.method === 'GET' || request.method === 'HEAD'
   const hasRscQuery = new URL(request.url).searchParams.has('_rsc')
   const hasRouterHeader = ROUTER_REQUEST_HEADERS.some(header => request.headers.has(header))
+  const isNegotiatedMarkdown = request.headers.get('accept')?.includes('text/markdown')
+    && !new URL(request.url).pathname.startsWith('/agent-markdown')
   const isRouterRequest = hasRscQuery || hasRouterHeader
 
-  if (!isRead || isRouterRequest) {
+  if (!isRead || isRouterRequest || isNegotiatedMarkdown) {
     return {
       browser: PRIVATE_CACHE_CONTROL,
       edge: PRIVATE_CACHE_CONTROL,

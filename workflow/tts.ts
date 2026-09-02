@@ -90,10 +90,11 @@ async function geminiTTS(text: string, gender: string, env: Env) {
     },
   }
 
-  const res = await fetch(`${url}?key=${apiKey}`, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
     },
     body: JSON.stringify(payload),
   })

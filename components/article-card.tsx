@@ -20,7 +20,7 @@ const AudioPlayer = dynamic(() => import('player.style/tailwind-audio/react'), {
 })
 
 const markdownRenderer = new MarkdownIt({
-  html: true,
+  html: false,
   linkify: true,
   breaks: true,
 })
