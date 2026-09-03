@@ -12,6 +12,8 @@ import {
   buildAudioBatchKey,
   buildAudioMultipartStateKey,
   buildAudioSegmentKey,
+  buildEpisodeIndexKey,
+  buildRssCacheKey,
   buildStoryArticleCheckpointKey,
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
@@ -24,6 +26,7 @@ import {
   parseStoryContentCheckpoint,
   splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
+  updateEpisodeIndexDates,
   updateRedditDedupeIndex,
 } from '../workflow/efficiency'
 
@@ -225,5 +228,37 @@ describe('Reddit dedupe index', () => {
     }
 
     assert.deepEqual([...getExcludedRedditIds(index, '2026-07-20')], ['previous-day'])
+  })
+})
+
+describe('episode index and RSS cache keys', () => {
+  it('builds canonical episode index key and normalizes the main variant', () => {
+    assert.equal(buildEpisodeIndexKey('production', 'hacker-news'), 'index:production:hacker-news:dates')
+    assert.equal(buildEpisodeIndexKey('production', 'main'), 'index:production:hacker-news:dates')
+    assert.equal(buildEpisodeIndexKey('staging', 'dev-to'), 'index:staging:dev-to:dates')
+  })
+
+  it('builds canonical RSS cache key and normalizes the main variant', () => {
+    assert.equal(buildRssCacheKey('production', 'hacker-news'), 'cache:production:hacker-news:rss.xml')
+    assert.equal(buildRssCacheKey('production', 'main'), 'cache:production:hacker-news:rss.xml')
+  })
+
+  it('updates episode index dates in descending order and avoids duplicate entries', () => {
+    const initial = updateEpisodeIndexDates(null, '2026-09-01')
+    assert.deepEqual(initial, ['2026-09-01'])
+
+    const withNewer = updateEpisodeIndexDates(initial, '2026-09-03')
+    assert.deepEqual(withNewer, ['2026-09-03', '2026-09-01'])
+
+    const withMiddle = updateEpisodeIndexDates(withNewer, '2026-09-02')
+    assert.deepEqual(withMiddle, ['2026-09-03', '2026-09-02', '2026-09-01'])
+
+    const withDuplicate = updateEpisodeIndexDates(withMiddle, '2026-09-02')
+    assert.deepEqual(withDuplicate, ['2026-09-03', '2026-09-02', '2026-09-01'])
+  })
+
+  it('ignores malformed date strings in updateEpisodeIndexDates', () => {
+    const updated = updateEpisodeIndexDates(['2026-09-01', 'not-a-date'], 'invalid')
+    assert.deepEqual(updated, ['2026-09-01'])
   })
 })

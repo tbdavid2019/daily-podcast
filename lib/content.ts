@@ -1,6 +1,13 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { cache } from 'react'
 import { mapScriptToArticle } from '@/lib/utils'
+import {
+  buildEpisodeIndexKey,
+  buildRssCacheKey,
+  updateEpisodeIndexDates,
+} from '@/workflow/efficiency'
+
+export { buildEpisodeIndexKey, buildRssCacheKey }
 
 interface ContentEnv {
   HACKER_NEWS_KV: KVNamespace
@@ -9,14 +16,15 @@ interface ContentEnv {
 
 export async function getArticleByDate(env: ContentEnv, date: string, variant = 'hacker-news') {
   const runEnv = env.NEXTJS_ENV || 'production'
-  const scriptKey = `script:${runEnv}:${variant}:${date}`
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const scriptKey = `script:${runEnv}:${normalizedVariant}:${date}`
   const scriptData = await env.HACKER_NEWS_KV.get(scriptKey, 'json')
 
   if (scriptData) {
-    return mapScriptToArticle(scriptData, runEnv, variant)
+    return mapScriptToArticle(scriptData, runEnv, normalizedVariant)
   }
 
-  if (variant !== 'hacker-news') {
+  if (normalizedVariant !== 'hacker-news') {
     return null
   }
 
@@ -28,17 +36,29 @@ export const getRequestArticleByDate = cache(async (date: string, variant = 'hac
   return getArticleByDate(env, date, variant)
 })
 
-export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6) {
-  const variant = 'hacker-news'
+export async function getEpisodeDates(
+  env: ContentEnv,
+  variant = 'hacker-news',
+  forceRefresh = false,
+): Promise<string[]> {
   const runEnv = env.NEXTJS_ENV || 'production'
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const indexKey = buildEpisodeIndexKey(runEnv, normalizedVariant)
 
+  if (!forceRefresh) {
+    const cachedDates = await env.HACKER_NEWS_KV.get<string[]>(indexKey, 'json')
+    if (Array.isArray(cachedDates) && cachedDates.length > 0) {
+      return cachedDates
+    }
+  }
+
+  // Fallback: 若尚無索引，掃描一次 KV 建立歷史清單並持久化儲存
   const dateSet = new Set<string>()
 
-  // 1. 抓取所有現代 script: 格式的歷史集數（全量無上限、永久保存）
   let scriptCursor: string | undefined
   do {
     const scriptList = await env.HACKER_NEWS_KV.list({
-      prefix: `script:${runEnv}:hacker-news:`,
+      prefix: `script:${runEnv}:${normalizedVariant}:`,
       cursor: scriptCursor,
     })
     for (const key of scriptList.keys) {
@@ -50,28 +70,67 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
     scriptCursor = scriptList.list_complete ? undefined : scriptList.cursor
   } while (scriptCursor)
 
-  // 2. 抓取所有舊版 content: 格式的歷史集數（全量無上限、永久保存）
-  let contentCursor: string | undefined
-  do {
-    const contentList = await env.HACKER_NEWS_KV.list({
-      prefix: `content:${runEnv}:hacker-news:`,
-      cursor: contentCursor,
-    })
-    for (const key of contentList.keys) {
-      if (key.name.includes(':story-contents:')) {
-        continue
+  if (normalizedVariant === 'hacker-news') {
+    let contentCursor: string | undefined
+    do {
+      const contentList = await env.HACKER_NEWS_KV.list({
+        prefix: `content:${runEnv}:hacker-news:`,
+        cursor: contentCursor,
+      })
+      for (const key of contentList.keys) {
+        if (key.name.includes(':story-contents:')) {
+          continue
+        }
+        const parts = key.name.split(':')
+        const date = parts[3]
+        if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          dateSet.add(date)
+        }
       }
-      const parts = key.name.split(':')
-      const date = parts[3]
-      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        dateSet.add(date)
-      }
-    }
-    contentCursor = contentList.list_complete ? undefined : contentList.cursor
-  } while (contentCursor)
+      contentCursor = contentList.list_complete ? undefined : contentList.cursor
+    } while (contentCursor)
+  }
 
-  // 由新到舊排序所有歷史集數
   const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a))
+
+  if (sortedDates.length > 0) {
+    try {
+      await env.HACKER_NEWS_KV.put(indexKey, JSON.stringify(sortedDates))
+    }
+    catch (error) {
+      console.warn('Failed to persist episode date index', error)
+    }
+  }
+
+  return sortedDates
+}
+
+export async function appendEpisodeDateToIndex(
+  env: ContentEnv,
+  date: string,
+  variant = 'hacker-news',
+): Promise<string[]> {
+  const runEnv = env.NEXTJS_ENV || 'production'
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const indexKey = buildEpisodeIndexKey(runEnv, normalizedVariant)
+  const existing = await env.HACKER_NEWS_KV.get<string[]>(indexKey, 'json')
+  const nextDates = updateEpisodeIndexDates(existing, date)
+
+  if (!existing || nextDates.length !== existing.length) {
+    try {
+      await env.HACKER_NEWS_KV.put(indexKey, JSON.stringify(nextDates))
+    }
+    catch (error) {
+      console.warn('Failed to append episode date to index', error)
+    }
+  }
+
+  return nextDates
+}
+
+export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6) {
+  const variant = 'hacker-news'
+  const sortedDates = await getEpisodeDates(env, variant)
   const totalItems = sortedDates.length
   const totalPages = Math.ceil(totalItems / pageSize) || 1
   const startIndex = (currentPage - 1) * pageSize

@@ -305,3 +305,31 @@ export function isAudioCheckpointForInstance(
 ): boolean {
   return object?.customMetadata?.workflowInstanceId === instanceId
 }
+
+export function buildEpisodeIndexKey(runEnv: string, variant = 'hacker-news'): string {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  return `index:${runEnv}:${normalizedVariant}:dates`
+}
+
+export function buildRssCacheKey(runEnv: string, variant = 'hacker-news'): string {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  return `cache:${runEnv}:${normalizedVariant}:rss.xml`
+}
+
+export function updateEpisodeIndexDates(
+  existingDates: readonly string[] | null | undefined,
+  newDate: string,
+): string[] {
+  const validDates = new Set<string>()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    validDates.add(newDate)
+  }
+  if (Array.isArray(existingDates)) {
+    for (const d of existingDates) {
+      if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        validDates.add(d)
+      }
+    }
+  }
+  return Array.from(validDates).sort((a, b) => b.localeCompare(a))
+}

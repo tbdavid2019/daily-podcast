@@ -3,9 +3,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
 import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
-import { getArticleByDate } from '@/lib/content'
+import { buildRssCacheKey, getArticleByDate, getEpisodeDates } from '@/lib/content'
 import { getBaseUrl } from '@/lib/discovery'
-import { getArticleTimestamp, getPastDays } from '@/lib/utils'
+import { getArticleTimestamp } from '@/lib/utils'
 import { EDGE_CACHE_CONTROL } from '@/lib/web-cache-policy'
 
 // YouTube trims episode descriptions above ~4000 chars; keep buffer to avoid warnings.
@@ -61,7 +61,24 @@ export async function OPTIONS() {
   })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const force = url.searchParams.get('force') === 'true'
+
+  const { env } = await getCloudflareContext({ async: true })
+  const runEnv = env.NEXTJS_ENV || 'production'
+  const variant = 'hacker-news'
+  const rssCacheKey = buildRssCacheKey(runEnv, variant)
+
+  if (!force) {
+    const cachedXml = await env.HACKER_NEWS_KV.get(rssCacheKey, 'text')
+    if (cachedXml) {
+      return new NextResponse(cachedXml, {
+        headers: rssHeaders,
+      })
+    }
+  }
+
   const baseUrl = getBaseUrl()
 
   // 如果沒有快取，產生新的回應
@@ -88,12 +105,13 @@ export async function GET() {
     },
   })
 
-  const { env } = await getCloudflareContext({ async: true })
-  const variant = 'hacker-news'
-  const pastDays = getPastDays(rssDays, 8)
+  // 從 Episode Index 抓取現存歷史日期，不進行 90 天盲搜
+  const allEpisodeDates = await getEpisodeDates(env, variant)
+  const targetDates = allEpisodeDates.slice(0, rssDays)
+
   const posts = (await Promise.all(
-    pastDays.map(day => getArticleByDate(env, day, variant)),
-  )).filter(Boolean)
+    targetDates.map(day => getArticleByDate(env, day, variant)),
+  )).filter(Boolean) as Article[]
 
   for (const post of posts) {
     const audioInfo = await env.HACKER_NEWS_R2.head(post.audio)
@@ -139,7 +157,18 @@ export async function GET() {
     })
   }
 
-  const response = new NextResponse(feed.buildXml(), {
+  const xml = feed.buildXml()
+
+  try {
+    await env.HACKER_NEWS_KV.put(rssCacheKey, xml, {
+      expirationTtl: 60 * 60 * 24 * 7,
+    })
+  }
+  catch (error) {
+    console.warn('Failed to cache RSS XML in KV', error)
+  }
+
+  const response = new NextResponse(xml, {
     headers: rssHeaders,
   })
 

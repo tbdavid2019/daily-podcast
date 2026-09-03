@@ -2,6 +2,27 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-09-03] 消除 KV 讀取放大與 RSS 快取優化 (KV Read Amplification Elimination & RSS Cache)
+
+- **根除 RSS 90 天盲猜之讀取放大問題**：
+  - 解決原本在 `/rss.xml` 透過 `getPastDays(90)` 盲猜過去 90 天日期的架構瑕疵。原架構下每當 Apple Podcasts、Spotify、Feedly 等外部平台爬蟲請求一次 RSS，就會產生 90 至 180 次 KV 讀取，導致極低訪客流量下每日 KV 讀取高達 3 萬多次並逼近 10 萬次免費上限。
+  - 引入單鍵 KV 快取 `cache:{env}:{variant}:rss.xml`，所有外部請求優先讀取已產生的 XML。單次請求 KV 讀取由原本的 90~180 次驟降至 1 次（邊緣快取命中時為 0 次），讀取消耗削減達 99.4%。
+- **建立集數日期索引清單（Episode Date Index）**：
+  - 在 `workflow/efficiency.ts` 與 `lib/content.ts` 新增 `index:{env}:{variant}:dates` 規範與管理函式。
+  - 首頁分頁（`getHomepageArticles`）與 Sitemap（`app/sitemap.ts`）直接依賴此索引清單進行日期分頁與網址生成，徹底消除原本使用 `KV.list()` 全庫動態輪詢的做法，徹底解除 Cloudflare KV 每天 1,000 次 `list()` 的額度上限風險。
+  - 後端 Generation Worker（`workflow/index.ts`）在每日儲存新腳本時，自動將新集數日期去重並排序寫入索引。
+- **自動化 RSS 快取更新與失效機制**：
+  - 在 `workflow/audio.ts` 完成音訊 Multipart 上傳與 R2 最終確認後，清理步驟會自動刪除舊的 `rssCacheKey`，確保音檔發佈完成後隨後的第一次外部請求會自動生成包含最新音訊連結的 RSS Feed 並重新快取。
+  - 在工作流強制重跑（`force clear script cache`）時，亦同步清除 RSS 快取以維持資料一致性。
+- **補齊單元測試與門禁驗證**：
+  - 在 `tests/workflow-efficiency.test.ts` 新增索引 Key 正規化、RSS Cache Key 建置、日期排序與去重邏輯之單元測試。
+  - 通過 `pnpm check`（lint, typecheck, 52 workflow tests, 27 web cache tests, 4 webmcp tests, 4 pwa tests, 6 build-gate tests）與 `pnpm build`。
+- **上線部署版本**：
+  - Generation Worker (`daily-podcast-worker`)：版本 `9e2b66c0-1881-4da7-a4b3-1e47e4643fb6`。
+  - Web Worker (`daily-podcast`)：版本 `9f7cebba-a9ec-4ff3-8568-0a275aeae3da`。
+
+---
+
 ## [2026-09-01] 單集頁面頂部固定導航列優化 (Article Card Sticky Header Enhancement)
 
 - **整合標題、播放器與分頁列為統一頂部固定容器**：

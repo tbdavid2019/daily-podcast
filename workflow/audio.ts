@@ -11,6 +11,7 @@ import {
   buildAudioBatchKey,
   buildAudioMultipartStateKey,
   buildAudioSegmentKey,
+  buildRssCacheKey,
   IO_STEP_CONFIG,
   isAudioCheckpointForInstance,
   MAX_TTS_SEGMENT_CHARS,
@@ -141,6 +142,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const displayDate = userSpecifiedDate || localToday
 
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
+    const rssCacheKey = buildRssCacheKey(runEnv, variant)
 
     // Output R2 Key
     const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
@@ -356,7 +358,10 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     try {
       await step.do('cleanup audio checkpoints', IO_STEP_CONFIG, async () => {
-        await this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey])
+        await Promise.all([
+          this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey]),
+          this.env.HACKER_NEWS_KV.delete(rssCacheKey),
+        ])
       })
     }
     catch (error) {

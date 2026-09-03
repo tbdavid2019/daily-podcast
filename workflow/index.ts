@@ -10,6 +10,8 @@ import { buildChildWorkflowInstanceId, createIdempotentWorkflowInstance } from '
 import {
   AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
+  buildEpisodeIndexKey,
+  buildRssCacheKey,
   buildStoryArticleCheckpointKey,
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
@@ -25,6 +27,7 @@ import {
   parseStoryContentCheckpoint,
   splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
+  updateEpisodeIndexDates,
   updateRedditDedupeIndex,
 } from './efficiency'
 import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
@@ -192,6 +195,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const rawContentKey = `content:${runEnv}:hacker-news:${displayDate}`
     // New Script Key: script:{env}:{variant}:{date}
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
+    const episodeIndexKey = buildEpisodeIndexKey(runEnv, variant)
+    const rssCacheKey = buildRssCacheKey(runEnv, variant)
 
     const oldestRetainedCheckpointDate = getDateDaysBefore(localToday, 3)
     const oldestRetainedCheckpointPrefix = buildStoryContentCheckpointPrefix(oldestRetainedCheckpointDate)
@@ -218,6 +223,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       await step.do('force clear script cache', IO_STEP_CONFIG, async () => {
         await kvDelete(scriptKey)
         await kvDelete(rawContentKey)
+        await kvDelete(rssCacheKey)
 
         const prefix = `${rawContentKey}:story-contents:`
         let cursor: string | undefined
@@ -721,13 +727,17 @@ ${fullContentString}
       stories.filter(story => story.source === 'reddit' && story.id).map(story => story.id as string),
     )
 
-    // Save the final script and the compact Reddit index together.
+    // Save the final script, the compact Reddit index, and update the episode index.
     await step.do('save script to kv', IO_STEP_CONFIG, async () => {
+      const existingDates = await kvGet<string[]>(episodeIndexKey, 'json')
+      const nextDates = updateEpisodeIndexDates(existingDates, displayDate)
+
       await Promise.all([
         kvPut(scriptKey, JSON.stringify(scriptData)), // Permanent storage, never expires
         kvPut(redditDedupeKey, JSON.stringify(nextRedditDedupeIndex), {
           expirationTtl: 60 * 60 * 24 * 14,
         }),
+        kvPut(episodeIndexKey, JSON.stringify(nextDates)),
       ])
       console.info(`✅ Script saved to KV: ${scriptKey}`)
     })
