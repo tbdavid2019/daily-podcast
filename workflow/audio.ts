@@ -40,6 +40,8 @@ interface Env extends CloudflareEnv {
   GEMINI_TTS_API_KEY?: string
   GEMINI_TTS_API_SECRET?: string
   GEMINI_TTS_MODEL?: string
+  GEMINI_TTS_FALLBACK_API_KEY?: string
+  GEMINI_TTS_FALLBACK_API_SECRET?: string
 }
 
 const TTS_RATE_LIMIT_DELAY_MS = 400

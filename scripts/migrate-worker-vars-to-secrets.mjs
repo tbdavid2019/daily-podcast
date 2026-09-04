@@ -6,6 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 const configPath = 'worker/wrangler.jsonc'
 const sensitiveKeys = new Map([
   ['GEMINI_TTS_API_KEY', 'GEMINI_TTS_API_SECRET'],
+  ['GEMINI_TTS_FALLBACK_API_KEY', 'GEMINI_TTS_FALLBACK_API_SECRET'],
   ['OPENAI_API_KEY', 'OPENAI_API_SECRET'],
   ['OPENAI_TTS_API_KEY', 'OPENAI_TTS_API_SECRET'],
   ['TTS_API_KEY', 'TTS_API_SECRET'],

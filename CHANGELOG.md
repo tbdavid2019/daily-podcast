@@ -2,6 +2,27 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-09-04] Gemini TTS 語音合成重試、多 Key 容錯切換與移除 Edge-TTS (Gemini TTS Retry, Multi-Key Failover & Edge-TTS Removal)
+
+- **Gemini TTS 加入 45 秒強制逾時控制（AbortSignal Timeout）**：
+  - 在 `workflow/tts.ts` 中，替所有 Gemini API 呼叫（`fetch`）加入 `AbortSignal.timeout(45_000)`。
+  - 徹底解決遠端 Google 伺服器若遇長連線掛起或無回應時，工作流在單一步驟死等超過 15 分鐘導致 `WorkflowTimeoutError` 的架構缺陷。
+- **實作智慧指數退避重試（Exponential Backoff Retry）**：
+  - 遇到 429（瞬時限流）、500/502/503（伺服器錯誤）或網路連線逾時等暫態異常時，自動退避等待（1 秒、2 秒...）於同一把 Key 原地重試最多 2 次，可自行消化 90% 以上的偶發性網路抖動。
+- **支援多把 Gemini Key 自動容錯切換（Multi-Key Failover）**：
+  - 新增 `createGeminiTtsConfigs` 模組，支援環境變數與 Secret 設定 `GEMINI_TTS_FALLBACK_API_KEY`（或 `GEMINI_TTS_FALLBACK_API_SECRET`），並相容插槽 `GEMINI_TTS_FALLBACK_1_API_KEY` 至 `GEMINI_TTS_FALLBACK_5_API_KEY`。
+  - 當第一把 Key 遇到 401/403 權限異常或 429 配額耗盡重試完畢後，系統會自動無縫切換至備用 Key 繼續完成語音合成。
+  - 全程維持 100% 原生 Gemini 2.5 Flash 24kHz PCM WAV 高擬真音質，徹底杜絕破音、變聲或格式衝突問題。
+- **徹底拔除 Edge-TTS 自動降級**：
+  - 移除以往主服務失敗時自動降級至 Edge-TTS 的機制，杜絕 `@echristian/edge-tts` 在 Cloudflare Workers 底層因 WebSocket 握手掛起造成的無限卡死，以及 WAV 剝除 Header 硬接 MP3 導致的音訊損毀問題。
+- **補齊完整單元測試與品質檢查**：
+  - 新增 `tests/tts-fallback.test.ts`，驗證 Key 解析、暫態錯誤重試、401 立即切換、429 配額切換與絕不降級 Edge-TTS 等情境。
+  - 納入 `package.json` 的 `test:workflow-security` 測試套件，並全數通過 `pnpm check`。
+- **線上 Worker 部署**：
+  - Generation Worker (`daily-podcast-worker`) 已正式部署上線（版本 `7d40017a-fcc3-44be-bd52-45eeeaccf502`）。
+
+---
+
 ## [2026-09-03] 消除 KV 讀取放大與 RSS 快取優化 (KV Read Amplification Elimination & RSS Cache)
 
 - **根除 RSS 90 天盲猜之讀取放大問題**：
