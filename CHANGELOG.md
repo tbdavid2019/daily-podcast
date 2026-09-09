@@ -2,6 +2,22 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-09-09] 全來源跨日滾動去重、30 天主題歷史庫與主持人前情回顧 (Full-Source Rolling Deduplication & Topic Archive Callbacks)
+
+- **實作全來源 7 天 ID 與 URL 滾動去重**：
+  - 解決過去僅 Reddit 去重，導致 Hacker News、GitHub 等來源的熱門主題（如「古巴比倫甜菜燉羊肉食譜」與「1024 位元組 Python 直譯器」）因持續停留在首頁榜單而連播兩天的問題。
+  - 在 KV 建立 `dedupe:${env}:${variant}:stories` 索引，於抓取與候選故事切片前自動過濾並順延遞補全新文章。
+- **建立輕量 30 天主題歷史庫（Topic Archive Index）**：
+  - 在 KV 建立 `topics:archive:${env}:${variant}` 滾動索引，保存過去 30 天每集的完整標題、核心焦點摘要與技術關鍵字。
+  - 手動回填 2026-09-03 至 2026-09-09 所有已發布集數至正式環境 KV。
+- **支援主持人對話中自然引用歷史集數（防幻覺前情提要）**：
+  - 實作關鍵字語意匹配演算法 `findRelevantHistoricalTopics`，當今日故事與過去主題有技術延續性時，自動注入真實歷史集數錨點至 Prompt。
+  - 在 `workflow/prompt.ts` 制定嚴格防幻覺指南，授權主持人在對話中自然呼應前情提要（如「還記得我們在 9 月 7 號聊過...」），增強節目連續性與專業深度。
+- **補齊完整單元測試與品質檢查**：
+  - 在 `tests/workflow-efficiency.test.ts` 新增網址正規化、7 天去重過濾、30 天主題索引維護與語意關鍵字匹配測試，全數通過 `pnpm check`。
+
+---
+
 ## [2026-09-04] Gemini TTS 語音合成重試、多 Key 容錯切換與移除 Edge-TTS (Gemini TTS Retry, Multi-Key Failover & Edge-TTS Removal)
 
 - **Gemini TTS 加入 45 秒強制逾時控制（AbortSignal Timeout）**：

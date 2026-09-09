@@ -1,6 +1,6 @@
 import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
-import type { StoryContentCheckpoint } from './efficiency'
+import type { StoryContentCheckpoint, TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
 import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
@@ -16,19 +16,29 @@ import {
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
+  buildStoryDedupeKey,
+  buildTopicArchiveKey,
   CONTENT_FETCH_STEP_CONFIG,
+  extractKeywords,
+  findRelevantHistoricalTopics,
+  formatHistoricalCallbacksContext,
   getDateDaysBefore,
   getDialoguePlan,
   getExcludedRedditIds,
+  getExcludedStoryIdentifiers,
   getScheduledStoryLimits,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
   parseRedditDedupeIndex,
   parseStoryContentCheckpoint,
+  parseStoryDedupeIndex,
+  parseTopicArchiveIndex,
   splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateEpisodeIndexDates,
   updateRedditDedupeIndex,
+  updateStoryDedupeIndex,
+  updateTopicArchiveIndex,
 } from './efficiency'
 import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
 import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
@@ -306,6 +316,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     }
 
     const redditDedupeKey = `dedupe:${runEnv}:${variant}:reddit`
+    const storyDedupeKey = buildStoryDedupeKey(runEnv, variant)
+    const topicArchiveKey = buildTopicArchiveKey(runEnv, variant)
+
     const redditDedupeIndex = await step.do('load reddit dedupe index', IO_STEP_CONFIG, async () => {
       const storedIndex = await kvGet<unknown>(redditDedupeKey, 'json')
       if (storedIndex) {
@@ -328,11 +341,35 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return rebuiltIndex
     })
 
-    const excludeRedditIds = getExcludedRedditIds(redditDedupeIndex, displayDate)
+    const storyDedupeIndex = await step.do('load story dedupe index', IO_STEP_CONFIG, async () => {
+      const stored = await kvGet<unknown>(storyDedupeKey, 'json')
+      if (stored) {
+        return parseStoryDedupeIndex(stored)
+      }
+      return parseStoryDedupeIndex(null)
+    })
 
-    console.info('Reddit dedup window', {
+    const topicArchiveIndex = await step.do('load topic archive index', IO_STEP_CONFIG, async () => {
+      const stored = await kvGet<unknown>(topicArchiveKey, 'json')
+      if (stored) {
+        return parseTopicArchiveIndex(stored)
+      }
+      return parseTopicArchiveIndex(null)
+    })
+
+    const { ids: excludeStoryIds, urls: excludeStoryUrls } = getExcludedStoryIdentifiers(storyDedupeIndex, displayDate)
+    const excludeRedditIds = getExcludedRedditIds(redditDedupeIndex, displayDate)
+    for (const id of excludeRedditIds) {
+      excludeStoryIds.add(id)
+      excludeStoryIds.add(`reddit:${id}`)
+    }
+
+    console.info('Deduplication window', {
       days: 7,
-      excludedCount: excludeRedditIds.size,
+      excludedRedditCount: excludeRedditIds.size,
+      excludedStoryIdsCount: excludeStoryIds.size,
+      excludedStoryUrlsCount: excludeStoryUrls.size,
+      topicArchiveDays: topicArchiveIndex.entries.length,
     })
 
     console.info('Source limits based on schedule:', {
@@ -345,6 +382,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       const allStories = await getAllStories(fetchDate, this.env, {
         limits: storyLimits,
         excludeRedditIds,
+        excludeStoryIds,
+        excludeStoryUrls,
       })
 
       if (!allStories.length) {
@@ -594,10 +633,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         `<story id="${story.id}" title="${story.title}" source="${story.source}" number="${index + 1}">\n${story.content}\n</story>`,
       ).join('\n\n---\n\n')
 
+      const historicalCallbacks = findRelevantHistoricalTopics(topicArchiveIndex, stories, displayDate)
+      const historicalCallbacksContext = formatHistoricalCallbacksContext(historicalCallbacks)
+
       const enhancedPrompt = `日期: ${displayDate}
 【必須討論的故事清單】（共 ${allStoryContents.length} 個故事，每一個都必須完整討論）
 ${storyList}
-
+${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 【動態對話展開要求】
 - 目標 ${dialoguePlan.targetLines} 段發言，允許範圍 ${dialoguePlan.minLines}-${dialoguePlan.maxLines} 段；JSON dialogue 中的一個項目就是一段發言
 - 每個故事至少要有一個完整來回：Cordelia 與 David 都必須針對該故事各發言至少一次
@@ -726,8 +768,50 @@ ${fullContentString}
       displayDate,
       stories.filter(story => story.source === 'reddit' && story.id).map(story => story.id as string),
     )
+    const nextStoryDedupeIndex = updateStoryDedupeIndex(
+      storyDedupeIndex,
+      displayDate,
+      stories as Story[],
+    )
 
-    // Save the final script, the compact Reddit index, and update the episode index.
+    // Build today's TopicArchiveEntry
+    const blogTitleMap = new Map<string, string>()
+    if (blogContent) {
+      for (const line of blogContent.split('\n')) {
+        const match = line.match(/^##\s+\[(.*?)\]\((.*?)\)/)
+        if (match) {
+          blogTitleMap.set(match[2].trim(), match[1].trim())
+        }
+      }
+    }
+
+    const todayTopics: TopicArchiveTopic[] = allStoryContents.map((storyContent, index) => {
+      const summaryBlock = storySummaries[index] || ''
+      const coreFocusMatch = summaryBlock.match(/\*\*核心焦點\*\*：([^\n]+)/)
+      const coreFocus = coreFocusMatch ? coreFocusMatch[1].trim() : ''
+      const storyObj = stories.find(candidate => candidate.id === storyContent.id)
+      const chineseTitle = (storyObj?.sourceUrl && blogTitleMap.get(storyObj.sourceUrl))
+        || (storyObj?.url && blogTitleMap.get(storyObj.url))
+        || storyContent.title
+
+      const keywords = extractKeywords(`${chineseTitle} ${coreFocus}`)
+      return {
+        title: chineseTitle,
+        keywords,
+        summary: coreFocus || chineseTitle,
+        source: storyContent.source,
+        sourceUrl: storyObj?.url || storyObj?.sourceUrl,
+      }
+    })
+
+    const todayTopicEntry: TopicArchiveEntry = {
+      date: displayDate,
+      episodeTitle: podcastScript.title || `[${displayDate}] 科技新聞彙整`,
+      topics: todayTopics,
+    }
+    const nextTopicArchiveIndex = updateTopicArchiveIndex(topicArchiveIndex, todayTopicEntry)
+
+    // Save the final script, the dedupe indexes, topic archive, and update the episode index.
     await step.do('save script to kv', IO_STEP_CONFIG, async () => {
       const existingDates = await kvGet<string[]>(episodeIndexKey, 'json')
       const nextDates = updateEpisodeIndexDates(existingDates, displayDate)
@@ -736,6 +820,12 @@ ${fullContentString}
         kvPut(scriptKey, JSON.stringify(scriptData)), // Permanent storage, never expires
         kvPut(redditDedupeKey, JSON.stringify(nextRedditDedupeIndex), {
           expirationTtl: 60 * 60 * 24 * 14,
+        }),
+        kvPut(storyDedupeKey, JSON.stringify(nextStoryDedupeIndex), {
+          expirationTtl: 60 * 60 * 24 * 14,
+        }),
+        kvPut(topicArchiveKey, JSON.stringify(nextTopicArchiveIndex), {
+          expirationTtl: 60 * 60 * 24 * 60,
         }),
         kvPut(episodeIndexKey, JSON.stringify(nextDates)),
       ])

@@ -1,6 +1,9 @@
 import puppeteer from '@cloudflare/puppeteer'
 import * as cheerio from 'cheerio'
 import {
+  normalizeDedupeUrl,
+} from './efficiency'
+import {
   buildRedditCombinedFeedUrl,
   buildRedditPostFeedUrl,
   isPoliticalRedditStory,
@@ -14,6 +17,8 @@ type StorySource = NonNullable<Story['source']>
 interface StoryFetchOptions {
   limits?: Partial<Record<StorySource, number>>
   excludeRedditIds?: Set<string>
+  excludeStoryIds?: Set<string>
+  excludeStoryUrls?: Set<string>
 }
 
 const SELF_HOSTED_MARKDOWN_NODES = [
@@ -170,8 +175,25 @@ async function getContentFromReader(url: string, format: 'html' | 'markdown', se
   return ''
 }
 
-export async function getHackerNewsTopStories(today: string) {
+export async function getHackerNewsTopStories(
+  today: string,
+  options?: { excludeIds?: Set<string>, excludeUrls?: Set<string> },
+) {
   console.info('[Hacker News] Fetching stories for date:', today)
+
+  const isAllowed = (story: { id?: string, url?: string }) => {
+    if (story.id && options?.excludeIds) {
+      if (options.excludeIds.has(story.id) || options.excludeIds.has(`hacker-news:${story.id}`)) {
+        return false
+      }
+    }
+    if (story.url && options?.excludeUrls) {
+      if (options.excludeUrls.has(normalizeDedupeUrl(story.url))) {
+        return false
+      }
+    }
+    return true
+  }
 
   // 優先使用 RSS feed，更穩定可靠
   try {
@@ -207,7 +229,7 @@ export async function getHackerNewsTopStories(today: string) {
     }).get()
 
     const filteredStories = stories
-      .filter(story => story.id && story.url && story.title)
+      .filter(story => story.id && story.url && story.title && isAllowed(story))
       .map(story => ({
         ...story,
         source: 'hacker-news' as const,
@@ -248,11 +270,13 @@ export async function getHackerNewsTopStories(today: string) {
     hackerNewsUrl: `https://news.ycombinator.com/item?id=${$(el).attr('id')}`,
   })).get()
 
-  const filteredStories = stories.filter(story => story.id && story.url).map(story => ({
-    ...story,
-    source: 'hacker-news' as const,
-    sourceUrl: story.hackerNewsUrl,
-  }))
+  const filteredStories = stories
+    .filter(story => story.id && story.url && isAllowed(story))
+    .map(story => ({
+      ...story,
+      source: 'hacker-news' as const,
+      sourceUrl: story.hackerNewsUrl,
+    }))
 
   console.info(`[Hacker News] Web scraping returned ${filteredStories.length} stories (filtered from ${stories.length} raw items)`)
 
@@ -794,7 +818,7 @@ export async function getDevToStories() {
 }
 
 export async function getAllStories(today: string, _config: unknown, options: StoryFetchOptions = {}) {
-  const { limits = {}, excludeRedditIds } = options
+  const { limits = {}, excludeRedditIds, excludeStoryIds, excludeStoryUrls } = options
 
   console.info('Starting to fetch stories from all sources...', { limits })
 
@@ -807,7 +831,7 @@ export async function getAllStories(today: string, _config: unknown, options: St
   // 只抓取需要的來源
   const fetchPromises: Record<StorySource, Promise<Story[]>> = {
     'hacker-news': shouldFetchSource('hacker-news')
-      ? getHackerNewsTopStories(today)
+      ? getHackerNewsTopStories(today, { excludeIds: excludeStoryIds, excludeUrls: excludeStoryUrls })
           .then((stories) => {
             console.info(`[Hacker News] Fetched ${stories.length} stories successfully`)
             return stories
@@ -860,10 +884,25 @@ export async function getAllStories(today: string, _config: unknown, options: St
     'reddit': redditStories.length,
   })
 
+  const isExcluded = (story: Story) => {
+    if (story.id && excludeStoryIds) {
+      if (excludeStoryIds.has(story.id) || (story.source && excludeStoryIds.has(`${story.source}:${story.id}`))) {
+        return true
+      }
+    }
+    if (story.url && excludeStoryUrls) {
+      if (excludeStoryUrls.has(normalizeDedupeUrl(story.url))) {
+        return true
+      }
+    }
+    return false
+  }
+
   const applyLimit = (stories: Story[], source: StorySource) => {
+    const filtered = stories.filter(s => !isExcluded(s))
     const limit = limits[source]
-    const limitedStories = typeof limit === 'number' ? stories.slice(0, limit) : stories
-    console.info(`Applied limit for ${source}:`, { original: stories.length, limit, final: limitedStories.length })
+    const limitedStories = typeof limit === 'number' ? filtered.slice(0, limit) : filtered
+    console.info(`Applied limit for ${source}:`, { original: stories.length, afterDedupe: filtered.length, limit, final: limitedStories.length })
     return limitedStories
   }
 

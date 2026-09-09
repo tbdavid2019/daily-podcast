@@ -235,6 +235,405 @@ export function updateRedditDedupeIndex(
   return { version: 1, entries }
 }
 
+export interface DedupeStoryItem {
+  source: string
+  id: string
+  url?: string
+}
+
+export interface StoryDedupeIndex {
+  version: 1
+  entries: Array<{ date: string, items: DedupeStoryItem[] }>
+}
+
+export function normalizeDedupeUrl(url: string | undefined | null): string {
+  if (!url || typeof url !== 'string') {
+    return ''
+  }
+  try {
+    const parsed = new URL(url.trim())
+    parsed.hash = ''
+    for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'ref', 'source']) {
+      parsed.searchParams.delete(key)
+    }
+    let normalized = parsed.toString()
+    if (normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1)
+    }
+    return normalized.toLowerCase()
+  }
+  catch {
+    return url.trim().toLowerCase()
+  }
+}
+
+export function buildStoryDedupeKey(runEnv: string, variant = 'hacker-news'): string {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  return `dedupe:${runEnv}:${normalizedVariant}:stories`
+}
+
+export function parseStoryDedupeIndex(value: unknown): StoryDedupeIndex {
+  if (!value || typeof value !== 'object' || (value as { version?: unknown }).version !== 1) {
+    return { version: 1, entries: [] }
+  }
+
+  const entries = (value as { entries?: unknown }).entries
+  if (!Array.isArray(entries)) {
+    return { version: 1, entries: [] }
+  }
+
+  return {
+    version: 1,
+    entries: entries.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+      const { date, items } = entry as { date?: unknown, items?: unknown }
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Array.isArray(items)) {
+        return []
+      }
+      const validItems: DedupeStoryItem[] = []
+      for (const item of items) {
+        if (!item || typeof item !== 'object')
+          continue
+        const { source, id, url } = item as { source?: unknown, id?: unknown, url?: unknown }
+        if (typeof source === 'string' && typeof id === 'string') {
+          validItems.push({
+            source,
+            id,
+            ...(typeof url === 'string' && url ? { url: normalizeDedupeUrl(url) } : {}),
+          })
+        }
+      }
+      return validItems.length > 0 ? [{ date, items: validItems }] : []
+    }),
+  }
+}
+
+export function getExcludedStoryIdentifiers(
+  index: StoryDedupeIndex,
+  displayDate: string,
+  retentionDays = 7,
+): { ids: Set<string>, urls: Set<string> } {
+  const cutoff = getDateDaysBefore(displayDate, retentionDays)
+  const ids = new Set<string>()
+  const urls = new Set<string>()
+
+  for (const entry of index.entries) {
+    if (entry.date >= cutoff && entry.date < displayDate) {
+      for (const item of entry.items) {
+        if (item.id) {
+          ids.add(item.id)
+          ids.add(`${item.source}:${item.id}`)
+        }
+        if (item.url) {
+          urls.add(item.url)
+        }
+      }
+    }
+  }
+
+  return { ids, urls }
+}
+
+export function updateStoryDedupeIndex(
+  index: StoryDedupeIndex,
+  displayDate: string,
+  stories: readonly Story[],
+  retentionDays = 7,
+): StoryDedupeIndex {
+  const cutoff = getDateDaysBefore(displayDate, retentionDays)
+  const entries = index.entries.filter(entry => entry.date >= cutoff && entry.date !== displayDate)
+
+  const currentItems: DedupeStoryItem[] = []
+  const seen = new Set<string>()
+
+  for (const story of stories) {
+    const source = story.source || 'unknown'
+    const id = story.id || ''
+    const url = normalizeDedupeUrl(story.url)
+    const key = `${source}:${id}:${url}`
+    if (!seen.has(key) && (id || url)) {
+      seen.add(key)
+      currentItems.push({
+        source,
+        id,
+        ...(url ? { url } : {}),
+      })
+    }
+  }
+
+  if (currentItems.length > 0) {
+    entries.push({ date: displayDate, items: currentItems })
+  }
+
+  entries.sort((left, right) => right.date.localeCompare(left.date))
+  return { version: 1, entries }
+}
+
+export interface TopicArchiveTopic {
+  title: string
+  keywords?: string[]
+  summary: string
+  source?: string
+  sourceUrl?: string
+}
+
+export interface TopicArchiveEntry {
+  date: string
+  episodeTitle: string
+  topics: TopicArchiveTopic[]
+}
+
+export interface TopicArchiveIndex {
+  version: 1
+  entries: TopicArchiveEntry[]
+}
+
+export function buildTopicArchiveKey(runEnv: string, variant = 'hacker-news'): string {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  return `topics:archive:${runEnv}:${normalizedVariant}`
+}
+
+export function parseTopicArchiveIndex(value: unknown): TopicArchiveIndex {
+  if (!value || typeof value !== 'object' || (value as { version?: unknown }).version !== 1) {
+    return { version: 1, entries: [] }
+  }
+
+  const entries = (value as { entries?: unknown }).entries
+  if (!Array.isArray(entries)) {
+    return { version: 1, entries: [] }
+  }
+
+  return {
+    version: 1,
+    entries: entries.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+      const { date, episodeTitle, topics } = entry as { date?: unknown, episodeTitle?: unknown, topics?: unknown }
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Array.isArray(topics)) {
+        return []
+      }
+      const validTopics: TopicArchiveTopic[] = []
+      for (const t of topics) {
+        if (!t || typeof t !== 'object')
+          continue
+        const { title, keywords, summary, source, sourceUrl } = t as Record<string, unknown>
+        if (typeof title === 'string' && title.trim()) {
+          validTopics.push({
+            title: title.trim(),
+            keywords: Array.isArray(keywords) ? keywords.filter(k => typeof k === 'string') : [],
+            summary: typeof summary === 'string' ? summary.trim() : '',
+            source: typeof source === 'string' ? source : undefined,
+            sourceUrl: typeof sourceUrl === 'string' ? sourceUrl : undefined,
+          })
+        }
+      }
+      return validTopics.length > 0
+        ? [{
+            date,
+            episodeTitle: typeof episodeTitle === 'string' ? episodeTitle : `[${date}]`,
+            topics: validTopics,
+          }]
+        : []
+    }),
+  }
+}
+
+export function updateTopicArchiveIndex(
+  index: TopicArchiveIndex,
+  entry: TopicArchiveEntry,
+  retentionDays = 30,
+): TopicArchiveIndex {
+  const cutoff = getDateDaysBefore(entry.date, retentionDays)
+  const entries = index.entries.filter(e => e.date >= cutoff && e.date !== entry.date)
+
+  if (entry.topics.length > 0) {
+    entries.push(entry)
+  }
+
+  entries.sort((left, right) => right.date.localeCompare(left.date))
+  return { version: 1, entries }
+}
+
+const DEDUPE_STOP_WORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'of',
+  'with',
+  'by',
+  'from',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'this',
+  'that',
+  'these',
+  'those',
+  'it',
+  'its',
+  'how',
+  'why',
+  'what',
+  'when',
+  'who',
+  'which',
+  'new',
+  'post',
+  'show',
+  'ask',
+  'hn',
+  '與',
+  '及',
+  '和',
+  '在',
+  '之',
+  '的',
+  '了',
+  '是',
+  '於',
+  '從',
+  '到',
+  '以',
+  '對',
+  '或',
+  '這個',
+  '那個',
+  '我們',
+  '今天',
+  '目前',
+  '探討',
+  '分析',
+  '解析',
+  '介紹',
+  '討論',
+  '報導',
+  '相關',
+  '問題',
+  '系統',
+  '技術',
+  '全面',
+  '深入',
+  '帶來',
+  '最新',
+  '架構',
+  '專案',
+])
+
+export function extractKeywords(text: string): string[] {
+  if (!text)
+    return []
+  const matches = text.match(/[A-Z0-9+#.-]{3,}|[\u4E00-\u9FA5]{2,4}/gi) || []
+  const keywords = new Set<string>()
+  for (const m of matches) {
+    const lower = m.toLowerCase()
+    if (!DEDUPE_STOP_WORDS.has(lower) && lower.length >= 2) {
+      keywords.add(m)
+    }
+  }
+  return [...keywords]
+}
+
+export interface HistoricalTopicCallback {
+  pastDate: string
+  episodeTitle: string
+  matchedTopic: TopicArchiveTopic
+  relatedCurrentStory: Story
+  overlapKeywords: string[]
+}
+
+export function findRelevantHistoricalTopics(
+  archive: TopicArchiveIndex,
+  currentStories: readonly Story[],
+  currentDisplayDate: string,
+  maxCallbacks = 3,
+): HistoricalTopicCallback[] {
+  const results: HistoricalTopicCallback[] = []
+  const seenPastTopicKeys = new Set<string>()
+
+  // Only check past entries (strictly before currentDisplayDate)
+  const pastEntries = archive.entries.filter(e => e.date < currentDisplayDate)
+
+  for (const story of currentStories) {
+    if (results.length >= maxCallbacks)
+      break
+    const currentText = `${story.title || ''}`
+    const currentKeywords = new Set(extractKeywords(currentText).map(k => k.toLowerCase()))
+    if (currentKeywords.size === 0)
+      continue
+
+    for (const pastEntry of pastEntries) {
+      if (results.length >= maxCallbacks)
+        break
+      for (const pastTopic of pastEntry.topics) {
+        const pastTopicKey = `${pastEntry.date}:${pastTopic.title}`
+        if (seenPastTopicKeys.has(pastTopicKey))
+          continue
+
+        const pastKeywords = (pastTopic.keywords && pastTopic.keywords.length > 0)
+          ? pastTopic.keywords
+          : extractKeywords(`${pastTopic.title} ${pastTopic.summary}`)
+
+        const overlap: string[] = []
+        for (const kw of pastKeywords) {
+          if (currentKeywords.has(kw.toLowerCase())) {
+            overlap.push(kw)
+          }
+        }
+
+        // Match if 2+ keywords match, or 1 long distinctive keyword (length >= 5 e.g. GrapheneOS, Chromium)
+        const isStrongMatch = overlap.length >= 2 || (overlap.length === 1 && overlap[0].length >= 5)
+        if (isStrongMatch) {
+          seenPastTopicKeys.add(pastTopicKey)
+          results.push({
+            pastDate: pastEntry.date,
+            episodeTitle: pastEntry.episodeTitle,
+            matchedTopic: pastTopic,
+            relatedCurrentStory: story,
+            overlapKeywords: overlap,
+          })
+          break // Match at most 1 past topic per current story
+        }
+      }
+    }
+  }
+
+  return results
+}
+
+export function formatHistoricalCallbacksContext(
+  callbacks: readonly HistoricalTopicCallback[],
+): string {
+  if (!callbacks || callbacks.length === 0) {
+    return ''
+  }
+
+  const items = callbacks.map((cb) => {
+    return `- ${cb.pastDate} 集（《${cb.episodeTitle}》）：
+  - 歷史主題：「${cb.matchedTopic.title}」
+  - 前情摘要：${cb.matchedTopic.summary || '（曾探討此技術背景）'}
+  - 今日關聯故事：[${cb.relatedCurrentStory.source || 'tech'}] ${cb.relatedCurrentStory.title}
+  - 關聯關鍵字：${cb.overlapKeywords.join(', ')}`
+  }).join('\n\n')
+
+  return `
+【相關歷史集數參考（主持人前情提要依據，嚴禁捏造不存在的集數或日期！）】
+${items}
+`.trim()
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')

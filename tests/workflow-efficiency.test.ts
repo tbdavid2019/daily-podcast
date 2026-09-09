@@ -18,16 +18,26 @@ import {
   buildStoryContentCacheKey,
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
-  getExcludedRedditIds,
+  buildStoryDedupeKey,
+  buildTopicArchiveKey,
+  findRelevantHistoricalTopics,
+  formatHistoricalCallbacksContext,
   getDateDaysBefore,
   getDialoguePlan,
+  getExcludedRedditIds,
+  getExcludedStoryIdentifiers,
   getScheduledStoryLimits,
   isAudioCheckpointForInstance,
+  normalizeDedupeUrl,
   parseStoryContentCheckpoint,
+  parseStoryDedupeIndex,
+  parseTopicArchiveIndex,
   splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateEpisodeIndexDates,
   updateRedditDedupeIndex,
+  updateStoryDedupeIndex,
+  updateTopicArchiveIndex,
 } from '../workflow/efficiency'
 
 describe('workflow retry budgets', () => {
@@ -260,5 +270,118 @@ describe('episode index and RSS cache keys', () => {
   it('ignores malformed date strings in updateEpisodeIndexDates', () => {
     const updated = updateEpisodeIndexDates(['2026-09-01', 'not-a-date'], 'invalid')
     assert.deepEqual(updated, ['2026-09-01'])
+  })
+})
+
+describe('full-source story dedupe index', () => {
+  it('normalizes dedupe URLs by stripping tracking parameters and trailing slashes', () => {
+    assert.equal(
+      normalizeDedupeUrl('https://example.com/post/?utm_source=twitter&utm_medium=social'),
+      'https://example.com/post',
+    )
+    assert.equal(normalizeDedupeUrl('https://example.com/app/'), 'https://example.com/app')
+    assert.equal(normalizeDedupeUrl(undefined), '')
+  })
+
+  it('builds canonical story dedupe key and normalizes main variant', () => {
+    assert.equal(buildStoryDedupeKey('production', 'hacker-news'), 'dedupe:production:hacker-news:stories')
+    assert.equal(buildStoryDedupeKey('production', 'main'), 'dedupe:production:hacker-news:stories')
+  })
+
+  it('deduplicates across sources by ID and URL within the 7-day retention window', () => {
+    const existing = parseStoryDedupeIndex({
+      version: 1,
+      entries: [
+        {
+          date: '2026-09-07',
+          items: [
+            { source: 'hacker-news', id: '49554622', url: 'https://example.com/ancient-stew' },
+            { source: 'hacker-news', id: '49591876', url: 'https://example.com/1024b-python' },
+          ],
+        },
+      ],
+    })
+
+    const { ids, urls } = getExcludedStoryIdentifiers(existing, '2026-09-08')
+    assert.ok(ids.has('49554622'))
+    assert.ok(ids.has('hacker-news:49554622'))
+    assert.ok(ids.has('49591876'))
+    assert.ok(urls.has('https://example.com/ancient-stew'))
+    assert.ok(urls.has('https://example.com/1024b-python'))
+
+    // When updating today (2026-09-08), it records new stories
+    const updated = updateStoryDedupeIndex(existing, '2026-09-08', [
+      { id: '12345678', source: 'hacker-news', title: 'New Story', url: 'https://example.com/new' },
+    ])
+    assert.equal(updated.entries.length, 2)
+    assert.equal(updated.entries[0].date, '2026-09-08')
+    assert.equal(updated.entries[0].items[0].id, '12345678')
+  })
+})
+
+describe('topic archive and historical callbacks', () => {
+  it('builds canonical topic archive key and normalizes main variant', () => {
+    assert.equal(buildTopicArchiveKey('production', 'hacker-news'), 'topics:archive:production:hacker-news')
+    assert.equal(buildTopicArchiveKey('production', 'main'), 'topics:archive:production:hacker-news')
+  })
+
+  it('manages rolling 30-day topic archive entries', () => {
+    const initial = parseTopicArchiveIndex(null)
+    assert.deepEqual(initial.entries, [])
+
+    const entry = {
+      date: '2026-09-07',
+      episodeTitle: '[2026-09-07] GrapheneOS 挑戰私有 RCS 枷鎖',
+      topics: [
+        {
+          title: 'GrapheneOS 大幅翻新預設應用與剪貼簿安全',
+          keywords: ['GrapheneOS', 'RCS', '隱私'],
+          summary: '自研開源 RCS 客戶端對抗閉源生態',
+          source: 'hacker-news',
+        },
+      ],
+    }
+
+    const updated = updateTopicArchiveIndex(initial, entry)
+    assert.equal(updated.entries.length, 1)
+    assert.equal(updated.entries[0].date, '2026-09-07')
+  })
+
+  it('matches historical topics by keyword overlap strictly from past dates', () => {
+    const archive = parseTopicArchiveIndex({
+      version: 1,
+      entries: [
+        {
+          date: '2026-09-07',
+          episodeTitle: '[2026-09-07] GrapheneOS 挑戰私有 RCS 枷鎖',
+          topics: [
+            {
+              title: 'GrapheneOS 大幅翻新預設應用與剪貼簿安全',
+              keywords: ['GrapheneOS', 'RCS', '隱私'],
+              summary: '自研開源 RCS 客戶端對抗閉源生態',
+              source: 'hacker-news',
+            },
+          ],
+        },
+      ],
+    })
+
+    const currentStories = [
+      {
+        id: 'new-story-1',
+        title: 'GrapheneOS announces new security updates for RCS',
+        source: 'hacker-news' as const,
+      },
+    ]
+
+    const callbacks = findRelevantHistoricalTopics(archive, currentStories, '2026-09-08')
+    assert.equal(callbacks.length, 1)
+    assert.equal(callbacks[0].pastDate, '2026-09-07')
+    assert.equal(callbacks[0].matchedTopic.title, 'GrapheneOS 大幅翻新預設應用與剪貼簿安全')
+
+    const context = formatHistoricalCallbacksContext(callbacks)
+    assert.match(context, /2026-09-07 集/)
+    assert.match(context, /GrapheneOS 大幅翻新預設應用與剪貼簿安全/)
+    assert.match(context, /自研開源 RCS 客戶端對抗閉源生態/)
   })
 })
