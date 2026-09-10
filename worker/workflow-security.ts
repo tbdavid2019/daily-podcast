@@ -17,6 +17,26 @@ interface WorkflowRequestError {
 type WorkflowAuthResult = { ok: true } | WorkflowRequestError
 type WorkflowParseResult = { ok: true, params: NormalizedWorkflowParams } | WorkflowRequestError
 
+export const DEFAULT_TIMEZONE_OFFSET = 8
+
+export function parseTimezoneOffset(value?: string, fallback = DEFAULT_TIMEZONE_OFFSET): number {
+  const normalized = value?.trim() || ''
+  if (!/^[+-]?\d{1,2}$/.test(normalized)) {
+    return fallback
+  }
+
+  const parsed = Number.parseInt(normalized, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export function getCalendarDate(date: Date, timezoneOffset = DEFAULT_TIMEZONE_OFFSET): string {
+  return new Date(date.getTime() + timezoneOffset * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+export function getCalendarDayOfWeek(date: string): number {
+  return new Date(`${date}T00:00:00.000Z`).getUTCDay()
+}
+
 interface WorkflowInstanceIdInput {
   runEnv: string
   operationDate: string
@@ -189,7 +209,7 @@ export function resolveOperationDate(today: string | undefined, now = new Date()
     return today
   }
 
-  return new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000).toISOString().slice(0, 10)
+  return getCalendarDate(now, timezoneOffset)
 }
 
 export async function buildWorkflowInstanceId(input: WorkflowInstanceIdInput): Promise<string> {

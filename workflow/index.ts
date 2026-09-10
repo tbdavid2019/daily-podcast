@@ -6,7 +6,13 @@ import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
 import { podcastTitle } from '@/config'
-import { buildChildWorkflowInstanceId, createIdempotentWorkflowInstance } from '@/worker/workflow-security'
+import {
+  buildChildWorkflowInstanceId,
+  createIdempotentWorkflowInstance,
+  getCalendarDate,
+  getCalendarDayOfWeek,
+  parseTimezoneOffset,
+} from '@/worker/workflow-security'
 import {
   AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
@@ -179,11 +185,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // 時區處理邏輯 - 支援自訂時區
     const now = new Date(event.timestamp.getTime())
     // 從環境變數讀取時區設定，預設為台北時間（UTC+8）
-    const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
+    const timezoneOffset = parseTimezoneOffset(this.env.TIMEZONE_OFFSET)
 
     // 計算指定時區的時間
-    const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
-    const localToday = localTime.toISOString().split('T')[0]
+    const localToday = getCalendarDate(now, timezoneOffset)
 
     // 使用者可以手動指定日期，否則使用自動計算
     const userSpecifiedDate = params.today
@@ -290,8 +295,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       : defaultCompletionTokens
 
     // 實施週期性排程邏輯
-    const date = new Date(displayDate)
-    const dayOfWeek = date.getDay()
+    const dayOfWeek = getCalendarDayOfWeek(displayDate)
 
     console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
 

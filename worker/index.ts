@@ -4,6 +4,8 @@ import {
   authenticateWorkflowRequest,
   buildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
+  getCalendarDate,
+  parseTimezoneOffset,
   parseWorkflowRequest,
   resolveOperationDate,
 } from './workflow-security'
@@ -56,9 +58,12 @@ async function startWorkflow(
   idempotencyKey?: string | null,
 ) {
   const runEnv = env.WORKER_ENV || 'production'
-  const parsedTimezoneOffset = Number.parseInt(env.TIMEZONE_OFFSET || '+8', 10)
-  const timezoneOffset = Number.isFinite(parsedTimezoneOffset) ? parsedTimezoneOffset : 8
+  const timezoneOffset = parseTimezoneOffset(env.TIMEZONE_OFFSET)
   const operationDate = resolveOperationDate(params.today, new Date(), timezoneOffset)
+  const workflowParams: NormalizedWorkflowParams = {
+    ...params,
+    today: operationDate,
+  }
 
   let instanceId: string
   try {
@@ -86,11 +91,11 @@ async function startWorkflow(
   try {
     const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(workflow, {
       id: instanceId,
-      params,
+      params: workflowParams,
     })
     const instanceDetails = {
       id: instance.id,
-      params,
+      params: workflowParams,
       details: await instance.status(),
     }
 
@@ -134,11 +139,7 @@ export default {
     // Calculate date if not provided
     let displayDate = today
     if (!displayDate) {
-      // Default to Taipei time if not provided, consistent with workflow
-      const now = new Date()
-      const timezoneOffset = 8 // Hardcoded default +8 for simplicity in viewer
-      const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
-      displayDate = localTime.toISOString().split('T')[0]
+      displayDate = getCalendarDate(new Date(), parseTimezoneOffset(env.TIMEZONE_OFFSET))
     }
 
     const normalizedVariant = variant === 'main' ? 'hacker-news' : variant

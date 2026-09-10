@@ -1,6 +1,7 @@
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { GeneratedScriptData, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
+import { getCalendarDate, parseTimezoneOffset } from '@/worker/workflow-security'
 import {
   createPcmWavHeader,
   planAudioMultipartUpload,
@@ -136,9 +137,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     // 時區處理邏輯
     const now = new Date(event.timestamp.getTime())
-    const timezoneOffset = Number.parseInt(this.env.TIMEZONE_OFFSET || '+8')
-    const localTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000)
-    const localToday = localTime.toISOString().split('T')[0]
+    const timezoneOffset = parseTimezoneOffset(this.env.TIMEZONE_OFFSET)
+    const localToday = getCalendarDate(now, timezoneOffset)
 
     const userSpecifiedDate = params.today
     const displayDate = userSpecifiedDate || localToday

@@ -5,6 +5,9 @@ import {
   buildChildWorkflowInstanceId,
   buildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
+  getCalendarDate,
+  getCalendarDayOfWeek,
+  parseTimezoneOffset,
   parseWorkflowRequest,
   resolveOperationDate,
 } from '../worker/workflow-security'
@@ -129,6 +132,21 @@ describe('workflow request parsing', () => {
 
 describe('workflow idempotency', () => {
   const now = new Date('2026-07-19T18:00:00.000Z')
+
+  it('keeps the entire local calendar day through 23:59:59.999', () => {
+    assert.equal(getCalendarDate(new Date('2026-09-09T15:59:59.999Z'), 8), '2026-09-09')
+    assert.equal(getCalendarDate(new Date('2026-09-09T16:00:00.000Z'), 8), '2026-09-10')
+  })
+
+  it('uses a calendar date weekday independent of the runtime timezone', () => {
+    assert.equal(getCalendarDayOfWeek('2026-09-07'), 1)
+  })
+
+  it('falls back safely when the timezone setting is invalid', () => {
+    assert.equal(parseTimezoneOffset(undefined), 8)
+    assert.equal(parseTimezoneOffset('not-a-number'), 8)
+    assert.equal(parseTimezoneOffset('-5'), -5)
+  })
 
   it('resolves an omitted date using the configured Taipei offset', () => {
     assert.equal(resolveOperationDate(undefined, now, 8), '2026-07-20')
