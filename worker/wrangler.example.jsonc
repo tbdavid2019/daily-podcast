@@ -30,7 +30,7 @@
   "vars": {
     // --- TTS Configuration (Gemini is default) ---
     "TTS_PROVIDER": "gemini", // Options: gemini, openai, minimax, edge
-    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
+    "GEMINI_TTS_MODEL": "gemini-3.8-flash-lite-tts",
     // Store GEMINI_TTS_API_SECRET with `wrangler secret put --cwd worker GEMINI_TTS_API_SECRET`.
     // Optional Gemini TTS fallback: `wrangler secret put --cwd worker GEMINI_TTS_FALLBACK_API_KEY`.
 

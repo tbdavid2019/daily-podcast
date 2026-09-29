@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { synthesize } from '@echristian/edge-tts'
 
-export const DEFAULT_GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
+export const DEFAULT_GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts'
 export const DEFAULT_GEMINI_TTS_TIMEOUT_MS = 45_000
 export const DEFAULT_GEMINI_TTS_MAX_RETRIES = 2
 export const MAX_GEMINI_TTS_FALLBACKS = 5
@@ -167,17 +167,27 @@ export async function callSingleGeminiTts(
   const model = config.model || DEFAULT_GEMINI_TTS_MODEL
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
   const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Puck') : (env.WOMAN_VOICE_ID || 'Leda')
+  const isGemini38Tts = model.startsWith('gemini-3.8-') && model.endsWith('-tts')
 
   const payload = {
-    contents: [{ parts: [{ text }] }],
+    contents: [{
+      role: 'user',
+      parts: [{ text }],
+    }],
     generationConfig: {
       responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName,
+      ...(isGemini38Tts && {
+        responseFormat: {
+          audio: {
+            mimeType: 'AUDIO_L16',
+            sampleRate: 24000,
           },
         },
+      }),
+      speechConfig: {
+        voiceConfig: isGemini38Tts
+          ? { voice: voiceName }
+          : { prebuiltVoiceConfig: { voiceName } },
       },
     },
   }

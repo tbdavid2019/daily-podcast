@@ -214,7 +214,7 @@ npx wrangler tail daily-podcast-worker
 
 | 服務商 (Provider) | 設定值 (`TTS_PROVIDER`) | 必填變數 (Required Vars) | 說明 |
 | :--- | :--- | :--- | :--- |
-| **Gemini**（建議） | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 2.5 Flash 產生中文語音（Fenrir／Leda）。 |
+| **Gemini**（建議） | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 3.8 Flash-Lite TTS 產生中文語音（Fenrir／Leda）。 |
 | **OpenAI** | `openai` | `OPENAI_TTS_API_SECRET` (或 `OPENAI_API_SECRET`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
 | **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_SECRET` | 使用 Minimax 語音模型。 |
 | **Edge TTS**（預設） | `edge`（或留空） | 無 | 使用微軟免費 Edge TTS 與台灣聲線（zh-TW-HsiaoChenNeural）。 |
@@ -231,8 +231,8 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 {
   "vars": {
     "TTS_PROVIDER": "gemini",
-    // 預設使用 gemini-2.5-flash-preview-tts，可選
-    "GEMINI_TTS_MODEL": "gemini-2.5-flash-preview-tts",
+    // 預設使用 gemini-3.8-flash-lite-tts，可選
+    "GEMINI_TTS_MODEL": "gemini-3.8-flash-lite-tts",
     // 自訂 Gemini 音色 (可選)
     "MAN_VOICE_ID": "Puck",   // 男聲預設為 Puck (更渾厚)
     "WOMAN_VOICE_ID": "Leda"  // 女聲預設為 Leda
