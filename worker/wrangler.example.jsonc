@@ -23,8 +23,7 @@
   },
   "triggers": {
     "crons": [
-      "30 0 * * *",
-      "0 1 * * *"
+      "30 0 * * *"
     ]
   },
   "keep_vars": false,

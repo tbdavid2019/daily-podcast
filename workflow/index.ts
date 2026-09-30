@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { podcastTitle, podcastTitleEn } from '@/config'
 import {
   buildChildWorkflowInstanceId,
+  buildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
   getCalendarDate,
   getCalendarDayOfWeek,
@@ -937,9 +938,42 @@ ${fullContentString}
 
     kvRequestLogger.checkpoint('after trigger audio workflow')
 
+    // When completing canonical hacker-news, automatically cascade to English script workflow
+    let enScriptInstanceId: string | undefined
+    if (variant === 'hacker-news' && !isEnglish) {
+      enScriptInstanceId = await step.do('trigger english script workflow', IO_STEP_CONFIG, async () => {
+        const enParams: WorkflowParams = {
+          today: displayDate,
+          variant: 'en',
+          phase: 'script',
+          force,
+        }
+        const enInstanceId = await buildWorkflowInstanceId({
+          runEnv,
+          operationDate: displayDate,
+          params: { variant: 'en', phase: 'script', force },
+          idempotencyKey: force ? event.instanceId : undefined,
+        })
+        const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(
+          this.env.HACKER_NEWS_WORKFLOW,
+          {
+            id: enInstanceId,
+            params: enParams,
+          },
+        )
+        console.info(
+          duplicateDetected ? 'English Script Workflow already exists' : 'Triggered English Script Workflow from Chinese Workflow',
+          { id: instance.id, params: enParams },
+        )
+        return instance.id
+      })
+      kvRequestLogger.checkpoint('after trigger english script workflow')
+    }
+
     return {
       scriptKey,
       audioInstanceId,
+      enScriptInstanceId,
       storyCount: stories.length,
       dialogueLines: scriptData.dialogue.length,
     }
