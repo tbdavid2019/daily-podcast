@@ -7,6 +7,7 @@ import Script from 'next/script'
 import { BgToggle } from '@/components/bg-toggle'
 import { BingBackground } from '@/components/bing-background'
 import { GoogleAd } from '@/components/google-ad'
+import { LangToggle } from '@/components/lang-toggle'
 import { PwaInstallButton } from '@/components/pwa-install-button'
 import { PwaServiceWorker } from '@/components/pwa-service-worker'
 import { WebMcpProvider } from '@/components/webmcp-provider'
@@ -160,6 +161,7 @@ export default function RootLayout({
                   <Rss className="w-7 h-7 font-bold" />
                 </a>
                 <PwaInstallButton />
+                <LangToggle />
               </div>
               <p className="text-base sm:text-lg text-zinc-700 mt-4 leading-relaxed max-w-2xl font-medium">{podcastDescription}</p>
             </header>
@@ -176,16 +178,25 @@ export default function RootLayout({
                   </div>
                   <div>
                     <h3 className="font-bold text-zinc-900 text-base leading-tight">DAVID888 Daily 每日放送</h3>
-                    <p className="text-xs text-zinc-600 font-medium mt-1">繁體中文科技廣播 · Hacker News / GitHub / Product Hunt 精華</p>
+                    <p className="text-xs text-zinc-600 font-medium mt-1">科技廣播 · Hacker News / GitHub / Product Hunt 精華</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <a
                     href="/rss.xml"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 hover:text-orange-800 transition-colors"
+                    title="繁體中文 RSS Feed"
                   >
                     <Rss className="size-3.5 text-pantone-tangerine" />
-                    RSS 訂閱
+                    RSS 繁中
+                  </a>
+                  <a
+                    href="/rss-en.xml"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-colors"
+                    title="English RSS Feed for YouTube / Apple Podcasts"
+                  >
+                    <Rss className="size-3.5 text-pantone-blue" />
+                    RSS EN
                   </a>
                   <a
                     href="/docs/api"
@@ -211,7 +222,9 @@ export default function RootLayout({
                   <span>製作維護</span>
                 </div>
                 <div className="flex items-center gap-3 text-zinc-600 font-medium">
-                  <Link href="/" className="hover:text-zinc-900 transition-colors">首頁</Link>
+                  <Link href="/" className="hover:text-zinc-900 transition-colors">繁中首頁</Link>
+                  <span>·</span>
+                  <Link href="/en" className="hover:text-zinc-900 transition-colors">English</Link>
                   <span>·</span>
                   <a href="/robots.txt" className="hover:text-zinc-900 transition-colors">Robots</a>
                   <span>·</span>

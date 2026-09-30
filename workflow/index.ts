@@ -5,7 +5,7 @@ import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, S
 import { generateObject, generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { z } from 'zod'
-import { podcastTitle } from '@/config'
+import { podcastTitle, podcastTitleEn } from '@/config'
 import {
   buildChildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
@@ -47,7 +47,16 @@ import {
   updateTopicArchiveIndex,
 } from './efficiency'
 import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
-import { introPrompt, podcastScriptPrompt, summarizeBlogPrompt, summarizeStoryPrompt } from './prompt'
+import {
+  introPrompt,
+  introPromptEn,
+  podcastScriptPrompt,
+  podcastScriptPromptEn,
+  summarizeBlogPrompt,
+  summarizeBlogPromptEn,
+  summarizeStoryPrompt,
+  summarizeStoryPromptEn,
+} from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
 import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
@@ -174,8 +183,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     if (variant === 'main')
       variant = 'hacker-news'
 
-    // 目前只支援 hacker-news，未來可擴充其他頻道邏輯
-    if (variant !== 'hacker-news') {
+    const isEnglish = variant === 'en'
+
+    // 目前只支援 hacker-news 與 en，未來可擴充其他頻道邏輯
+    if (variant !== 'hacker-news' && variant !== 'en') {
       console.warn(`Variant ${variant} is not fully implemented yet, defaulting to logic for hacker-news but saving with variant key.`)
     }
 
@@ -207,7 +218,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       variant,
     })
 
-    const rawContentKey = `content:${runEnv}:hacker-news:${displayDate}`
+    const rawContentKey = isEnglish
+      ? `content:${runEnv}:en:${displayDate}`
+      : `content:${runEnv}:hacker-news:${displayDate}`
     // New Script Key: script:{env}:{variant}:{date}
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
     const episodeIndexKey = buildEpisodeIndexKey(runEnv, variant)
@@ -558,7 +571,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
       const { text, usage, finishReason } = await runLlm('summarize all stories', 'standard', model => generateText({
         model,
-        system: `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
+        system: isEnglish
+          ? `${summarizeStoryPromptEn}\n\nPlease generate a summary for each story. **Important: You must generate a summary for all ${expectedCount} stories**. Wrap each summary with <story-summary id="STORY_ID">...</story-summary>.`
+          : `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
         prompt: combinedContent,
         maxTokens: summarizationMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
@@ -640,7 +655,27 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       const historicalCallbacks = findRelevantHistoricalTopics(topicArchiveIndex, stories, displayDate)
       const historicalCallbacksContext = formatHistoricalCallbacksContext(historicalCallbacks)
 
-      const enhancedPrompt = `日期: ${displayDate}
+      const enhancedPrompt = isEnglish
+        ? `Date: ${displayDate}
+[MANDATORY STORY LIST] (Total ${allStoryContents.length} stories, each must be discussed)
+${storyList}
+${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
+[DYNAMIC DIALOGUE REQUIREMENTS]
+- Target ${dialoguePlan.targetLines} dialogue turns, allowable range ${dialoguePlan.minLines}-${dialoguePlan.maxLines} turns. Each JSON dialogue item is one turn.
+- Each story must have at least one complete exchange between Cordelia and David.
+- David must explain the core technical mechanisms and principles for each story.
+- 2-3 most important or controversial stories should have extended exchanges.
+- Keep total word count around 1800-2400 words (matching 15-20 min TTS pace).
+- Substantive turns should be 60-120 words; quick transitions 25-50 words. No turn should exceed ${MAX_DIALOGUE_LINE_CHARS} words/chars.
+- Avoid low-information filler; prioritize technical depth, concrete facts, and grounded opinions.
+
+<story-metadata>${JSON.stringify(storyMetadata)}</story-metadata>
+
+<raw-story-content>
+${fullContentString}
+</raw-story-content>
+`
+        : `日期: ${displayDate}
 【必須討論的故事清單】（共 ${allStoryContents.length} 個故事，每一個都必須完整討論）
 ${storyList}
 ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
@@ -663,7 +698,7 @@ ${fullContentString}
 
       const { object, usage, finishReason } = await runLlm('generate podcast script', 'thinking', model => generateObject({
         model,
-        system: podcastScriptPrompt,
+        system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
         prompt: enhancedPrompt,
         maxTokens: scriptMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
@@ -710,8 +745,12 @@ ${fullContentString}
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
         const { text } = await runLlm('beautify missing title', 'standard', model => generateText({
           model,
-          system: `你是 ${podcastTitle} 的總編輯。請根據提供的故事摘要，產生一個具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或災難性結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
-          prompt: `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
+          system: isEnglish
+            ? `You are the Executive Editor of ${podcastTitleEn}. Based on the provided story summaries, generate an engaging, accurate English title. Format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]". Output ONLY the title.`
+            : `你是 ${podcastTitle} 的總編輯。請根據提供的故事摘要，產生一個具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或災難性結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
+          prompt: isEnglish
+            ? `Date: ${displayDate}\nToday's story summaries:\n${storySummaries.join('\n')}`
+            : `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
           maxRetries: AI_SDK_MAX_RETRIES,
         }))
         return text.trim().replace(/^"|"$/g, '')
@@ -726,7 +765,7 @@ ${fullContentString}
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => generateText({
         model,
-        system: summarizeBlogPrompt,
+        system: isEnglish ? summarizeBlogPromptEn : summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
         maxTokens: blogMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
@@ -745,7 +784,7 @@ ${fullContentString}
 
       const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({
         model,
-        system: introPrompt,
+        system: isEnglish ? introPromptEn : introPrompt,
         prompt: podcastContent,
         maxRetries: AI_SDK_MAX_RETRIES,
       }))
@@ -791,18 +830,20 @@ ${fullContentString}
 
     const todayTopics: TopicArchiveTopic[] = allStoryContents.map((storyContent, index) => {
       const summaryBlock = storySummaries[index] || ''
-      const coreFocusMatch = summaryBlock.match(/\*\*核心焦點\*\*：([^\n]+)/)
+      const coreFocusMatch = isEnglish
+        ? summaryBlock.match(/\*\*Core Focus\*\*:\s*([^\n]+)/i)
+        : summaryBlock.match(/\*\*核心焦點\*\*：([^\n]+)/)
       const coreFocus = coreFocusMatch ? coreFocusMatch[1].trim() : ''
       const storyObj = stories.find(candidate => candidate.id === storyContent.id)
-      const chineseTitle = (storyObj?.sourceUrl && blogTitleMap.get(storyObj.sourceUrl))
+      const storyTitle = (storyObj?.sourceUrl && blogTitleMap.get(storyObj.sourceUrl))
         || (storyObj?.url && blogTitleMap.get(storyObj.url))
         || storyContent.title
 
-      const keywords = extractKeywords(`${chineseTitle} ${coreFocus}`)
+      const keywords = extractKeywords(`${storyTitle} ${coreFocus}`)
       return {
-        title: chineseTitle,
+        title: storyTitle,
         keywords,
-        summary: coreFocus || chineseTitle,
+        summary: coreFocus || storyTitle,
         source: storyContent.source,
         sourceUrl: storyObj?.url || storyObj?.sourceUrl,
       }
@@ -810,7 +851,7 @@ ${fullContentString}
 
     const todayTopicEntry: TopicArchiveEntry = {
       date: displayDate,
-      episodeTitle: podcastScript.title || `[${displayDate}] 科技新聞彙整`,
+      episodeTitle: podcastScript.title || (isEnglish ? `[${displayDate}] Tech News Summary` : `[${displayDate}] 科技新聞彙整`),
       topics: todayTopics,
     }
     const nextTopicArchiveIndex = updateTopicArchiveIndex(topicArchiveIndex, todayTopicEntry)

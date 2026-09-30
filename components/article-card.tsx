@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { dictionaries } from '@/lib/i18n'
 import {
   applyPlaybackStart,
   buildPlaybackShareUrl,
@@ -43,6 +44,8 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, staticHost = '', showSummary = false, showFooter = false }: ArticleCardProps) {
+  const isEn = article.variant === 'en'
+  const dict = isEn ? dictionaries.en : dictionaries.zh
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
   const [shareMessage, setShareMessage] = useState('')
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
@@ -165,19 +168,19 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     try {
       if (navigator.share) {
         await navigator.share({ url })
-        setShareMessage('已開啟分享')
+        setShareMessage(dict.linkCopied)
         return
       }
 
       await navigator.clipboard.writeText(url)
-      setShareMessage('連結已複製')
+      setShareMessage(dict.linkCopied)
     }
     catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return
       }
 
-      setShareMessage('無法複製連結')
+      setShareMessage(dict.shareError)
     }
   }
 
@@ -185,7 +188,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     <div className={`sticky top-0 z-30 bg-white/95 backdrop-blur-xl ${showFooter ? 'border-b border-zinc-200/80 rounded-t-2xl' : 'rounded-2xl'}`}>
       <CardHeader className="pb-2">
         <CardTitle>
-          <Link href={`/post/${article.date}`} title={article.title} className="text-zinc-900 hover:text-pantone-blue transition-colors">
+          <Link href={getArticlePath(article.date, article.variant)} title={article.title} className="text-zinc-900 hover:text-pantone-blue transition-colors">
             <h2 className="text-xl font-bold tracking-tight leading-tight">{article.title}</h2>
           </Link>
           {showSummary && (
@@ -219,19 +222,19 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
             type="button"
             onClick={() => void handleShare()}
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
-            title="分享目前播放位置"
+            title={dict.shareMoment}
           >
             <Share2 className="size-4" aria-hidden="true" />
-            分享此刻
+            {dict.shareMoment}
           </button>
         </div>
       </div>
       {showFooter && (
         <div className="px-6 pb-3 pt-1">
           <TabsList className="bg-zinc-100/80 p-1 border border-zinc-200/60 rounded-xl">
-            <TabsTrigger value="summary" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">總結</TabsTrigger>
-            <TabsTrigger value="podcast" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">Podcast</TabsTrigger>
-            <TabsTrigger value="references" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">參考</TabsTrigger>
+            <TabsTrigger value="summary" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">{dict.tabs.summary}</TabsTrigger>
+            <TabsTrigger value="podcast" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">{dict.tabs.podcast}</TabsTrigger>
+            <TabsTrigger value="references" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-sm">{dict.tabs.references}</TabsTrigger>
           </TabsList>
         </div>
       )}
@@ -257,11 +260,11 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
                   {article.stories?.map((story) => {
                     const sourceLabel = (() => {
                       switch (story.source) {
-                        case 'hacker-news': return '評論'
-                        case 'github-trending': return 'GitHub'
-                        case 'product-hunt': return 'Product Hunt'
-                        case 'dev-to': return 'Dev.to'
-                        case 'reddit': return story.subreddit ? `r/${story.subreddit}` : 'Reddit'
+                        case 'hacker-news': return dict.sources.comment
+                        case 'github-trending': return dict.sources.github
+                        case 'product-hunt': return dict.sources.productHunt
+                        case 'dev-to': return dict.sources.devto
+                        case 'reddit': return story.subreddit ? `r/${story.subreddit}` : dict.sources.reddit
                         default: return null
                       }
                     })()

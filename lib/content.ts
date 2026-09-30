@@ -128,9 +128,9 @@ export async function appendEpisodeDateToIndex(
   return nextDates
 }
 
-export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6) {
-  const variant = 'hacker-news'
-  const sortedDates = await getEpisodeDates(env, variant)
+export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6, variant = 'hacker-news') {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const sortedDates = await getEpisodeDates(env, normalizedVariant)
   const totalItems = sortedDates.length
   const totalPages = Math.ceil(totalItems / pageSize) || 1
   const startIndex = (currentPage - 1) * pageSize
@@ -138,7 +138,7 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
 
   const posts = (await Promise.all(
     currentDays.map(async (day) => {
-      const article = await getArticleByDate(env, day, variant)
+      const article = await getArticleByDate(env, day, normalizedVariant)
       return article as Article | null
     }),
   )).filter(Boolean) as Article[]

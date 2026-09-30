@@ -17,11 +17,17 @@ interface PaginationProps {
   currentPage: number
   totalPages: number
   className?: string
+  basePath?: string
 }
 
-export function Pagination({ currentPage, totalPages, className }: PaginationProps) {
+export function Pagination({ currentPage, totalPages, className, basePath = '' }: PaginationProps) {
   const router = useRouter()
   const [jumpPage, setJumpPage] = useState('')
+
+  const getPageUrl = (page: number) => {
+    const prefix = basePath || ''
+    return `${prefix}?page=${page}`
+  }
 
   if (totalPages <= 1) {
     return null
@@ -65,7 +71,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
     e.preventDefault()
     const pageNum = Number.parseInt(jumpPage.trim(), 10)
     if (!Number.isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-      router.push(`/?page=${pageNum}`)
+      router.push(getPageUrl(pageNum))
       setJumpPage('')
     }
   }
@@ -92,7 +98,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         {hasPrev
           ? (
               <Link
-                href="/?page=1"
+                href={getPageUrl(1)}
                 title="第一頁"
                 className={cn(baseBtnClass, enabledBtnClass, 'size-9')}
                 aria-label="第一頁"
@@ -113,7 +119,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         {hasPrev
           ? (
               <Link
-                href={`/?page=${currentPage - 1}`}
+                href={getPageUrl(currentPage - 1)}
                 title="上一頁"
                 className={cn(baseBtnClass, enabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
                 aria-label="上一頁"
@@ -162,7 +168,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
               : (
                   <Link
                     key={item.key}
-                    href={`/?page=${pageNum}`}
+                    href={getPageUrl(pageNum)}
                     className={cn(
                       baseBtnClass,
                       enabledBtnClass,
@@ -179,7 +185,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         {hasNext
           ? (
               <Link
-                href={`/?page=${currentPage + 1}`}
+                href={getPageUrl(currentPage + 1)}
                 title="下一頁"
                 className={cn(baseBtnClass, enabledBtnClass, 'px-2.5 sm:px-3 gap-1')}
                 aria-label="下一頁"
@@ -202,7 +208,7 @@ export function Pagination({ currentPage, totalPages, className }: PaginationPro
         {hasNext
           ? (
               <Link
-                href={`/?page=${totalPages}`}
+                href={getPageUrl(totalPages)}
                 title={`最後一頁 (第 ${totalPages} 頁)`}
                 className={cn(baseBtnClass, enabledBtnClass, 'size-9')}
                 aria-label="最後一頁"
