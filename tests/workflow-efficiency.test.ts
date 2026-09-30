@@ -61,6 +61,21 @@ describe('workflow retry budgets', () => {
     assert.deepEqual(hardChunks.map(chunk => chunk.length), [380, 380, 17])
 
     assert.deepEqual(splitDialogueText('  保留   合理空白。 '), ['保留 合理空白。'])
+
+    // English sentence boundary and decimal preservation
+    const englishSentences = 'The failure rate ticked up to 1.73 percent. David, the big takeaway is here.'
+    assert.deepEqual(splitDialogueText(englishSentences, 50), [
+      'The failure rate ticked up to 1.73 percent.',
+      'David, the big takeaway is here.',
+    ])
+
+    // Oversized English sentence without splitting words across boundaries
+    const longEnglish = 'The architecture here is remarkably disciplined. The author offloaded the three-body gravitational simulation directly into compute shaders. If the satellites were rendered at true physical scale, they would be sub-pixel invisibles.'
+    const chunks = splitDialogueText(longEnglish, 100)
+    assert.ok(chunks.every(c => c.length <= 100))
+    for (const word of ['architecture', 'remarkably', 'disciplined', 'author', 'offloaded', 'gravitational', 'simulation', 'compute', 'satellites', 'rendered', 'physical', 'sub-pixel', 'invisibles']) {
+      assert.ok(chunks.some(c => c.includes(word)), `Word ${word} must be intact`)
+    }
   })
 
   it('derives replay-sensitive dates from the durable Workflow event', async () => {

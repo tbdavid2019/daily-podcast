@@ -38,8 +38,28 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
   const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
 
   // Format dialogue as string for the frontend
+  const isEnglish = variant === 'en'
   const podcastContent = Array.isArray(data.dialogue)
-    ? data.dialogue.map((line: any) => `${line.speaker}: ${line.text}`).join('\n\n')
+    ? data.dialogue.map((line: any) => {
+        let speaker = line.speaker
+        if (isEnglish) {
+          if (speaker === '女' || speaker?.toLowerCase() === 'cordelia') {
+            speaker = 'Cordelia'
+          }
+          else if (speaker === '男' || speaker?.toLowerCase() === 'david') {
+            speaker = 'David'
+          }
+        }
+        else {
+          if (speaker?.toLowerCase() === 'cordelia') {
+            speaker = '女'
+          }
+          else if (speaker?.toLowerCase() === 'david') {
+            speaker = '男'
+          }
+        }
+        return `${speaker}: ${line.text}`
+      }).join('\n\n')
     : data.dialogue
 
   // Use the generated title if available (new format), otherwise fallback to constructed title

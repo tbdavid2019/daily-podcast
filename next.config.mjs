@@ -1,9 +1,6 @@
-import process from 'node:process'
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
 
-if (process.env.NODE_ENV === 'development') {
-  initOpenNextCloudflareForDev()
-}
+initOpenNextCloudflareForDev()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

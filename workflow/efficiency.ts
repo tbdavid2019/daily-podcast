@@ -45,18 +45,37 @@ export function splitDialogueText(text: string, maxChars = MAX_DIALOGUE_LINE_CHA
     return [normalized]
   }
 
-  const sentences = normalized.match(/[^。！？!?；;]+[。！？!?；;]?/gu) || [normalized]
+  // Split on Chinese punctuation (。！？!?；;) or English sentence boundaries (. ! ? followed by space)
+  const sentences = normalized.split(/(?<=[。！？!?；;])\s*|(?<=[.!?])\s+(?=[a-z0-9"'])/iu).map(s => s.trim()).filter(Boolean)
   const segments: string[] = []
   let current = ''
 
-  for (const sentence of sentences) {
-    const trimmedSentence = sentence.trim()
+  function appendOversized(chunk: string) {
+    let remaining = chunk.trim()
+    while (remaining.length > maxChars) {
+      let cut = remaining.lastIndexOf(' ', maxChars)
+      if (cut <= 0) {
+        cut = maxChars
+      }
+      const part = remaining.slice(0, cut).trim()
+      if (part) {
+        segments.push(part)
+      }
+      remaining = remaining.slice(cut).trim()
+    }
+    if (remaining) {
+      segments.push(remaining)
+    }
+  }
+
+  for (const trimmedSentence of sentences) {
     if (!trimmedSentence) {
       continue
     }
 
-    if ((current + trimmedSentence).length <= maxChars) {
-      current += trimmedSentence
+    const sep = (current && /[a-z0-9.,!?;:]$/i.test(current)) ? ' ' : ''
+    if ((current + sep + trimmedSentence).length <= maxChars) {
+      current = current ? (current + sep + trimmedSentence) : trimmedSentence
       continue
     }
 
@@ -70,12 +89,7 @@ export function splitDialogueText(text: string, maxChars = MAX_DIALOGUE_LINE_CHA
       continue
     }
 
-    for (let offset = 0; offset < trimmedSentence.length; offset += maxChars) {
-      const chunk = trimmedSentence.slice(offset, offset + maxChars).trim()
-      if (chunk) {
-        segments.push(chunk)
-      }
-    }
+    appendOversized(trimmedSentence)
   }
 
   if (current) {

@@ -789,7 +789,11 @@ ${fullContentString}
     await step.sleep('pause before intro content', breakTime)
 
     const introContent = await step.do('create intro content', AI_STEP_CONFIG, async () => {
-      const podcastDialogueLines = podcastScript.dialogue.map(line => `${line.speaker}：${line.text}`)
+      const podcastDialogueLines = podcastScript.dialogue.map((line) => {
+        const speakerName = isEnglish ? (line.speaker === '女' ? 'Cordelia' : 'David') : line.speaker
+        const separator = isEnglish ? ': ' : '：'
+        return `${speakerName}${separator}${line.text}`
+      })
       const podcastContent = podcastDialogueLines.join('\n')
 
       const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({

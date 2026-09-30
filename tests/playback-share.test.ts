@@ -60,3 +60,34 @@ describe('timestamped playback sharing', () => {
     assert.doesNotMatch(source, /crossOrigin=/)
   })
 })
+
+describe('mapScriptToArticle speaker mapping', () => {
+  it('maps Chinese speaker labels to Cordelia and David for English variant', async () => {
+    const { mapScriptToArticle } = await import('../lib/utils')
+    const article = mapScriptToArticle({
+      displayDate: '2026-09-30',
+      title: 'English Episode',
+      dialogue: [
+        { speaker: '女', text: 'Welcome to the show.' },
+        { speaker: '男', text: 'Thanks Cordelia.' },
+      ],
+    }, 'production', 'en')
+
+    assert.equal(article.podcastContent, 'Cordelia: Welcome to the show.\n\nDavid: Thanks Cordelia.')
+  })
+
+  it('preserves or normalizes Chinese speaker labels for default variant', async () => {
+    const { mapScriptToArticle } = await import('../lib/utils')
+    const article = mapScriptToArticle({
+      displayDate: '2026-09-30',
+      title: '中文節目',
+      dialogue: [
+        { speaker: 'Cordelia', text: '歡迎收聽。' },
+        { speaker: 'David', text: '大家早安。' },
+      ],
+    }, 'production', 'hacker-news')
+
+    assert.equal(article.podcastContent, '女: 歡迎收聽。\n\n男: 大家早安。')
+  })
+})
+
