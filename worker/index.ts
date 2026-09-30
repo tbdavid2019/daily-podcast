@@ -5,6 +5,7 @@ import {
   buildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
   getCalendarDate,
+  getScheduledVariant,
   parseTimezoneOffset,
   parseWorkflowRequest,
   resolveOperationDate,
@@ -208,14 +209,15 @@ export default {
   },
   async scheduled(event: ScheduledEvent, env: Env) {
     console.info('scheduled event', event.cron)
+    const variant = getScheduledVariant(event.cron)
     const response = await startWorkflow({
-      variant: 'hacker-news',
+      variant,
       phase: 'script',
       force: false,
     }, env)
 
     if (!response.ok) {
-      throw new Error(`Scheduled Workflow trigger failed with status ${response.status}`)
+      throw new Error(`Scheduled Workflow trigger failed for ${variant} with status ${response.status}`)
     }
   },
 }

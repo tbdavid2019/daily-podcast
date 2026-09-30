@@ -263,3 +263,10 @@ export async function createIdempotentWorkflowInstance<Params, Instance extends 
     }
   }
 }
+
+export function getScheduledVariant(cron?: string): 'en' | 'hacker-news' {
+  if (cron === '0 1 * * *') {
+    return 'en'
+  }
+  return 'hacker-news'
+}

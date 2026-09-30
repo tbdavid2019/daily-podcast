@@ -396,6 +396,14 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     })
 
     const stories = await step.do(`get all stories ${fetchDate}`, CONTENT_FETCH_STEP_CONFIG, async () => {
+      if (isEnglish && !force) {
+        const hnScriptRaw = await kvGet<GeneratedScriptData>(`script:${runEnv}:hacker-news:${displayDate}`, 'json')
+        if (hnScriptRaw?.stories && hnScriptRaw.stories.length > 0) {
+          console.info(`English workflow reusing ${hnScriptRaw.stories.length} curated stories from hacker-news:`, displayDate)
+          return hnScriptRaw.stories
+        }
+      }
+
       const allStories = await getAllStories(fetchDate, this.env, {
         limits: storyLimits,
         excludeRedditIds,
@@ -420,10 +428,15 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     // Fetch one story per durable step so a failure cannot replay every source item.
     // Large content is checkpointed in strongly-consistent R2; step state stores only keys.
+    const hnRawContentKey = `content:${runEnv}:hacker-news:${displayDate}`
     const storyContentPlan = await Promise.all(stories.map(async (story) => {
       const cacheKey = await buildStoryContentCacheKey(rawContentKey, story)
+      const fallbackCacheKey = isEnglish
+        ? await buildStoryContentCacheKey(hnRawContentKey, story)
+        : undefined
       return {
         cacheKey,
+        fallbackCacheKey,
         contentCheckpointKey: buildStoryContentCheckpointKey(cacheKey, event.instanceId),
         articleCheckpointKey: buildStoryArticleCheckpointKey(cacheKey, event.instanceId),
         story,
@@ -441,7 +454,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         if (await this.env.HACKER_NEWS_R2.head(plan.articleCheckpointKey)) {
           continue
         }
-        const cached = await kvGet(plan.cacheKey)
+        let cached = await kvGet(plan.cacheKey)
+        if (!cached && plan.fallbackCacheKey) {
+          cached = await kvGet(plan.fallbackCacheKey)
+        }
         if (cached) {
           try {
             if (parseStoryContentCheckpoint(JSON.parse(cached))) {
@@ -485,7 +501,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         await step.sleep(`wait for reddit rss ${redditStoryIndex}`, REDDIT_RSS_RATE_LIMIT_DELAY)
       }
       const stepName = `get story content ${storyIndex + 1}`
-      const { cacheKey, contentCheckpointKey, articleCheckpointKey } = storyContentPlan[storyIndex]
+      const { cacheKey, fallbackCacheKey, contentCheckpointKey, articleCheckpointKey } = storyContentPlan[storyIndex]
 
       kvRequestLogger.checkpoint(`before ${stepName}`)
       const checkpointKey = await step.do(stepName, CONTENT_FETCH_STEP_CONFIG, async () => {
@@ -495,12 +511,15 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         }
 
         let storyRecord: StoryContentCheckpoint | null = null
-        const cached = await kvGet(cacheKey)
+        let cached = await kvGet(cacheKey)
+        if (!cached && fallbackCacheKey) {
+          cached = await kvGet(fallbackCacheKey)
+        }
         if (cached) {
           try {
             storyRecord = parseStoryContentCheckpoint(JSON.parse(cached))
             if (storyRecord) {
-              console.info('use cached story content', { cacheKey })
+              console.info('use cached story content', { cacheKey: cached === fallbackCacheKey ? fallbackCacheKey : cacheKey })
             }
           }
           catch (error) {

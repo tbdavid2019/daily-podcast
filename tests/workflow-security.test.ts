@@ -7,6 +7,7 @@ import {
   createIdempotentWorkflowInstance,
   getCalendarDate,
   getCalendarDayOfWeek,
+  getScheduledVariant,
   parseTimezoneOffset,
   parseWorkflowRequest,
   resolveOperationDate,
@@ -263,5 +264,20 @@ describe('workflow idempotency', () => {
       }),
       error => error === createError,
     )
+  })
+})
+
+describe('scheduled cron routing', () => {
+  it('routes English cron (01:00 UTC / 09:00 Taipei) to en variant', () => {
+    assert.equal(getScheduledVariant('0 1 * * *'), 'en')
+  })
+
+  it('routes Chinese cron (00:30 UTC / 08:30 Taipei) to hacker-news variant', () => {
+    assert.equal(getScheduledVariant('30 0 * * *'), 'hacker-news')
+  })
+
+  it('falls back safely to hacker-news variant when cron is unspecified', () => {
+    assert.equal(getScheduledVariant(undefined), 'hacker-news')
+    assert.equal(getScheduledVariant(''), 'hacker-news')
   })
 })
