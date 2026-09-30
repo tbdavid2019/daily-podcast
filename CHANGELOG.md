@@ -2,6 +2,31 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-09-30] 全英文 Podcast、流水線級聯共享快取與英文斷句音訊修復 (English Podcast, Cascading Pipeline & Sentence Splitting Fix)
+
+- **全英文 Podcast 雙語架構與多語系前端 (Bilingual UI & English Podcast Variant)**：
+  - 前端網站加入「🌐 EN / 繁中」語系切換功能與 i18n 字典支援，提供獨立英文單集與首頁路由（`/en` 與 `/post/[date]/en`）。
+  - 建立專屬獨立英文 RSS Feed（`/rss-en.xml`），完美對接 Spotify、Apple Podcasts 與 YouTube Podcasts 英文頻道。
+  - 在 `lib/utils.ts` 中優化發言者標籤映射：針對 `variant === 'en'` 自動將對話發言者正規化為 **`Cordelia:`** 與 **`David:`**，中文節目維持繁體標籤「女: / 男:」。
+- **英文斷句演算法修復與單字完整性保護 (Sentence Splitting & Word Boundary Protection)**：
+  - 重構 `workflow/efficiency.ts` 中的 `splitDialogueText`：
+    - 正則式新增英文句號與小數點識別支援 `(?<=[.!?])\s+(?=[a-z0-9"'])`，保護小數點與版本號（如 `1.73%`、`3.8`）不被切碎。
+    - 超長句子 fallback 切分引入單字空格邊界保護（`lastIndexOf(' ', maxChars)`），嚴格禁止從單字內部硬切，徹底根治 `rendered` 被切成 `rende` / `red` 以及標點分離、同講者連續兩次標籤的異常。
+  - 全新生成並替換 2026-09-30 英文版 45.5 MB 完整語音檔，消除 TTS 合成因文字切裂產生的斷音與停頓。
+- **流水線級聯（Cascading Pipeline）與雙語選題/2md 內文快取共享 (Cascading Workflow & Shared 2md Cache)**：
+  - **因應 Cloudflare Free Plan 5 個 Cron 上限**：維持單一 Cron `30 0 * * *`（台北時間 08:30），由繁中版完成後於步驟 `trigger english script workflow` 自動級聯發起英文版工作流，零多餘 Cron 消耗。
+  - **0 重複 2md 爬蟲外發請求**：
+    - 英文版執行時，自動優先復用中文版當日已精選之 10 大熱門新聞，確保中英雙語焦點 100% 同步。
+    - 在文章內文解析階段，英文版直接讀取中文版已經轉好的英文 Markdown（2md）快取，跳過外部網頁抓取，徹底守護 Cloudflare 免費方案每次執行 50 次子請求的預算上限。
+    - 若中文版尚未生成，英文版自動安全降級為獨立抓取，維持單獨執行能力。
+- **根治 OpenNext Dev Proxy 預渲染死鎖 (OpenNext Prerender SQLite Locking Fix)**：
+  - 修正 `next.config.mjs`：無條件呼叫 `initOpenNextCloudflareForDev()`，徹底排除 Next.js 15 在靜態預渲染（19 頁）時各子程序多重啟動 Miniflare 並發寫入本機 DO 狀態造成的 `SQLITE_BUSY` 與 `SQLITE_READONLY` 死鎖問題。
+- **完整門禁驗證與部署**：
+  - 新增並通過英文斷句測試、小數點保護測試、多語系講者映射測試與 Cron 路由測試（73 項單元測試全數綠燈）。
+  - Web Worker (`daily-podcast`) 與 Generation Worker (`daily-podcast-worker`) 均已順利編譯並更新部署上線。
+
+---
+
 ## [2026-09-09] 全來源跨日滾動去重、30 天主題歷史庫與主持人前情回顧 (Full-Source Rolling Deduplication & Topic Archive Callbacks)
 
 - **實作全來源 7 天 ID 與 URL 滾動去重**：
