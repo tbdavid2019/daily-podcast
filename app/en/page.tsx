@@ -14,6 +14,24 @@ const PAGE_SIZE = 6
 export const metadata: Metadata = {
   title: `${podcastTitleEn} - English Edition`,
   description: podcastDescriptionEn,
+  alternates: {
+    canonical: '/en',
+    types: {
+      'application/rss+xml': [
+        {
+          url: '/rss-en.xml',
+          title: podcastTitleEn,
+        },
+      ],
+    },
+  },
+  openGraph: {
+    title: `${podcastTitleEn} - English Edition`,
+    description: podcastDescriptionEn,
+    url: '/en',
+    locale: 'en_US',
+    siteName: podcastTitleEn,
+  },
 }
 
 interface EnHomeProps {

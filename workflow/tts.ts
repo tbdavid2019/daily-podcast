@@ -307,18 +307,25 @@ export async function geminiTTS(
   throw lastError
 }
 
-async function edgeTTS(text: string, gender: string, env: Env) {
+async function edgeTTS(text: string, gender: string, env: Env, isEnglish = false) {
+  const defaultMaleVoice = isEnglish ? 'en-US-GuyNeural' : 'zh-TW-YunJheNeural'
+  const defaultFemaleVoice = isEnglish ? 'en-US-JennyNeural' : 'zh-TW-HsiaoChenNeural'
+  const defaultLang = isEnglish ? 'en-US' : 'zh-TW'
+
   const { audio } = await synthesize({
     text,
-    language: 'zh-TW', // 改為繁體中文 (台灣)
-    voice: gender === '男' ? (env.MAN_VOICE_ID || 'zh-TW-YunJheNeural') : (env.WOMAN_VOICE_ID || 'zh-TW-HsiaoChenNeural'),
+    language: defaultLang,
+    voice: gender === '男' ? (env.MAN_VOICE_ID || defaultMaleVoice) : (env.WOMAN_VOICE_ID || defaultFemaleVoice),
     rate: env.AUDIO_SPEED || '10%',
   })
   return audio
 }
 
-async function minimaxTTS(text: string, gender: string, env: Env) {
+async function minimaxTTS(text: string, gender: string, env: Env, isEnglish = false) {
   const apiKey = env.TTS_API_SECRET || env.TTS_API_KEY
+  const defaultMaleVoice = isEnglish ? 'English_expressive_narrator' : 'Chinese (Mandarin)_Gentleman'
+  const defaultFemaleVoice = isEnglish ? 'English_friendly_host' : 'Chinese (Mandarin)_Gentle_Senior'
+
   const res = await fetch(`${env.TTS_API_URL || 'https://api.minimax.chat/v1/t2a_v2'}?GroupId=${env.TTS_API_ID}`, {
     method: 'POST',
     headers: {
@@ -330,7 +337,7 @@ async function minimaxTTS(text: string, gender: string, env: Env) {
       text,
       timber_weights: [
         {
-          voice_id: gender === '男' ? (env.MAN_VOICE_ID || 'Chinese (Mandarin)_Gentleman') : (env.WOMAN_VOICE_ID || 'Chinese (Mandarin)_Gentle_Senior'),
+          voice_id: gender === '男' ? (env.MAN_VOICE_ID || defaultMaleVoice) : (env.WOMAN_VOICE_ID || defaultFemaleVoice),
           weight: 100,
         },
       ],
@@ -346,7 +353,7 @@ async function minimaxTTS(text: string, gender: string, env: Env) {
         bitrate: 128000,
         format: 'mp3',
       },
-      language_boost: 'Chinese',
+      language_boost: isEnglish ? 'English' : 'Chinese',
     }),
   })
 
@@ -361,7 +368,7 @@ async function minimaxTTS(text: string, gender: string, env: Env) {
   throw new Error(`Failed to fetch audio: ${res.statusText}`)
 }
 
-async function openaiTTS(text: string, gender: string, env: Env) {
+async function openaiTTS(text: string, gender: string, env: Env, isEnglish = false) {
   const apiKey = env.OPENAI_TTS_API_SECRET || env.OPENAI_API_SECRET || env.OPENAI_TTS_API_KEY || env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('OpenAI TTS API key is missing')
@@ -378,8 +385,11 @@ async function openaiTTS(text: string, gender: string, env: Env) {
     speed: Number(env.AUDIO_SPEED || 1.3), // 語速調整：1.0=正常, 1.3=快30%
   }
 
-  if (env.OPENAI_TTS_INSTRUCTIONS) {
-    body.instructions = env.OPENAI_TTS_INSTRUCTIONS
+  const instructions = env.OPENAI_TTS_INSTRUCTIONS
+    || (isEnglish ? 'Please speak in a natural, lively American English podcast tone.' : undefined)
+
+  if (instructions) {
+    body.instructions = instructions
   }
 
   const res = await fetch(`${baseUrl}/audio/speech`, {
@@ -401,15 +411,20 @@ async function openaiTTS(text: string, gender: string, env: Env) {
   return new Blob([arrayBuffer], { type: 'audio/mpeg' })
 }
 
-export default async function (text: string, gender: string, env: Env) {
+export interface SynthesizeOptions {
+  isEnglish?: boolean
+}
+
+export default async function (text: string, gender: string, env: Env, options?: SynthesizeOptions) {
+  const isEnglish = options?.isEnglish ?? (/[a-z]/i.test(text) && !/[\u4E00-\u9FFF]/.test(text))
   if (env.TTS_PROVIDER === 'openai') {
-    return openaiTTS(text, gender, env)
+    return openaiTTS(text, gender, env, isEnglish)
   }
   if (env.TTS_PROVIDER === 'minimax') {
-    return minimaxTTS(text, gender, env)
+    return minimaxTTS(text, gender, env, isEnglish)
   }
   if (env.TTS_PROVIDER === 'edge') {
-    return edgeTTS(text, gender, env)
+    return edgeTTS(text, gender, env, isEnglish)
   }
   // Default: Gemini TTS with automatic retries and multi-key fallback
   return geminiTTS(text, gender, env)

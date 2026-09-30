@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -7,6 +8,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function PwaInstallButton() {
+  const pathname = usePathname()
+  const isEn = pathname.startsWith('/en') || pathname.endsWith('/en')
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function PwaInstallButton() {
         void installPrompt.prompt().finally(() => setInstallPrompt(null))
       }}
     >
-      安裝 App
+      {isEn ? 'Install App' : '安裝 App'}
     </button>
   )
 }

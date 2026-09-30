@@ -132,6 +132,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     if (variant === 'main')
       variant = 'hacker-news'
 
+    const isEnglish = variant === 'en'
+
     // Check if using Gemini TTS (which outputs WAV)
     const isGeminiTTS = this.env.TTS_PROVIDER === 'gemini'
 
@@ -222,7 +224,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
             continue
           }
 
-          const audio = await synthesize(segment.text, segment.speaker, this.env)
+          const audio = await synthesize(segment.text, segment.speaker, this.env, { isEnglish })
           const typedBuffer = new Uint8Array(await audio.arrayBuffer())
           if (!typedBuffer.byteLength) {
             throw new Error('podcast audio size is 0')

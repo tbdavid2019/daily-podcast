@@ -147,7 +147,7 @@ export async function GET(request: Request) {
       date: new Date(updatedAt),
       enclosure: {
         url: `${env.NEXT_STATIC_HOST}/${post.audio}?t=${updatedAt}`,
-        type: 'audio/mpeg',
+        type: audioInfo?.httpMetadata?.contentType || (post.audio.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
         size: audioInfo?.size,
       },
     })

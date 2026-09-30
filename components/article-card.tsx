@@ -88,13 +88,13 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     const setupSeekButtons = () => {
       const shadow = parent.shadowRoot
       if (!shadow) {
-        return null
+        return false
       }
 
       const backwardBtn = shadow.querySelector('media-seek-backward-button')
       const forwardBtn = shadow.querySelector('media-seek-forward-button')
       if (!backwardBtn || !forwardBtn) {
-        return null
+        return false
       }
 
       if (!shadow.querySelector('#seek-buttons-enhanced-style')) {
@@ -116,48 +116,16 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
         shadow.appendChild(style)
       }
 
-      const onBackward = (e: Event) => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        audioElement.currentTime = Math.max(0, audioElement.currentTime - 10)
-      }
-
-      const onForward = (e: Event) => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        const duration = Number.isFinite(audioElement.duration) ? audioElement.duration : Number.MAX_SAFE_INTEGER
-        audioElement.currentTime = Math.min(duration, audioElement.currentTime + 10)
-      }
-
-      backwardBtn.addEventListener('click', onBackward, true)
-      forwardBtn.addEventListener('click', onForward, true)
-
-      return () => {
-        backwardBtn.removeEventListener('click', onBackward, true)
-        forwardBtn.removeEventListener('click', onForward, true)
-      }
+      return true
     }
 
-    let cleanup = setupSeekButtons()
-    if (!cleanup) {
+    if (!setupSeekButtons()) {
       const interval = setInterval(() => {
-        cleanup = setupSeekButtons()
-        if (cleanup) {
+        if (setupSeekButtons()) {
           clearInterval(interval)
         }
       }, 50)
-      return () => {
-        clearInterval(interval)
-        if (typeof cleanup === 'function') {
-          cleanup()
-        }
-      }
-    }
-
-    return () => {
-      if (typeof cleanup === 'function') {
-        cleanup()
-      }
+      return () => clearInterval(interval)
     }
   }, [audioElement])
 
