@@ -181,7 +181,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       const text = line.text.trim()
       if (!text)
         continue
-      const chunks = splitDialogueText(text, MAX_TTS_SEGMENT_CHARS)
+      const chunks = splitDialogueText(text, isEnglish ? 1000 : MAX_TTS_SEGMENT_CHARS)
       for (const chunk of chunks) {
         allSegments.push({ text: chunk, speaker: line.speaker })
       }

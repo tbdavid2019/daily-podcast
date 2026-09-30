@@ -21,7 +21,7 @@
     "test:workflow-trigger": "node --test tests/trigger-workflow-script.test.mjs",
     "test:workflow-security": "tsx --test tests/workflow-security.test.ts tests/workflow-efficiency.test.ts tests/audio-multipart.test.ts tests/reddit.test.ts tests/llm-fallback.test.ts tests/tts-fallback.test.ts",
     "test:web-cache": "tsx --test tests/web-cache-policy.test.ts tests/playback-share.test.ts tests/llms-txt.test.ts",
-    "test:webmcp": "tsx --test tests/webmcp.test.ts",
+    "test:webmcp": "tsx --test tests/webmcp.test.ts tests/mcp.test.ts",
     "test:pwa": "node --test tests/pwa.test.mjs",
     "test:build-gate": "node --test tests/build-gate.test.mjs tests/normalize-generated-types.test.mjs",
     "tests": "wrangler dev --cwd tests --remote",
@@ -44,6 +44,7 @@
     "@ai-sdk/openai": "^1.3.24",
     "@cloudflare/puppeteer": "^1.1.0",
     "@echristian/edge-tts": "^0.0.14",
+    "@modelcontextprotocol/server": "2.0.0",
     "@radix-ui/react-slider": "^1.4.4",
     "@radix-ui/react-slot": "^1.3.0",
     "@radix-ui/react-tabs": "^1.1.18",
@@ -62,7 +63,8 @@
     "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod4": "npm:zod@^4.4.3"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^5.4.1",

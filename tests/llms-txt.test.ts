@@ -19,6 +19,7 @@ describe('llms.txt & llms-full.txt discovery standards', () => {
     assert.match(content, /## 研發團隊與維護資訊 \(Development & Maintenance\)/)
     assert.match(content, /\[llms\.txt\]\(https:\/\/podcast\.david888\.com\/llms\.txt\)/)
     assert.match(content, /\[llms-full\.txt\]\(https:\/\/podcast\.david888\.com\/llms-full\.txt\)/)
+    assert.match(content, /\[MCP endpoint\]\(https:\/\/podcast\.david888\.com\/mcp\)/)
     assert.match(content, /Accept: text\/markdown/)
   })
 
@@ -29,6 +30,7 @@ describe('llms.txt & llms-full.txt discovery standards', () => {
     assert.match(content, /## 系統架構簡介 \(System Architecture\)/)
     assert.match(content, /## 完整路由與頁面說明 \(Route Directory\)/)
     assert.match(content, /## HTTP Content Negotiation 說明/)
+    assert.match(content, /MCP Streamable HTTP/)
     assert.match(content, /## 爬蟲政策與 Content Signals \(Robots Policy\)/)
     assert.match(content, /## 維護團隊與聯絡資訊 \(Maintenance & Contact\)/)
   })
@@ -40,8 +42,10 @@ describe('llms.txt & llms-full.txt discovery standards', () => {
 
     assert.match(llmsTxt, /# DAVID888 Daily 每日放送/)
     assert.match(llmsTxt, /https:\/\/podcast\.david888\.com\/llms\.txt/)
+    assert.match(llmsTxt, /https:\/\/podcast\.david888\.com\/mcp/)
     assert.match(llmsFullTxt, /# DAVID888 Daily 每日放送 - LLM 完整網站與 API 說明/)
     assert.match(llmsFullTxt, /https:\/\/podcast\.david888\.com\/llms-full\.txt/)
+    assert.match(llmsFullTxt, /POST https:\/\/podcast\.david888\.com\/mcp/)
     assert.match(headers, /\/llms\.txt[\s\S]*?Content-Type: text\/markdown; charset=utf-8/)
     assert.match(headers, /\/llms-full\.txt[\s\S]*?Content-Type: text\/markdown; charset=utf-8/)
   })

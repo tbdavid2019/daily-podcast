@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { buildApiDocMarkdown, buildOpenApiSpec } from '../lib/discovery'
 import {
   buildWebMcpEpisodePath,
   normalizeWebMcpPage,
@@ -9,6 +10,14 @@ import {
 } from '../lib/webmcp'
 
 describe('WebMCP input and output helpers', () => {
+  it('documents the same-origin MCP Streamable HTTP endpoint', () => {
+    const docs = buildApiDocMarkdown('https://podcast.example')
+    const spec = buildOpenApiSpec('https://podcast.example')
+
+    assert.match(docs, /POST https:\/\/podcast\.example\/mcp/)
+    assert.equal(spec.paths['/mcp'].post.operationId, 'postMcpMessage')
+  })
+
   it('builds same-origin Markdown paths for default and named variants', () => {
     assert.equal(
       buildWebMcpEpisodePath({ date: '2026-08-23', variant: 'hacker-news' }),

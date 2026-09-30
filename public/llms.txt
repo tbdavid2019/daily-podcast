@@ -14,6 +14,7 @@
 - [llms.txt](https://podcast.david888.com/llms.txt): LLM 與 AI Agent 的精簡網站結構與資源索引。
 - [llms-full.txt](https://podcast.david888.com/llms-full.txt): 完整網站架構、路由說明與 API 詳細規範檔案。
 - [Agent Skills 索引目錄](https://podcast.david888.com/.well-known/agent-skills/index.json): 機器可讀的 Agent Skills 清單與 SHA-256 驗證雜湊。
+- [MCP endpoint](https://podcast.david888.com/mcp): 以 Streamable HTTP 提供近期集數與單集內容工具。
 - [API Catalog](https://podcast.david888.com/.well-known/api-catalog): 符合 RFC 9727 規範的 API 服務鏈結目錄。
 - [OpenAPI Specification](https://podcast.david888.com/openapi.json): 標準 OpenAPI 3.1.0 介面規範。
 - [API 服務說明文件](https://podcast.david888.com/docs/api): 提供 AI Agent 呼叫之公開 API 節點與 HTTP 標頭說明。

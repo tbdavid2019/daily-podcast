@@ -27,11 +27,16 @@
 ### 5. API 狀態節點 (`https://podcast.david888.com/api/status`)
 - **功能**: 提供輕量級 JSON 狀態，包含服務名稱、當前狀態與 RSS URL。
 
+### 6. MCP Streamable HTTP (`https://podcast.david888.com/mcp`)
+- **功能**: 透過 POST JSON-RPC 請求列出近期集數或讀取指定集數內容。
+- **工具**: `list_recent_episodes`、`get_episode`。
+
 ## AI Agent 探索與協定規範 (Agent & Protocol Discovery)
 
 - **llms.txt**: `https://podcast.david888.com/llms.txt` (標準 Markdown 清單)
 - **llms-full.txt**: `https://podcast.david888.com/llms-full.txt` (完整規格檔案)
 - **Agent Skills 索引**: `https://podcast.david888.com/.well-known/agent-skills/index.json`
+- **MCP endpoint**: `POST https://podcast.david888.com/mcp`
 - **RFC 9727 API Catalog**: `https://podcast.david888.com/.well-known/api-catalog`
 - **OpenAPI 3.1.0 Specification**: `https://podcast.david888.com/openapi.json`
 - **API 說明網頁**: `https://podcast.david888.com/docs/api`

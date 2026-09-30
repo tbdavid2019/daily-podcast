@@ -134,12 +134,14 @@ export function buildLlmsTxt(baseUrl: string) {
     `- [節目文章頁面](${baseUrl}/post/{date}): 包含指定日期（如 ${baseUrl}/post/2026-08-10）的完整報導內文、故事導讀與延伸參考連結。`,
     `- [Podcast RSS Feed](${baseUrl}/rss.xml): 提供適用於各大 Podcast 播放器的標準 RSS 訂閱源（保留最新 ${rssDays} 天）。`,
     `- [Sitemap](${baseUrl}/sitemap.xml): 完整網站頁面索引與搜尋檢索地圖（永久典藏收錄全量集數）。`,
+    `- [MCP endpoint](${baseUrl}/mcp): 使用 Streamable HTTP 列出近期集數或讀取指定集數。`,
     '',
     '## AI Agent & API Discovery',
     '',
     `- [llms.txt](${baseUrl}/llms.txt): LLM 與 AI Agent 的精簡網站結構與資源索引。`,
     `- [llms-full.txt](${baseUrl}/llms-full.txt): 完整網站架構、路由說明與 API 詳細規範檔案。`,
     `- [Agent Skills 索引目錄](${baseUrl}/.well-known/agent-skills/index.json): 機器可讀的 Agent Skills 清單與 SHA-256 驗證雜湊。`,
+    `- [MCP endpoint](${baseUrl}/mcp): 以 Streamable HTTP 提供 \`list_recent_episodes\` 和 \`get_episode\` 工具。`,
     `- [API Catalog](${baseUrl}/.well-known/api-catalog): 符合 RFC 9727 規範的 API 服務鏈結目錄。`,
     `- [OpenAPI Specification](${baseUrl}/openapi.json): 標準 OpenAPI 3.1.0 介面規範。`,
     `- [API 服務說明文件](${baseUrl}/docs/api): 提供 AI Agent 呼叫之公開 API 節點與 HTTP 標頭說明。`,
@@ -193,11 +195,16 @@ export function buildLlmsFullTxt(baseUrl: string) {
     `### 5. API 狀態節點 (\`${baseUrl}/api/status\`)`,
     '- **功能**: 提供輕量級 JSON 狀態，包含服務名稱、當前狀態與 RSS URL。',
     '',
+    `### 6. MCP Streamable HTTP (\`${baseUrl}/mcp\`)`,
+    '- **功能**: 以 POST JSON-RPC 請求列出近期集數，或讀取指定日期與變體的集數內容。',
+    '- **工具**: `list_recent_episodes`、`get_episode`。',
+    '',
     '## AI Agent 探索與協定規範 (Agent & Protocol Discovery)',
     '',
     `- **llms.txt**: \`${baseUrl}/llms.txt\` (標準 Markdown 清單)`,
     `- **llms-full.txt**: \`${baseUrl}/llms-full.txt\` (完整規格檔案)`,
     `- **Agent Skills 索引**: \`${baseUrl}/.well-known/agent-skills/index.json\``,
+    `- **MCP endpoint**: \`POST ${baseUrl}/mcp\` (\`list_recent_episodes\`、\`get_episode\`)`,
     `- **RFC 9727 API Catalog**: \`${baseUrl}/.well-known/api-catalog\``,
     `- **OpenAPI 3.1.0 Specification**: \`${baseUrl}/openapi.json\``,
     `- **API 說明網頁**: \`${baseUrl}/docs/api\``,
@@ -334,6 +341,42 @@ export function buildOpenApiSpec(baseUrl: string) {
           },
         },
       },
+      '/mcp': {
+        post: {
+          operationId: 'postMcpMessage',
+          summary: 'Send a Model Context Protocol Streamable HTTP message',
+          description: 'Supports MCP tools/list and tools/call for public podcast content.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    jsonrpc: { const: '2.0' },
+                    id: { type: ['string', 'number'] },
+                    method: { type: 'string' },
+                    params: { type: 'object' },
+                  },
+                  required: ['jsonrpc', 'method'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'MCP JSON-RPC response',
+              content: {
+                'application/json': {
+                  schema: { type: 'object' },
+                },
+              },
+            },
+            403: { description: 'Request Host or Origin is not allowed' },
+            405: { description: 'HTTP method is not supported' },
+          },
+        },
+      },
     },
   }
 }
@@ -349,6 +392,7 @@ export function buildApiDocMarkdown(baseUrl: string) {
     `- \`GET ${baseUrl}/llms.txt\`: LLM and AI Agent discovery index`,
     `- \`GET ${baseUrl}/llms-full.txt\`: Full LLM documentation and route reference`,
     `- \`GET ${baseUrl}/api/status\`: service health and discovery summary`,
+    `- \`POST ${baseUrl}/mcp\`: MCP Streamable HTTP endpoint with \`list_recent_episodes\` and \`get_episode\` tools`,
     `- \`GET ${baseUrl}/openapi.json\`: OpenAPI description for the public endpoint set`,
     `- \`GET ${baseUrl}/.well-known/api-catalog\`: RFC 9727 API catalog`,
     `- \`GET ${baseUrl}/.well-known/agent-skills/index.json\`: agent skills discovery index`,

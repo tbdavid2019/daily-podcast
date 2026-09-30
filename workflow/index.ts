@@ -696,7 +696,16 @@ ${fullContentString}
 </raw-story-content>
 `
 
-      const { object, usage, finishReason } = await runLlm('generate podcast script', 'thinking', model => generateObject({
+      interface RawGeneratedScript {
+        title?: string
+        dialogue: { speaker: string, text: string }[]
+      }
+
+      const { object, usage, finishReason } = await runLlm<{
+        object: RawGeneratedScript
+        usage: unknown
+        finishReason: unknown
+      }>('generate podcast script', 'thinking', model => generateObject({
         model,
         system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
         prompt: enhancedPrompt,
@@ -729,7 +738,8 @@ ${fullContentString}
         if (!speaker || !text) {
           throw new Error(`invalid dialogue line at index ${index}`)
         }
-        return splitDialogueText(text).map(chunk => ({
+        const maxChars = isEnglish ? 1000 : MAX_DIALOGUE_LINE_CHARS
+        return splitDialogueText(text, maxChars).map(chunk => ({
           speaker: speaker as PodcastDialogueLine['speaker'],
           text: chunk,
         }))
