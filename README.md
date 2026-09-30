@@ -365,6 +365,21 @@ pnpm social:post --date 2026-09-30    # 指定補發特定日期集數
 pnpm social:post --max-stories 6      # 自訂串文子題數量
 ```
 
+### ⏰ Orca 自動化排程
+
+本專案已註冊至本機 **Orca Automations** 排程系統，每日固定於 **上午 11:00 (Asia/Taipei)** 自動發布當日重點整理至 X (Twitter) 與 Threads：
+
+```bash
+# 檢視已註冊之 Orca 排程狀態
+orca automations list
+
+# 查看社群發文排程詳細設定
+orca automations show e0fe7092-5f99-4e45-89ba-3f2b07ad77c5
+
+# 手動立即觸發排程測試
+orca automations run --automation e0fe7092-5f99-4e45-89ba-3f2b07ad77c5
+```
+
 ---
 
 ## 🤝 貢獻與支持

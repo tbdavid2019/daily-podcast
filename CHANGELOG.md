@@ -21,6 +21,8 @@
     - 若中文版尚未生成，英文版自動安全降級為獨立抓取，維持單獨執行能力。
 - **根治 OpenNext Dev Proxy 預渲染死鎖 (OpenNext Prerender SQLite Locking Fix)**：
   - 修正 `next.config.mjs`：無條件呼叫 `initOpenNextCloudflareForDev()`，徹底排除 Next.js 15 在靜態預渲染（19 頁）時各子程序多重啟動 Miniflare 並發寫入本機 DO 狀態造成的 `SQLITE_BUSY` 與 `SQLITE_READONLY` 死鎖問題。
+- **社群自動發文排程（Orca Automations）**：
+  - 成功註冊本機 Orca 排程（`e0fe7092-5f99-4e45-89ba-3f2b07ad77c5`），固定於每日上午 11:00（Asia/Taipei）自動執行 `pnpm social:dry-run` 預檢，並調用 `node scripts/social-post.mjs` 透過本機 Chrome 工作階段自動發布當日重點整理至 X (Twitter) 與 Meta Threads。
 - **完整門禁驗證與部署**：
   - 新增並通過英文斷句測試、小數點保護測試、多語系講者映射測試與 Cron 路由測試（73 項單元測試全數綠燈）。
   - Web Worker (`daily-podcast`) 與 Generation Worker (`daily-podcast-worker`) 均已順利編譯並更新部署上線。
