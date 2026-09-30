@@ -48,6 +48,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   const dict = isEn ? dictionaries.en : dictionaries.zh
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
   const [shareMessage, setShareMessage] = useState('')
+  const [audioError, setAudioError] = useState(false)
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
@@ -182,8 +183,21 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
             preload="metadata"
             playsInline
             tabIndex={article.updatedAt || -1}
+            onError={() => setAudioError(true)}
+            onPlay={() => {
+              if (audioError) {
+                setShareMessage(dict.audioNotReady)
+              }
+            }}
           />
         </AudioPlayer>
+        {audioError && (
+          <p className="mt-1 text-xs text-amber-600 font-medium flex items-center gap-1">
+            <span>⚠️</span>
+            {' '}
+            {dict.audioNotReady}
+          </p>
+        )}
         <div className="mt-2 flex items-center justify-end gap-2">
           {shareMessage && <span className="text-xs text-zinc-500" aria-live="polite">{shareMessage}</span>}
           <button

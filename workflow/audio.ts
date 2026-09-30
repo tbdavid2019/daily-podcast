@@ -209,6 +209,12 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       )
       segmentCheckpointKeys.push(...segmentKeys)
 
+      // To avoid exceeding Cloudflare Workers Free limit (50 external subrequests per invocation),
+      // we sleep for 1 second periodically to suspend and start a fresh Worker invocation.
+      if (batchIndex > 0 && batchIndex % 3 === 0) {
+        await step.sleep(`pause before audio batch ${batchIndex + 1}`, '1 second')
+      }
+
       const batchKey = await step.do(`create audio batch ${batchIndex + 1}`, AUDIO_BATCH_STEP_CONFIG, async () => {
         if (await this.env.HACKER_NEWS_R2.head(deterministicBatchKey)) {
           return deterministicBatchKey

@@ -15,6 +15,7 @@ export interface I18nDictionary {
   shareMoment: string
   linkCopied: string
   shareError: string
+  audioNotReady: string
   tabs: {
     summary: string
     podcast: string
@@ -45,6 +46,7 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     shareMoment: '分享此刻',
     linkCopied: '連結已複製',
     shareError: '無法複製連結',
+    audioNotReady: '音訊處理中，請稍候重試',
     tabs: {
       summary: '總結',
       podcast: 'Podcast',
@@ -73,6 +75,7 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     shareMoment: 'Share Timestamp',
     linkCopied: 'Link Copied',
     shareError: 'Unable to copy link',
+    audioNotReady: 'Audio is generating, please retry shortly',
     tabs: {
       summary: 'Summary',
       podcast: 'Podcast',
