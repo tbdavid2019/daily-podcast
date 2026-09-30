@@ -50,6 +50,9 @@ worker/.env.production
 
 curl
 
+# social automation profile
+.social-session
+
 # wrangler configs (if using plain vars - uncomment if needed)
 # wrangler.jsonc
 worker/wrangler.jsonc

@@ -136,8 +136,8 @@ different pnpm workspace command.
   could be affected.
 - For Workflow changes, verify step names remain deterministic and unique,
   retries are safe, and rerunning a step cannot duplicate costly side effects.
-- Do not run remote tests, deploy, tail production logs, trigger `/workflow`, or
-  call paid AI/TTS APIs unless the user explicitly authorizes the action.
+- Once changes pass verification (`pnpm check` and `pnpm build`), proactively commit, `git push` to `origin/main`, and execute the corresponding deployment (`pnpm run deploy` for Web Worker, `pnpm run deploy:worker` for Generation Worker) without waiting for user reminders.
+- Do not run remote tests, tail production logs, trigger `/workflow`, or call paid AI/TTS APIs unless the user explicitly authorizes the action.
 - Report pre-existing failures separately from failures introduced by a change.
 
 ## Free-plan engineering rules

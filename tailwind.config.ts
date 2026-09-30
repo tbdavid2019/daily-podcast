@@ -16,6 +16,14 @@ const config: Config = {
         mono: ['var(--font-jetbrains-mono)', 'monospace'],
       },
       colors: {
+        pantone: {
+          blue: '#0F4C81', // PANTONE 19-4052 Classic Blue
+          tangerine: '#F25C05', // PANTONE 17-1463 Tangerine Tango
+          castlerock: '#1E293B', // PANTONE 19-4007 Castlerock (Deep Ink)
+          pewter: '#475569', // PANTONE 18-5203 Pewter (Secondary Ink)
+          gray: '#E2E8F0', // PANTONE 14-4102 Feather Gray
+          white: '#FFFFFF', // PANTONE 11-0601 Bright White
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

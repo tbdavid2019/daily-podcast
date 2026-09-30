@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import process from 'node:process'
-import { Rss } from 'lucide-react'
+import { ExternalLink, Radio, Rss } from 'lucide-react'
 import localFont from 'next/font/local'
 import Link from 'next/link'
 import Script from 'next/script'
@@ -139,48 +139,94 @@ export default function RootLayout({
         <div className="flex justify-center min-h-screen relative">
           {/* Left Sidebar - PC Only */}
           <aside className="hidden xl:block w-[160px] sticky top-4 h-fit pt-20 mr-4">
-            <div className="text-xs text-center text-gray-400 mb-2">Advertisement</div>
-            <GoogleAd slot="7008136098" style={{ display: 'inline-block', width: '160px', height: '600px' }} />
+            <div className="glass p-2.5 rounded-2xl border border-zinc-200/80 shadow-md">
+              <div className="text-[11px] font-bold text-center text-zinc-500 mb-2 uppercase tracking-wider">Advertisement</div>
+              <GoogleAd slot="7008136098" style={{ display: 'inline-block', width: '136px', height: '600px' }} />
+            </div>
           </aside>
 
           {/* Main Content */}
           <div className="w-full max-w-3xl flex-shrink-0 z-10">
-            <header className="max-w-3xl mx-auto p-4 py-8 glass rounded-xl mb-4">
-              <div className="flex items-center justify-start">
-                <Link href="/" title="Home" className="hover:opacity-80 transition-opacity">
+            <header className="max-w-3xl mx-auto p-6 sm:p-8 glass rounded-2xl mb-6">
+              <div className="flex items-center justify-start flex-wrap gap-2">
+                <Link href="/" title="Home" className="hover:opacity-85 transition-opacity">
                   <h1 className="text-3xl font-black tracking-tight text-zinc-900 drop-shadow-sm">{podcastTitle}</h1>
                 </Link>
                 <a
                   href="/rss.xml"
-                  className="text-orange-500 hover:text-orange-600 transition-all hover:scale-110 ml-3"
+                  className="text-pantone-tangerine hover:text-[#EA580C] transition-all hover:scale-110 ml-2 p-1 rounded-lg hover:bg-orange-50"
                   title="RSS Feed"
                 >
                   <Rss className="w-7 h-7 font-bold" />
                 </a>
                 <PwaInstallButton />
               </div>
-              <p className="text-lg text-gray-600/80 mt-4 leading-relaxed max-w-2xl font-medium">{podcastDescription}</p>
+              <p className="text-base sm:text-lg text-zinc-700 mt-4 leading-relaxed max-w-2xl font-medium">{podcastDescription}</p>
             </header>
             <main className="max-w-3xl mx-auto px-4">
               <div className="max-w-3xl mx-auto space-y-6">
                 {children}
               </div>
             </main>
-            <footer className="max-w-3xl mx-auto p-4 py-12 border-t mt-12 border-zinc-200/50 glass rounded-xl">
-              <div className="text-sm text-gray-400 font-medium">
-                由
-                {' '}
-                <a href="https://david888.com" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-600 underline transition-colors">david888.com</a>
-                {' '}
-                製作
+            <footer className="max-w-3xl mx-auto mt-14 mb-8 glass rounded-2xl p-6 sm:p-8 border border-zinc-200/80 shadow-lg">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-200/70 pb-6">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-xl bg-gradient-to-br from-[#0F4C81] to-[#1E3A8A] flex items-center justify-center text-white shadow-sm shadow-[#0F4C81]/30">
+                    <Radio className="size-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-zinc-900 text-base leading-tight">DAVID888 Daily 每日放送</h3>
+                    <p className="text-xs text-zinc-600 font-medium mt-1">繁體中文科技廣播 · Hacker News / GitHub / Product Hunt 精華</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/rss.xml"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 hover:text-orange-800 transition-colors"
+                  >
+                    <Rss className="size-3.5 text-pantone-tangerine" />
+                    RSS 訂閱
+                  </a>
+                  <a
+                    href="/docs/api"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 hover:bg-zinc-200 transition-colors"
+                  >
+                    API 文件
+                  </a>
+                </div>
+              </div>
+
+              <div className="pt-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-700">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span>由</span>
+                  <a
+                    href="https://david888.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-bold text-[#0F4C81] hover:text-[#0A2540] underline underline-offset-4 decoration-[#0F4C81]/50 hover:decoration-[#0F4C81] transition-colors"
+                  >
+                    david888.com
+                    <ExternalLink className="size-3" />
+                  </a>
+                  <span>製作維護</span>
+                </div>
+                <div className="flex items-center gap-3 text-zinc-600 font-medium">
+                  <Link href="/" className="hover:text-zinc-900 transition-colors">首頁</Link>
+                  <span>·</span>
+                  <a href="/robots.txt" className="hover:text-zinc-900 transition-colors">Robots</a>
+                  <span>·</span>
+                  <a href="/llms.txt" className="hover:text-zinc-900 transition-colors">llms.txt</a>
+                </div>
               </div>
             </footer>
           </div>
 
           {/* Right Sidebar - PC Only */}
           <aside className="hidden xl:block w-[160px] sticky top-4 h-fit pt-20 ml-4">
-            <div className="text-xs text-center text-gray-400 mb-2">Advertisement</div>
-            <GoogleAd slot="7008136098" style={{ display: 'inline-block', width: '160px', height: '600px' }} />
+            <div className="glass p-2.5 rounded-2xl border border-zinc-200/80 shadow-md">
+              <div className="text-[11px] font-bold text-center text-zinc-500 mb-2 uppercase tracking-wider">Advertisement</div>
+              <GoogleAd slot="7008136098" style={{ display: 'inline-block', width: '136px', height: '600px' }} />
+            </div>
           </aside>
         </div>
       </body>

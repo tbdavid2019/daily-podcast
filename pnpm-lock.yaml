@@ -123,6 +123,9 @@ importers:
       lint-staged:
         specifier: ^16.4.0
         version: 16.4.0
+      playwright-core:
+        specifier: ^1.63.0
+        version: 1.63.0
       postcss:
         specifier: ^8.5.20
         version: 8.5.20
@@ -4731,6 +4734,11 @@ packages:
 
   player.style@0.1.10:
     resolution: {integrity: sha512-Jxv7tlaQ3SFCddsN35jzoGnCHB3/xMTbJOgn4zcsmF0lcZvRPq5UkRRAD5tZm8CvzKndUvtoDlG6GSPL/N/SrA==}
+
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
@@ -11142,6 +11150,8 @@ snapshots:
       media-chrome: 4.11.1(react@19.2.7)
     transitivePeerDependencies:
       - react
+
+  playwright-core@1.63.0: {}
 
   pluralize@8.0.0: {}
 

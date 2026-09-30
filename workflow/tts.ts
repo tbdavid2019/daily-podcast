@@ -166,7 +166,7 @@ export async function callSingleGeminiTts(
   const timeoutMs = options.timeoutMs ?? DEFAULT_GEMINI_TTS_TIMEOUT_MS
   const model = config.model || DEFAULT_GEMINI_TTS_MODEL
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Puck') : (env.WOMAN_VOICE_ID || 'Leda')
+  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Sadaltager') : (env.WOMAN_VOICE_ID || 'Leda')
   const isGemini38Tts = model.startsWith('gemini-3.8-') && model.endsWith('-tts')
 
   const payload = {

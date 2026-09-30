@@ -234,7 +234,7 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
     // 預設使用 gemini-3.8-flash-lite-tts，可選
     "GEMINI_TTS_MODEL": "gemini-3.8-flash-lite-tts",
     // 自訂 Gemini 音色 (可選)
-    "MAN_VOICE_ID": "Puck",   // 男聲預設為 Puck (更渾厚)
+    "MAN_VOICE_ID": "Sadaltager",   // 男聲預設為 Sadaltager
     "WOMAN_VOICE_ID": "Leda"  // 女聲預設為 Leda
   }
 }
@@ -244,7 +244,7 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 
 | 提供商 | 性別 | ID (預設) | 其他可用選項 |
 | :--- | :--- | :--- | :--- |
-| **Gemini** | 男 (Male) | `Puck` | `Fenrir` (舊預設), `Zephyr`, `Charon` |
+| **Gemini** | 男 (Male) | `Sadaltager` | `Fenrir`, `Puck`, `Zephyr`, `Charon` |
 | **Gemini** | 女 (Female) | `Leda` | `Kore`, `Aoede` |
 | **Edge** | 男 (Male) | `zh-TW-YunJheNeural` | `zh-CN-YunxiNeural`, `en-US-ChristopherNeural` |
 | **Edge** | 女 (Female) | `zh-TW-HsiaoChenNeural` | `zh-CN-XiaoxiaoNeural`, `en-US-JennyNeural` |
@@ -337,6 +337,32 @@ pnpm dev:worker
 
 # 終端機 2: 啟動 Web
 pnpm dev
+```
+
+---
+
+## 📱 社群自動發文（X / Threads 本機發稿）
+
+本專案提供免付費 API、完全免費的本機自動社群發文腳本，透過驅動本機 Google Chrome 自動將每日 Podcast 重點整理發布至 **X (Twitter)**（自動發布 5~7 則完整串文 Thread）與 **Meta Threads**。
+
+### 常用指令
+
+```bash
+# 1. 首次登入引導（打開 Chrome 登入一次 X 與 Threads，登入狀態將保存在本機 .social-session）
+pnpm social:login
+
+# 2. 終端機預覽今日文案（不開啟瀏覽器、不發布）
+pnpm social:dry-run
+
+# 3. 正式發布（自動抓取當日節目發布到 X 與 Threads）
+pnpm social:post
+
+# 指定發布平台或參數
+pnpm social:post --target x           # 只發布 X 串文
+pnpm social:post --target threads     # 只發布 Threads
+pnpm social:post --headless           # 背景無頭模式執行
+pnpm social:post --date 2026-09-30    # 指定補發特定日期集數
+pnpm social:post --max-stories 6      # 自訂串文子題數量
 ```
 
 ---

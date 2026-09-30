@@ -35,7 +35,10 @@
     "workflow:migrate-secrets": "node scripts/migrate-worker-vars-to-secrets.mjs",
     "workflow:run": "node --env-file=.env.workflow.local scripts/trigger-workflow.mjs --phase script",
     "workflow:audio": "node --env-file=.env.workflow.local scripts/trigger-workflow.mjs --phase audio --force",
-    "test:workflow": "pnpm test:workflow-security && pnpm test:workflow-trigger"
+    "test:workflow": "pnpm test:workflow-security && pnpm test:workflow-trigger",
+    "social:post": "node scripts/social-post.mjs",
+    "social:dry-run": "node scripts/social-post.mjs --dry-run",
+    "social:login": "node scripts/social-post.mjs --login"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",
@@ -78,6 +81,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "lint-staged": "^16.4.0",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.20",
     "simple-git-hooks": "^2.13.1",
     "tailwindcss": "^3.4.19",

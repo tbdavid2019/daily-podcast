@@ -33,9 +33,9 @@ export function BgToggle() {
       type="button"
       onClick={toggle}
       className={cn(
-        'fixed top-4 right-4 z-50 p-2 rounded-full transition-all duration-300',
-        'glass border border-white/20 hover:scale-110',
-        enabled ? 'text-primary bg-white/60' : 'text-gray-400 bg-white/20',
+        'fixed top-4 right-4 z-50 p-2.5 rounded-full transition-all duration-300 shadow-md',
+        'glass border border-zinc-200/80 hover:scale-110 active:scale-95',
+        enabled ? 'text-[#0F4C81] bg-white/95 hover:bg-white' : 'text-zinc-500 bg-white/90 hover:bg-white',
       )}
       title={enabled ? '關閉背景' : '開啟背景'}
     >

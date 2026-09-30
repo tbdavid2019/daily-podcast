@@ -34,8 +34,10 @@ export default async function Home({ searchParams }: HomeProps) {
           />
           {(index + 1) % 2 === 0 && (
             <div className="my-8 w-full flex flex-col items-center">
-              <div className="text-xs text-gray-400 mb-2">Advertisement</div>
-              <GoogleAd slot="7008136098" className="w-full flex justify-center" />
+              <div className="w-full glass p-3.5 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col items-center">
+                <div className="text-[11px] font-bold text-center text-zinc-500 mb-2 uppercase tracking-wider">Advertisement</div>
+                <GoogleAd slot="7008136098" className="w-full flex justify-center" />
+              </div>
             </div>
           )}
         </React.Fragment>
