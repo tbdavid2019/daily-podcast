@@ -154,7 +154,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   }
 
   const stickyHeader = (
-    <div className={`sticky top-0 z-30 bg-white/95 backdrop-blur-xl ${showFooter ? 'border-b border-zinc-200/80 rounded-t-2xl' : 'rounded-2xl'}`}>
+    <div className={`sticky top-0 z-30 bg-white/95 backdrop-blur-xl ${showFooter ? 'border-b border-zinc-200/80 rounded-t-2xl shadow-sm' : 'rounded-2xl'}`}>
       <CardHeader className="pb-2">
         <CardTitle>
           <Link href={getArticlePath(article.date, article.variant)} title={article.title} className="text-zinc-900 hover:text-pantone-blue transition-colors">
@@ -224,7 +224,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   )
 
   return (
-    <Card className="mb-6 glass border-zinc-200/80 hover:shadow-xl transition-all duration-300 group rounded-2xl overflow-hidden">
+    <Card className="mb-6 glass border-zinc-200/80 hover:shadow-xl transition-all duration-300 group rounded-2xl">
       {showFooter
         ? (
             <Tabs defaultValue="summary" className="w-full">
