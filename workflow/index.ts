@@ -78,6 +78,7 @@ interface Env extends CloudflareEnv {
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
   MAX_STORY_BUDGET?: string
+  HN_MIN_POINTS?: string
 }
 
 function createKvRequestLogger() {

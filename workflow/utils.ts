@@ -4,6 +4,15 @@ import {
   normalizeDedupeUrl,
 } from './efficiency'
 import {
+  buildHackerNewsFeedUrl,
+  DEFAULT_HN_MIN_POINTS,
+  DEFAULT_HN_TARGET_COUNT,
+  HN_OFFICIAL_RSS_URL,
+  parseHackerNewsRss,
+  parseHnMinPoints,
+  selectHackerNewsStories,
+} from './hackernews'
+import {
   buildRedditCombinedFeedUrl,
   buildRedditPostFeedUrl,
   isPoliticalRedditStory,
@@ -19,6 +28,7 @@ interface StoryFetchOptions {
   excludeRedditIds?: Set<string>
   excludeStoryIds?: Set<string>
   excludeStoryUrls?: Set<string>
+  minPoints?: number
 }
 
 const SELF_HOSTED_MARKDOWN_NODES = [
@@ -177,79 +187,115 @@ async function getContentFromReader(url: string, format: 'html' | 'markdown', se
 
 export async function getHackerNewsTopStories(
   today: string,
-  options?: { excludeIds?: Set<string>, excludeUrls?: Set<string> },
+  options?: {
+    excludeIds?: Set<string>
+    excludeUrls?: Set<string>
+    minPoints?: number
+    targetCount?: number
+  },
 ) {
-  console.info('[Hacker News] Fetching stories for date:', today)
+  const minPoints = parseHnMinPoints(options?.minPoints, DEFAULT_HN_MIN_POINTS)
+  const targetCount = options?.targetCount ?? DEFAULT_HN_TARGET_COUNT
+  console.info('[Hacker News] Fetching stories for date:', today, { minPoints, targetCount })
 
-  const isAllowed = (story: { id?: string, url?: string }) => {
-    if (story.id && options?.excludeIds) {
-      if (options.excludeIds.has(story.id) || options.excludeIds.has(`hacker-news:${story.id}`)) {
-        return false
-      }
-    }
-    if (story.url && options?.excludeUrls) {
-      if (options.excludeUrls.has(normalizeDedupeUrl(story.url))) {
-        return false
-      }
-    }
-    return true
-  }
+  const collectedStories: Story[] = []
+  const collectedIds = new Set<string>()
+  const collectedUrls = new Set<string>()
 
-  // 優先使用 RSS feed，更穩定可靠
+  // 1. 優先使用 hnrss.org 高分精選 RSS
+  const hnrssUrl = buildHackerNewsFeedUrl(minPoints)
+  const hnrssController = new AbortController()
+  const hnrssTimeoutId = setTimeout(() => hnrssController.abort(), 10000)
   try {
-    const rssUrl = 'https://news.ycombinator.com/rss'
-    console.info('[Hacker News] Fetching RSS from:', rssUrl)
+    console.info('[Hacker News] Fetching high-points RSS from:', hnrssUrl)
+    const response = await fetch(hnrssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; DailyPodcast/1.0)',
+        'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+      },
+      signal: hnrssController.signal,
+    })
 
-    const response = await fetch(rssUrl)
-    const rssText = await response.text()
-
-    console.info('[Hacker News] RSS feed length:', rssText.length)
-
-    const $ = cheerio.load(rssText, { xmlMode: true })
-    const items = $('item')
-
-    console.info('[Hacker News] Found RSS items:', items.length)
-
-    const stories: Story[] = items.map((i: number, el: any) => {
-      const $item = $(el)
-      const link = $item.find('link').text()
-      const title = $item.find('title').text()
-      const commentsLink = $item.find('comments').text()
-
-      // 從 comments link 提取 ID: https://news.ycombinator.com/item?id=12345
-      const idMatch = commentsLink.match(/id=(\d+)/)
-      const id = idMatch ? idMatch[1] : ''
-
-      return {
-        id,
-        title,
-        url: link,
-        hackerNewsUrl: commentsLink,
+    if (response.ok) {
+      const rssText = await response.text()
+      const parsed = parseHackerNewsRss(rssText)
+      const selected = selectHackerNewsStories(parsed, {
+        excludeIds: options?.excludeIds,
+        excludeUrls: options?.excludeUrls,
+      })
+      for (const story of selected) {
+        collectedStories.push(story)
+        if (story.id) {
+          collectedIds.add(story.id)
+        }
+        if (story.url) {
+          collectedUrls.add(normalizeDedupeUrl(story.url))
+        }
       }
-    }).get()
-
-    const filteredStories = stories
-      .filter(story => story.id && story.url && story.title && isAllowed(story))
-      .map(story => ({
-        ...story,
-        source: 'hacker-news' as const,
-        sourceUrl: story.hackerNewsUrl,
-      }))
-
-    console.info(`[Hacker News] RSS returned ${filteredStories.length} stories (filtered from ${stories.length} raw items)`)
-
-    if (filteredStories.length > 0) {
-      return filteredStories
+      console.info(`[Hacker News] hnrss.org returned ${selected.length} qualified stories (points >= ${minPoints}, filtered from ${parsed.length} items)`)
     }
-
-    console.warn('[Hacker News] RSS returned 0 stories, falling back to web scraping...')
+    else {
+      console.warn(`[Hacker News] hnrss.org returned status ${response.status} ${response.statusText}`)
+    }
   }
   catch (error) {
-    console.error('[Hacker News] RSS fetch failed:', error)
-    console.info('[Hacker News] Falling back to web scraping...')
+    console.warn('[Hacker News] hnrss.org fetch failed or timed out:', error)
+  }
+  finally {
+    clearTimeout(hnrssTimeoutId)
   }
 
-  // Fallback: 使用原有的網頁抓取方式
+  // 2. 若高分 RSS 數量不足 targetCount，以官方 RSS 補足或作為備用
+  if (collectedStories.length < targetCount) {
+    const officialController = new AbortController()
+    const officialTimeoutId = setTimeout(() => officialController.abort(), 10000)
+    try {
+      console.info(`[Hacker News] Supplementing stories from official RSS (current: ${collectedStories.length}, target: ${targetCount})`)
+      const response = await fetch(HN_OFFICIAL_RSS_URL, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; DailyPodcast/1.0)',
+          'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+        },
+        signal: officialController.signal,
+      })
+
+      if (response.ok) {
+        const rssText = await response.text()
+        const parsed = parseHackerNewsRss(rssText)
+        const needed = targetCount - collectedStories.length
+        const supplemented = selectHackerNewsStories(parsed, {
+          excludeIds: options?.excludeIds,
+          excludeUrls: options?.excludeUrls,
+          existingIds: collectedIds,
+          existingUrls: collectedUrls,
+          targetCount: needed,
+        })
+        for (const story of supplemented) {
+          collectedStories.push(story)
+          if (story.id) {
+            collectedIds.add(story.id)
+          }
+          if (story.url) {
+            collectedUrls.add(normalizeDedupeUrl(story.url))
+          }
+        }
+        console.info(`[Hacker News] Official RSS added ${supplemented.length} stories (total now: ${collectedStories.length})`)
+      }
+    }
+    catch (error) {
+      console.error('[Hacker News] Official RSS fetch failed:', error)
+    }
+    finally {
+      clearTimeout(officialTimeoutId)
+    }
+  }
+
+  if (collectedStories.length > 0) {
+    return collectedStories
+  }
+
+  // 3. Fallback: 使用原有的網頁抓取方式
+  console.warn('[Hacker News] RSS feeds returned 0 stories, falling back to web scraping...')
   const url = `https://news.ycombinator.com/front?day=${today}`
 
   console.info('[Hacker News] Fetching from web page:', url)
@@ -263,24 +309,22 @@ export async function getHackerNewsTopStories(
 
   console.info('[Hacker News] Found items from self-hosted reader:', items.length)
 
-  const stories: Story[] = items.map((i: number, el: any) => ({
+  const scrapedStories: Story[] = items.map((i: number, el: any) => ({
     id: $(el).attr('id'),
     title: $(el).find('.titleline > a').text(),
     url: $(el).find('.titleline > a').attr('href'),
     hackerNewsUrl: `https://news.ycombinator.com/item?id=${$(el).attr('id')}`,
   })).get()
 
-  const filteredStories = stories
-    .filter(story => story.id && story.url && isAllowed(story))
-    .map(story => ({
-      ...story,
-      source: 'hacker-news' as const,
-      sourceUrl: story.hackerNewsUrl,
-    }))
+  const fallbackSelected = selectHackerNewsStories(scrapedStories, {
+    excludeIds: options?.excludeIds,
+    excludeUrls: options?.excludeUrls,
+    targetCount,
+  })
 
-  console.info(`[Hacker News] Web scraping returned ${filteredStories.length} stories (filtered from ${stories.length} raw items)`)
+  console.info(`[Hacker News] Web scraping returned ${fallbackSelected.length} stories (filtered from ${scrapedStories.length} raw items)`)
 
-  return filteredStories
+  return fallbackSelected
 }
 
 export async function getHackerNewsStory(
@@ -831,7 +875,17 @@ export async function getAllStories(today: string, _config: unknown, options: St
   // 只抓取需要的來源
   const fetchPromises: Record<StorySource, Promise<Story[]>> = {
     'hacker-news': shouldFetchSource('hacker-news')
-      ? getHackerNewsTopStories(today, { excludeIds: excludeStoryIds, excludeUrls: excludeStoryUrls })
+      ? getHackerNewsTopStories(today, {
+          excludeIds: excludeStoryIds,
+          excludeUrls: excludeStoryUrls,
+          targetCount: limits['hacker-news'],
+          minPoints: parseHnMinPoints(
+            options.minPoints ?? (typeof (_config as { HN_MIN_POINTS?: unknown })?.HN_MIN_POINTS === 'string'
+              ? (_config as { HN_MIN_POINTS?: string }).HN_MIN_POINTS
+              : undefined),
+            DEFAULT_HN_MIN_POINTS,
+          ),
+        })
           .then((stories) => {
             console.info(`[Hacker News] Fetched ${stories.length} stories successfully`)
             return stories
