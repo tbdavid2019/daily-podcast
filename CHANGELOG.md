@@ -2,6 +2,27 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-02] Hacker News 高分篩選、三層階梯式容錯與 Codex 審查驗證 (Hacker News High-Points RSS & Tiered Fallback Architecture)
+
+- **整合 `hnrss.org` 高分篩選機制（High-Points RSS Feed）**：
+  - 將 Hacker News 主要抓取來源升級為 `https://hnrss.org/frontpage?points=100`，篩選點數達 100 分以上的優質焦點報導，過濾剛登上次頁但快速沉沒的低熱度內容。
+  - 支援透過環境變數 `HN_MIN_POINTS`（預設 `100`）自訂分數門檻；若設為 `0` 則抓取全首頁。
+  - 新增 `parseHnMinPoints` 嚴格校驗門檻輸入，若遇無效數值或格式異常安全回退預設門檻，防止篩選靜默失效。
+- **純函式解析與防重複選取模組（`workflow/hackernews.ts`）**：
+  - 建立專屬純解析模組，同時相容 `hnrss.org`（提取 `Points` 與留言數）與官方 `news.ycombinator.com/rss` 格式。
+  - 實作 `selectHackerNewsStories` 結合現有的 7 天 ID 與標準化 URL 去重機制，杜絕跨日重複入選相同新聞。
+- **三層階梯式容錯架構（Tiered Fallback Architecture）**：
+  - **第一層（高分精選）**：優先由 `hnrss.org` 抓取具備高討論度之熱門文章。
+  - **第二層（官方補足）**：若高分文章經 7 天去重後未達目標篇數（平日 7 篇、週日 10 篇），自動請求官方 RSS 補足缺額，兼顧新聞深度與每日集數配額穩定性。
+  - **第三層（網頁爬蟲備援）**：若 RSS 服務皆異常（0 篇），自動 fallback 至原有的自建 Reader Proxy 爬取歷史 Front 頁面。
+  - 針對各 RSS 外部連線加入 `AbortController` 10 秒防護，並將逾時保護完整涵蓋至內文串流讀取（`response.text()`），避免 Worker 掛起。
+- **Codex Code Review 與門禁驗證**：
+  - 呼叫 `codex review --uncommitted` 進行非交談式代碼複審，針對連線逾時覆蓋範圍與門檻解析邊界完成強化，複審結果為零瑕疵（Zero actionable defects）。
+  - 新增 `tests/hackernews.test.ts` 單元測試，`pnpm check`（78 項測試）與 `pnpm build` 全數綠燈通過。
+  - Generation Worker (`daily-podcast-worker`) 已完成編譯並部署上線（版本 `c1873070-9df7-4c75-bf86-53b3f8ca73ba`）。
+
+---
+
 ## [2026-09-30] 全英文 Podcast、流水線級聯共享快取與英文斷句音訊修復 (English Podcast, Cascading Pipeline & Sentence Splitting Fix)
 
 - **全英文 Podcast 雙語架構與多語系前端 (Bilingual UI & English Podcast Variant)**：
