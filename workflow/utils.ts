@@ -205,7 +205,7 @@ export async function getHackerNewsTopStories(
   // 1. 優先使用 hnrss.org 高分精選 RSS
   const hnrssUrl = buildHackerNewsFeedUrl(minPoints)
   const hnrssController = new AbortController()
-  const hnrssTimeoutId = setTimeout(() => hnrssController.abort(), 10000)
+  const hnrssTimeoutId = setTimeout(() => hnrssController.abort(), 15000)
   try {
     console.info('[Hacker News] Fetching high-points RSS from:', hnrssUrl)
     const response = await fetch(hnrssUrl, {
@@ -248,7 +248,7 @@ export async function getHackerNewsTopStories(
   // 2. 若高分 RSS 數量不足 targetCount，以官方 RSS 補足或作為備用
   if (collectedStories.length < targetCount) {
     const officialController = new AbortController()
-    const officialTimeoutId = setTimeout(() => officialController.abort(), 10000)
+    const officialTimeoutId = setTimeout(() => officialController.abort(), 15000)
     try {
       console.info(`[Hacker News] Supplementing stories from official RSS (current: ${collectedStories.length}, target: ${targetCount})`)
       const response = await fetch(HN_OFFICIAL_RSS_URL, {
