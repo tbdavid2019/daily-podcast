@@ -214,8 +214,16 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       artist: isEn ? 'DAVID888 Daily Tech' : 'DAVID888 Daily 每日放送',
       album: currentEpisode.date,
       artwork: [
-        { src: '/icon.png', sizes: '512x512', type: 'image/png' },
-        { src: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+        {
+          src: isEn ? '/podcast-cover-en.png' : '/podcast-cover.png',
+          sizes: '512x512',
+          type: 'image/png',
+        },
+        {
+          src: isEn ? '/podcast-cover-en.png' : '/icon.png',
+          sizes: '192x192',
+          type: 'image/png',
+        },
       ],
     })
 

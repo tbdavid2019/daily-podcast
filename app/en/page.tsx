@@ -31,6 +31,20 @@ export const metadata: Metadata = {
     url: '/en',
     locale: 'en_US',
     siteName: podcastTitleEn,
+    images: [
+      {
+        url: '/podcast-cover-en.png',
+        width: 3000,
+        height: 3000,
+        alt: `${podcastTitleEn} - English Edition`,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${podcastTitleEn} - English Edition`,
+    description: podcastDescriptionEn,
+    images: ['/podcast-cover-en.png'],
   },
 }
 

@@ -118,6 +118,34 @@ describe('playback rate presets and global player', () => {
     assert.match(source, /hashchange/)
     assert.match(source, /seek\(start\)/)
   })
+
+  it('renders official podcast cover artwork in global player without generic HN placeholder', async () => {
+    const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
+    assert.match(source, /podcast-cover-en\.png/)
+    assert.match(source, /podcast-cover\.png/)
+    assert.doesNotMatch(source, /\{\s*isEn \? 'EN' : 'HN'\s*\}/)
+  })
+
+  it('provides dedicated 10s rewind and forward icons without stroke obstruction', async () => {
+    const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
+    assert.match(source, /Rewind10Icon/)
+    assert.match(source, /Forward10Icon/)
+  })
+
+  it('copies timestamped share URL directly to clipboard with visual feedback', async () => {
+    const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
+    assert.match(source, /navigator\.clipboard\?\.writeText/)
+    assert.match(source, /hasCopied/)
+  })
+
+  it('configures distinct English podcast cover art for Apple Podcasts and RSS subscribers', async () => {
+    const rssEnSource = await readFile(new URL('../app/rss-en.xml/route.ts', import.meta.url), 'utf8')
+    assert.match(rssEnSource, /podcast-cover-en\.png/)
+
+    const { stat } = await import('node:fs/promises')
+    const fileStat = await stat(new URL('../public/podcast-cover-en.png', import.meta.url))
+    assert.ok(fileStat.size > 10000, 'podcast-cover-en.png should exist with substantial size')
+  })
 })
 
 

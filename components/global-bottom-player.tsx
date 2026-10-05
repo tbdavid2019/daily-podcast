@@ -6,11 +6,10 @@ import {
   Headphones,
   Pause,
   Play,
-  RotateCcw,
-  RotateCw,
   Share2,
   X,
 } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioTime } from '@/components/audio-player-context'
@@ -18,6 +17,66 @@ import { Slider } from '@/components/ui/slider'
 import { dictionaries } from '@/lib/i18n'
 import { buildPlaybackShareUrl, formatPlaybackTimestamp, getArticlePath } from '@/lib/playback-share'
 import { cn } from '@/lib/utils'
+
+function Rewind10Icon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M 12 4 A 8 8 0 1 0 18 6.5" />
+      <path d="M 13 1.5 L 9.5 4 L 13 6.5" />
+      <text
+        x="12"
+        y="14.8"
+        textAnchor="middle"
+        stroke="none"
+        fill="currentColor"
+        fontSize="7.5"
+        fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        fontWeight="800"
+      >
+        10
+      </text>
+    </svg>
+  )
+}
+
+function Forward10Icon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M 12 4 A 8 8 0 1 1 6 6.5" />
+      <path d="M 11 1.5 L 14.5 4 L 11 6.5" />
+      <text
+        x="12"
+        y="14.8"
+        textAnchor="middle"
+        stroke="none"
+        fill="currentColor"
+        fontSize="7.5"
+        fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        fontWeight="800"
+      >
+        10
+      </text>
+    </svg>
+  )
+}
 
 export function GlobalBottomPlayer() {
   const {
@@ -37,6 +96,7 @@ export function GlobalBottomPlayer() {
   const { currentTime, duration } = useAudioTime()
 
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false)
+  const [hasCopied, setHasCopied] = useState(false)
   const [shareFeedback, setShareFeedback] = useState('')
   const speedMenuRef = useRef<HTMLDivElement>(null)
 
@@ -62,7 +122,7 @@ export function GlobalBottomPlayer() {
     return null
   }
 
-  const handleShare = async () => {
+  const handleCopyShareMoment = async () => {
     const url = buildPlaybackShareUrl(
       window.location.origin,
       currentEpisode.date,
@@ -71,21 +131,27 @@ export function GlobalBottomPlayer() {
     )
 
     try {
-      if (navigator.share) {
-        await navigator.share({ url })
-        setShareFeedback(dict.linkCopied)
-        setTimeout(() => setShareFeedback(''), 2500)
-        return
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
       }
-
-      await navigator.clipboard.writeText(url)
+      else {
+        const textarea = document.createElement('textarea')
+        textarea.value = url
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setHasCopied(true)
       setShareFeedback(dict.linkCopied)
-      setTimeout(() => setShareFeedback(''), 2500)
+      setTimeout(() => {
+        setHasCopied(false)
+        setShareFeedback('')
+      }, 2500)
     }
-    catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
+    catch {
       setShareFeedback(dict.shareError)
       setTimeout(() => setShareFeedback(''), 2500)
     }
@@ -124,18 +190,15 @@ export function GlobalBottomPlayer() {
           <div className="flex items-center justify-between gap-2 sm:gap-4">
             {/* Left: Episode Meta Info */}
             <div className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[280px] sm:max-w-xs md:max-w-sm">
-              {/* Variant Badge & Soundwave Animation */}
+              {/* Podcast Artwork & Soundwave Animation */}
               <div className="relative flex-shrink-0">
-                <span
-                  className={cn(
-                    'inline-flex items-center justify-center size-8 rounded-lg text-xs font-bold shadow-xs',
-                    isEn
-                      ? 'bg-emerald-600 text-white dark:bg-emerald-700'
-                      : 'bg-pantone-blue text-white',
-                  )}
-                >
-                  {isEn ? 'EN' : 'HN'}
-                </span>
+                <Image
+                  src={isEn ? '/podcast-cover-en.png' : '/podcast-cover.png'}
+                  alt={currentEpisode.title}
+                  width={40}
+                  height={40}
+                  className="size-10 rounded-lg object-cover shadow-xs border border-zinc-200/80 dark:border-zinc-700/80"
+                />
                 {isPlaying && (
                   <span className="absolute -bottom-1 -right-1 flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -172,10 +235,7 @@ export function GlobalBottomPlayer() {
                 title={dict.rewind10s}
                 className="inline-flex items-center justify-center size-10 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
               >
-                <div className="relative flex items-center justify-center">
-                  <RotateCcw className="size-4.5" />
-                  <span className="absolute text-[8px] font-bold font-mono -bottom-0.5">10</span>
-                </div>
+                <Rewind10Icon className="size-6" />
               </button>
 
               {/* Play / Pause Toggle */}
@@ -207,10 +267,7 @@ export function GlobalBottomPlayer() {
                 title={dict.forward10s}
                 className="inline-flex items-center justify-center size-10 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
               >
-                <div className="relative flex items-center justify-center">
-                  <RotateCw className="size-4.5" />
-                  <span className="absolute text-[8px] font-bold font-mono -bottom-0.5">10</span>
-                </div>
+                <Forward10Icon className="size-6" />
               </button>
             </div>
 
@@ -340,21 +397,32 @@ export function GlobalBottomPlayer() {
                 )}
               </div>
 
-              {/* Share Timestamp Button */}
+              {/* Share Timestamp Button (Direct Copy) */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => void handleShare()}
+                  onClick={() => void handleCopyShareMoment()}
                   aria-label={dict.shareMoment}
-                  title={dict.shareMoment}
-                  className="inline-flex items-center justify-center size-10 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
+                  title={`${dict.shareMoment} (${formatPlaybackTimestamp(currentTime)})`}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-1 size-10 rounded-full transition-all touch-manipulation min-w-[44px] min-h-[44px]',
+                    hasCopied
+                      ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 shadow-xs'
+                      : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95',
+                  )}
                 >
-                  <Share2 className="size-4.5" />
+                  {hasCopied
+                    ? (
+                        <Check className="size-4.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                      )
+                    : (
+                        <Share2 className="size-4.5" />
+                      )}
                 </button>
                 {shareFeedback && (
                   <span
                     role="status"
-                    className="absolute right-0 bottom-full mb-2 whitespace-nowrap px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11px] font-medium shadow-lg animate-in fade-in"
+                    className="absolute right-0 bottom-full mb-2 whitespace-nowrap px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11px] font-medium shadow-lg animate-in fade-in z-50 pointer-events-none"
                   >
                     {shareFeedback}
                   </span>

@@ -7,16 +7,23 @@
 - **全站底部浮動播放列（Global Bottom Dock Player）**：
   - 導入全域懸浮播放列（`components/global-bottom-player.tsx`），採毛玻璃質感與行動端安全邊界設計（`backdrop-blur-xl bg-white/95 border-t shadow-2xl`），頁面滾動時播放狀態持續不中斷。
   - 大幅瘦身文章卡片頂部黏性標頭（Sticky Header），移除原本肥大之卡片內 Web Component 播放器，釋放近 100px 手機垂直可視高度，提供乾淨無干擾之逐字稿與摘要閱讀體驗。
-  - 底部控制列具備：單集標題導引、快轉/倒轉 10 秒（44×44px 觸控無障礙規範）、流暢進度滑動條（Scrubber）、時間戳記分享（`#t=...`）以及最小化關閉鍵。
+  - 底部控制列具備：單集標題導引、無遮擋 10 秒倒轉/快轉圖示（44×44px 觸控無障礙規範）、流暢進度滑動條（Scrubber）、時間戳記直接複製分享鍵以及最小化關閉鍵。
+  - 更換左側原有的「HN」純文字方塊為真實節目封面縮圖（依語言切換中文橘底或英文藍底封面），並保留播放中呼吸綠燈提示。
+  - 修復 10 秒倒轉與快轉圖示圓弧切穿「10」數字之視覺遮蔽瑕疵，改以專屬向量繪製無遮擋圓弧與清晰置中數字。
+  - 播放列整合「分享此時刻」按鈕：點擊直接將當前秒數之播放網址（`#t=...`）複製至系統剪貼簿，免除叫起系統分享選單之繁瑣步驟，並以動態勾選圖示與提示氣泡提供即時視覺回饋。
 - **英聽訓練專屬慢速檔位（0.5x / 0.75x / 0.9x）與常用倍速**：
   - 針對英語聽力練習需求，特別擴充支援 `0.5x`（慢速練習）、`0.75x`（英聽首選）、`0.9x`（微慢適應）三檔慢速，連同 `1.0x`、`1.25x`、`1.5x`、`2.0x` 共七段精準速度調控。
   - 速度設定自動同步至本機儲存（`localStorage`），跨集數與重整頁面皆能自動記憶學員喜好的練習速度。
   - 慢速檔位具備耳機圖示與專屬標記，介面層次分明且單手觸控易於切換。
+- **英文版專屬識別封面（English Edition Podcast Cover Art）**：
+  - 為解決訂閱中英文雙版本時 Apple Podcasts 與 Podcast Apps 封面同為橘底「每日放送」而難以分辨的問題，特別設計並建立 3000×3000 高解析度英文專屬封面（`public/podcast-cover-en.png`）。
+  - 採用專案代表性色票經典科技藍（Pantone Classic Blue `#0F4C81`）作為基底，搭配「David888 Daily Tech」與「ENGLISH EDITION」膠囊標章，與中文版經典橘（`#FD670C`）形成高度和諧且一目了然之視覺區隔。
+  - 同步更新 `app/rss-en.xml` 節目封面連結、`/en` 頁面之 OpenGraph/Twitter 社群分享預覽圖以及鎖定畫面之 MediaSession 封面圖。
 - **Codex 審查驗證與時間更新重繪效能隔離（Fast-Updating State Isolation）**：
   - 呼叫 `codex review --uncommitted` 進行代碼複審，針對「關閉播放列時停止播放與文章卡片重新喚起」、「已選中單集開啟時間戳連結直接定位」完成修正。
   - 依 Codex 審查建議，將 `currentTime` / `duration` 等高頻更新狀態拆分至獨立的 `AudioTimeContext`，首頁全部文章卡片與 Markdown 渲染全面解耦；音訊播放中時間更新僅驅動計時器與進度條，根除整頁反覆重繪與 Markdown 重新解析之效能消耗。
 - **門禁與全量測試驗證**：
-  - 新增並擴充 `tests/playback-share.test.ts` 單元測試（包含英聽慢速清單、時間戳跳轉與無 crossOrigin 限制驗證），全數通過 `pnpm check`（84 項測試全數綠燈）。
+  - 擴充 `tests/playback-share.test.ts` 單元測試（包含英聽慢速清單、10 秒無遮擋圖示、剪貼簿直接複製、英文專屬封面存在與引用校驗），全數通過 `pnpm check`（88 項測試全數綠燈）。
   - Next.js 15 與 OpenNext Cloudflare Worker 打包編譯測試通過（`pnpm build` 與 `pnpm opennext` 均為 exit code 0）。
 
 ---
