@@ -19,6 +19,9 @@ export interface I18nDictionary {
   playEpisode: string
   pauseEpisode: string
   resumeEpisode: string
+  relisten: string
+  completed: string
+  inProgress: string
   playbackSpeed: string
   rewind10s: string
   forward10s: string
@@ -58,6 +61,9 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     playEpisode: '播放本集',
     pauseEpisode: '暫停',
     resumeEpisode: '繼續播放',
+    relisten: '重新播放',
+    completed: '已聽完',
+    inProgress: '收聽中',
     playbackSpeed: '播放速度',
     rewind10s: '倒轉 10 秒',
     forward10s: '快轉 10 秒',
@@ -95,6 +101,9 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     playEpisode: 'Play Episode',
     pauseEpisode: 'Pause',
     resumeEpisode: 'Resume',
+    relisten: 'Replay',
+    completed: 'Completed',
+    inProgress: 'Listening',
     playbackSpeed: 'Speed',
     rewind10s: 'Back 10s',
     forward10s: 'Forward 10s',

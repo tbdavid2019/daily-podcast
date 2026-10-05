@@ -1,16 +1,18 @@
 'use client'
 
+import type { AudioEpisode } from '@/lib/playback-storage'
 import React, { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { applyPlaybackStart } from '@/lib/playback-share'
+import {
+  getEpisodeProgress,
+  getLastEpisode,
+  markEpisodeCompleted,
+  markEpisodeProgress,
+  saveLastEpisode,
+  SPEED_STORAGE_KEY,
+} from '@/lib/playback-storage'
 
-export interface AudioEpisode {
-  date: string
-  variant?: string
-  title: string
-  audioSrc: string
-  updatedAt?: number
-  duration?: number
-}
+export type { AudioEpisode }
 
 export const PLAYBACK_RATES = [0.5, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0] as const
 export type PlaybackRate = typeof PLAYBACK_RATES[number]
@@ -42,8 +44,6 @@ export interface AudioTimeContextType {
 const AudioPlayerContext = createContext<AudioPlayerContextType | null>(null)
 const AudioTimeContext = createContext<AudioTimeContextType>({ currentTime: 0, duration: 0 })
 
-const SPEED_STORAGE_KEY = 'daily_podcast_speed'
-
 export function AudioPlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentEpisode, setCurrentEpisode] = useState<AudioEpisode | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -72,6 +72,33 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
+  const lastSavedTimeRef = useRef<number>(0)
+
+  // Restore last played episode and progress upon client mount
+  useEffect(() => {
+    try {
+      const { episode, isVisible } = getLastEpisode()
+      if (episode) {
+        const savedProgress = getEpisodeProgress(episode.date, episode.variant)
+        setCurrentEpisode(episode)
+        setIsPlayerVisible(isVisible)
+        if (savedProgress > 0) {
+          setCurrentTime(savedProgress)
+          pendingSeekRef.current = savedProgress
+        }
+        if (episode.duration && episode.duration > 0) {
+          setDuration(episode.duration)
+        }
+        if (audioRef.current) {
+          audioRef.current.src = episode.audioSrc
+          audioRef.current.playbackRate = playbackRate
+        }
+      }
+    }
+    catch {
+      // Ignore storage read errors on initial mount
+    }
+  }, [playbackRate])
 
   const setPlaybackRate = useCallback((rate: PlaybackRate) => {
     setPlaybackRateState(rate)
@@ -96,7 +123,10 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     const clamped = Math.max(0, Math.min(time, maxDuration || time))
     audio.currentTime = clamped
     setCurrentTime(clamped)
-  }, [duration])
+    if (currentEpisode) {
+      markEpisodeProgress(currentEpisode.date, currentEpisode.variant, clamped, maxDuration)
+    }
+  }, [currentEpisode, duration])
 
   const skip = useCallback((seconds: number) => {
     const audio = audioRef.current
@@ -112,20 +142,29 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
     setHasError(false)
     setIsPlayerVisible(true)
+    saveLastEpisode(episode, true)
+
+    let targetStart = startTime
+    if (targetStart === undefined) {
+      const saved = getEpisodeProgress(episode.date, episode.variant)
+      if (saved > 0) {
+        targetStart = saved
+      }
+    }
 
     const isDifferent = !currentEpisode || currentEpisode.audioSrc !== episode.audioSrc
 
     if (isDifferent) {
       setCurrentEpisode(episode)
-      setCurrentTime(0)
+      setCurrentTime(targetStart ?? 0)
       setDuration(0)
       setIsLoading(true)
 
       audio.src = episode.audioSrc
       audio.playbackRate = playbackRate
 
-      if (startTime !== undefined && startTime > 0) {
-        pendingSeekRef.current = startTime
+      if (targetStart !== undefined && targetStart > 0) {
+        pendingSeekRef.current = targetStart
       }
       else {
         pendingSeekRef.current = null
@@ -143,8 +182,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       }
     }
     else {
-      if (startTime !== undefined) {
-        applyPlaybackStart(audio, startTime)
+      if (targetStart !== undefined) {
+        applyPlaybackStart(audio, targetStart)
         setCurrentTime(audio.currentTime)
       }
 
@@ -169,28 +208,35 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
     if (isPlaying) {
       audio.pause()
+      markEpisodeProgress(currentEpisode.date, currentEpisode.variant, audio.currentTime, audio.duration || duration)
     }
     else {
       setIsPlayerVisible(true)
+      saveLastEpisode(currentEpisode, true)
       audio.play().catch((error) => {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.warn('Audio toggle play error:', error)
         }
       })
     }
-  }, [currentEpisode, isPlaying])
+  }, [currentEpisode, duration, isPlaying])
 
   const closePlayer = useCallback(() => {
     if (audioRef.current && !audioRef.current.paused) {
       audioRef.current.pause()
     }
+    if (currentEpisode && audioRef.current) {
+      markEpisodeProgress(currentEpisode.date, currentEpisode.variant, audioRef.current.currentTime, audioRef.current.duration || duration)
+      saveLastEpisode(currentEpisode, false)
+    }
     setIsPlaying(false)
     setIsPlayerVisible(false)
-  }, [])
+  }, [currentEpisode, duration])
 
   const openPlayer = useCallback(() => {
     if (currentEpisode) {
       setIsPlayerVisible(true)
+      saveLastEpisode(currentEpisode, true)
     }
   }, [currentEpisode])
 
@@ -254,6 +300,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
     if (Number.isFinite(audio.duration) && audio.duration > 0) {
       setDuration(audio.duration)
+      if (currentEpisode) {
+        markEpisodeProgress(currentEpisode.date, currentEpisode.variant, audio.currentTime, audio.duration)
+      }
     }
     audio.playbackRate = playbackRate
 
@@ -270,6 +319,10 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       return
     }
     setCurrentTime(audio.currentTime)
+    if (currentEpisode && Math.abs(audio.currentTime - lastSavedTimeRef.current) >= 1) {
+      lastSavedTimeRef.current = audio.currentTime
+      markEpisodeProgress(currentEpisode.date, currentEpisode.variant, audio.currentTime, audio.duration || duration)
+    }
   }
 
   const handleDurationChange = () => {
@@ -344,7 +397,12 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
           onWaiting={() => setIsLoading(true)}
           onPlaying={() => setIsLoading(false)}
           onCanPlay={() => setIsLoading(false)}
-          onEnded={() => setIsPlaying(false)}
+          onEnded={() => {
+            setIsPlaying(false)
+            if (currentEpisode) {
+              markEpisodeCompleted(currentEpisode.date, currentEpisode.variant, audioRef.current?.duration || duration)
+            }
+          }}
           onError={handleAudioError}
         />
       </AudioTimeContext>

@@ -14,6 +14,7 @@ import {
   getArticlePath,
   getPlaybackStartFromHash,
 } from '@/lib/playback-share'
+import { getEpisodeListenStatus, getEpisodeProgress } from '@/lib/playback-storage'
 import { cn } from '@/lib/utils'
 
 const markdownRenderer = new MarkdownIt({
@@ -54,6 +55,9 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   const dict = isEn ? dictionaries.en : dictionaries.zh
   const [shareMessage, setShareMessage] = useState('')
   const [hasCopied, setHasCopied] = useState(false)
+  const [listenStatus, setListenStatus] = useState(() => {
+    return getEpisodeListenStatus(article.date, article.variant)
+  })
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
@@ -97,12 +101,32 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [article.date, article.variant, isCurrentEpisode, seek])
 
+  useEffect(() => {
+    const handleHistoryUpdate = (event: Event) => {
+      const custom = event as CustomEvent<{ key?: string }>
+      const key = `${article.variant || 'hacker-news'}:${article.date}`
+      if (!custom.detail?.key || custom.detail.key === key) {
+        setListenStatus(getEpisodeListenStatus(article.date, article.variant))
+      }
+    }
+
+    window.addEventListener('podcast_history_updated', handleHistoryUpdate)
+    return () => window.removeEventListener('podcast_history_updated', handleHistoryUpdate)
+  }, [article.date, article.variant])
+
   const handlePlayToggle = async () => {
     let start: number | undefined
     if (typeof window !== 'undefined' && window.location.pathname === getArticlePath(article.date, article.variant)) {
       const hashStart = getPlaybackStartFromHash(window.location.hash)
       if (hashStart !== null) {
         start = hashStart
+      }
+    }
+
+    if (start === undefined) {
+      const savedProgress = getEpisodeProgress(article.date, article.variant)
+      if (savedProgress > 0) {
+        start = savedProgress
       }
     }
 
@@ -130,7 +154,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   const handleShare = async () => {
     const time = isCurrentEpisode
       ? getCurrentTime()
-      : (typeof window !== 'undefined' ? (getPlaybackStartFromHash(window.location.hash) ?? 0) : 0)
+      : (typeof window !== 'undefined' ? (getPlaybackStartFromHash(window.location.hash) ?? getEpisodeProgress(article.date, article.variant)) : 0)
     const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, time)
 
     try {
@@ -165,9 +189,27 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     <div className={`sticky top-0 z-30 bg-white/95 backdrop-blur-xl ${showFooter ? 'border-b border-zinc-200/80 rounded-t-2xl shadow-xs' : 'rounded-2xl'}`}>
       <CardHeader className="pb-2">
         <CardTitle>
-          <Link href={getArticlePath(article.date, article.variant)} title={article.title} className="text-zinc-900 hover:text-pantone-blue transition-colors">
-            <h2 className="text-xl font-bold tracking-tight leading-tight">{article.title}</h2>
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-1.5">
+            <Link href={getArticlePath(article.date, article.variant)} title={article.title} className="text-zinc-900 hover:text-pantone-blue transition-colors flex-1 min-w-[240px]">
+              <h2 className="text-xl font-bold tracking-tight leading-tight">{article.title}</h2>
+            </Link>
+            {listenStatus.status === 'completed' && (
+              <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60 select-none">
+                <Check className="size-3.5 stroke-[2.5]" aria-hidden="true" />
+                <span>{dict.completed}</span>
+              </span>
+            )}
+            {listenStatus.status === 'in_progress' && (
+              <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-pantone-blue dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/60 select-none">
+                <span className="size-1.5 rounded-full bg-pantone-blue animate-pulse" />
+                <span>
+                  {dict.inProgress}
+                  {' '}
+                  {formatPlaybackTimestamp(listenStatus.progress)}
+                </span>
+              </span>
+            )}
+          </div>
           {showSummary && (
             <p className="text-base py-3 text-zinc-700 font-medium leading-relaxed">
               {summary}
@@ -206,7 +248,15 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
               : (
                   <>
                     <Play className="size-4.5 sm:size-4 fill-current ml-0.5" />
-                    <span className="hidden sm:inline">{isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode}</span>
+                    <span className="hidden sm:inline">
+                      {isCurrentEpisode
+                        ? dict.resumeEpisode
+                        : listenStatus.status === 'in_progress'
+                          ? `${dict.resumeEpisode} (${formatPlaybackTimestamp(listenStatus.progress)})`
+                          : listenStatus.status === 'completed'
+                            ? dict.relisten
+                            : dict.playEpisode}
+                    </span>
                   </>
                 )}
           </button>

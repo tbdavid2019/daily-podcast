@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { describe, it } from 'node:test'
+import { beforeEach, describe, it } from 'node:test'
 import {
   applyPlaybackStart,
   buildPlaybackShareUrl,
@@ -61,7 +61,7 @@ describe('timestamped playback sharing', () => {
     // TabsList sits in center of the single row
     assert.match(source, /flex-1\s+flex\s+justify-center/)
     // Play button hides text on mobile to avoid pushing tabs to second line
-    assert.match(source, /<span className="hidden sm:inline">\{isCurrentEpisode \? dict\.resumeEpisode : dict\.playEpisode\}<\/span>/)
+    assert.match(source, /<span className="hidden sm:inline">[\s\S]*?\{isCurrentEpisode[\s\S]*?<\/span>/)
   })
 
   it('does not enforce crossOrigin on media element for mobile compatibility', async () => {
@@ -165,6 +165,113 @@ describe('playback rate presets and global player', () => {
     assert.match(source, /className="hidden sm:inline-flex items-center/)
     // Artwork thumbnail is wrapped in link pointing to episode
     assert.match(source, /<Link\s+href=\{getArticlePath\(currentEpisode\.date,\s*currentEpisode\.variant\)\}\s+className="relative flex-shrink-0/)
+  })
+})
+
+describe('localStorage episode playback progress persistence', () => {
+  const mockStorage = new Map<string, string>()
+
+  const originalWindow = globalThis.window
+  const originalLocalStorage = globalThis.localStorage
+
+  beforeEach?.(() => {
+    mockStorage.clear()
+  })
+
+  // Setup mock localStorage in globalThis for node testing
+  globalThis.localStorage = {
+    getItem: (key: string) => mockStorage.get(key) ?? null,
+    setItem: (key: string, val: string) => { mockStorage.set(key, val) },
+    removeItem: (key: string) => { mockStorage.delete(key) },
+    clear: () => { mockStorage.clear() },
+    key: (i: number) => Array.from(mockStorage.keys())[i] ?? null,
+    get length() { return mockStorage.size },
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.window = globalThis as any
+
+  it('generates consistent, variant-aware storage keys', async () => {
+    const { buildProgressStorageKey } = await import('../lib/playback-storage')
+    assert.equal(buildProgressStorageKey('2026-10-05'), 'daily_podcast_progress_hacker-news_2026-10-05')
+    assert.equal(buildProgressStorageKey('2026-10-05', 'hacker-news'), 'daily_podcast_progress_hacker-news_2026-10-05')
+    assert.equal(buildProgressStorageKey('2026-10-05', 'en'), 'daily_podcast_progress_en_2026-10-05')
+  })
+
+  it('saves and restores episode progress accurately', async () => {
+    const { saveEpisodeProgress, getEpisodeProgress } = await import('../lib/playback-storage')
+    saveEpisodeProgress('2026-10-05', 'hacker-news', 315.4, 900)
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 315)
+  })
+
+  it('ignores negligible progress under 2 seconds to prevent accidental seeks', async () => {
+    const { saveEpisodeProgress, getEpisodeProgress } = await import('../lib/playback-storage')
+    saveEpisodeProgress('2026-10-05', 'hacker-news', 1.5, 900)
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 0)
+  })
+
+  it('resets progress to 0 when episode is within 5 seconds of completion or >= 98%', async () => {
+    const { saveEpisodeProgress, getEpisodeProgress } = await import('../lib/playback-storage')
+    saveEpisodeProgress('2026-10-05', 'hacker-news', 896, 900)
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 0)
+
+    saveEpisodeProgress('2026-10-05', 'hacker-news', 985, 1000)
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 0)
+  })
+
+  it('clears saved progress when requested', async () => {
+    const { saveEpisodeProgress, getEpisodeProgress, clearEpisodeProgress } = await import('../lib/playback-storage')
+    saveEpisodeProgress('2026-10-05', 'hacker-news', 420, 900)
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 420)
+    clearEpisodeProgress('2026-10-05', 'hacker-news')
+    assert.equal(getEpisodeProgress('2026-10-05', 'hacker-news'), 0)
+  })
+
+  it('saves and restores last active episode across page reloads', async () => {
+    const { saveLastEpisode, getLastEpisode } = await import('../lib/playback-storage')
+    const episode = {
+      date: '2026-10-05',
+      variant: 'hacker-news',
+      title: 'Daily Episode Title',
+      audioSrc: 'https://r2.example.com/audio.mp3',
+      duration: 888,
+    }
+    saveLastEpisode(episode, true)
+
+    const restored = getLastEpisode()
+    assert.equal(restored.isVisible, true)
+    assert.equal(restored.episode?.date, '2026-10-05')
+    assert.equal(restored.episode?.title, 'Daily Episode Title')
+    assert.equal(restored.episode?.audioSrc, 'https://r2.example.com/audio.mp3')
+  })
+
+  it('tracks listen status as unheard, in_progress, and completed', async () => {
+    const {
+      getEpisodeListenStatus,
+      markEpisodeCompleted,
+      markEpisodeProgress,
+    } = await import('../lib/playback-storage')
+
+    // Unheard initially
+    assert.equal(getEpisodeListenStatus('2026-10-05', 'hacker-news').status, 'unheard')
+
+    // In progress after listening
+    markEpisodeProgress('2026-10-05', 'hacker-news', 250, 900)
+    const inProgress = getEpisodeListenStatus('2026-10-05', 'hacker-news')
+    assert.equal(inProgress.status, 'in_progress')
+    assert.equal(inProgress.progress, 250)
+
+    // Completed when marked completed or reached end
+    markEpisodeCompleted('2026-10-05', 'hacker-news', 900)
+    const completed = getEpisodeListenStatus('2026-10-05', 'hacker-news')
+    assert.equal(completed.status, 'completed')
+  })
+
+  it('renders listen status badge and dynamic button label in article card', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+    assert.match(source, /listenStatus\.status === 'completed'/)
+    assert.match(source, /listenStatus\.status === 'in_progress'/)
+    assert.match(source, /dict\.completed/)
+    assert.match(source, /dict\.relisten/)
   })
 })
 
