@@ -48,10 +48,17 @@ describe('timestamped playback sharing', () => {
     assert.equal(formatPlaybackTimestamp(3_845), '1:04:05')
   })
 
-  it('shares only the timestamp URL without a separate description', async () => {
+  it('copies timestamp URL directly to clipboard in article card', async () => {
     const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
 
-    assert.match(source, /navigator\.share\(\{ url \}\)/)
+    assert.match(source, /navigator\.clipboard\?\.writeText/)
+    assert.match(source, /hasCopied/)
+  })
+
+  it('positions tabs list in the center of the control row when footer is shown', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+
+    assert.match(source, /order-3\s+sm:order-2\s+w-full\s+sm:w-auto\s+flex\s+justify-center/)
   })
 
   it('does not enforce crossOrigin on media element for mobile compatibility', async () => {
@@ -145,6 +152,16 @@ describe('playback rate presets and global player', () => {
     const { stat } = await import('node:fs/promises')
     const fileStat = await stat(new URL('../public/podcast-cover-en.png', import.meta.url))
     assert.ok(fileStat.size > 10000, 'podcast-cover-en.png should exist with substantial size')
+  })
+
+  it('hides episode title and close button on mobile while keeping clickable artwork and core controls', async () => {
+    const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
+    // Title/date container is hidden on mobile, visible from sm up
+    assert.match(source, /className="hidden sm:block min-w-0 flex-1"/)
+    // Close button is hidden on mobile, visible from sm up
+    assert.match(source, /className="hidden sm:inline-flex items-center/)
+    // Artwork thumbnail is wrapped in link pointing to episode
+    assert.match(source, /<Link\s+href=\{getArticlePath\(currentEpisode\.date,\s*currentEpisode\.variant\)\}\s+className="relative flex-shrink-0/)
   })
 })
 

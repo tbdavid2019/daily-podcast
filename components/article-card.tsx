@@ -1,6 +1,6 @@
 'use client'
 
-import { Pause, Play, Share2 } from 'lucide-react'
+import { Check, Pause, Play, Share2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -53,6 +53,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
   const isEn = article.variant === 'en'
   const dict = isEn ? dictionaries.en : dictionaries.zh
   const [shareMessage, setShareMessage] = useState('')
+  const [hasCopied, setHasCopied] = useState(false)
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
@@ -133,22 +134,28 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, time)
 
     try {
-      if (navigator.share) {
-        await navigator.share({ url })
-        setShareMessage(dict.linkCopied)
-        setTimeout(() => setShareMessage(''), 2500)
-        return
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
+      }
+      else {
+        const textarea = document.createElement('textarea')
+        textarea.value = url
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
       }
 
-      await navigator.clipboard.writeText(url)
+      setHasCopied(true)
       setShareMessage(dict.linkCopied)
-      setTimeout(() => setShareMessage(''), 2500)
+      setTimeout(() => {
+        setHasCopied(false)
+        setShareMessage('')
+      }, 2500)
     }
-    catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-
+    catch {
       setShareMessage(dict.shareError)
       setTimeout(() => setShareMessage(''), 2500)
     }
@@ -169,39 +176,54 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
         </CardTitle>
       </CardHeader>
 
-      <div className="px-6 py-2.5 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => void handlePlayToggle()}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 shadow-xs min-h-[44px] touch-manipulation select-none',
-            isCurrentPlaying
-              ? 'bg-pantone-blue text-white hover:bg-pantone-blue/90 shadow-md ring-2 ring-pantone-blue/30 active:scale-95'
-              : isCurrentEpisode
-                ? 'bg-pantone-blue/10 text-pantone-blue border border-pantone-blue/30 hover:bg-pantone-blue/20 active:scale-95'
-                : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-900 border border-zinc-200/80 active:scale-95',
-          )}
-          title={isCurrentPlaying ? dict.pauseEpisode : (isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode)}
-        >
-          {isCurrentPlaying
-            ? (
-                <>
-                  <Pause className="size-4 fill-current" />
-                  <span>{dict.pauseEpisode}</span>
-                  <ActivePlaybackTimer />
-                </>
-              )
-            : (
-                <>
-                  <Play className="size-4 fill-current ml-0.5" />
-                  <span>{isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode}</span>
-                </>
-              )}
-        </button>
+      <div className={cn('px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3', showFooter && 'pb-3')}>
+        {/* Play toggle button (Left) */}
+        <div className="order-1 flex items-center">
+          <button
+            type="button"
+            onClick={() => void handlePlayToggle()}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 shadow-xs min-h-[44px] touch-manipulation select-none',
+              isCurrentPlaying
+                ? 'bg-pantone-blue text-white hover:bg-pantone-blue/90 shadow-md ring-2 ring-pantone-blue/30 active:scale-95'
+                : isCurrentEpisode
+                  ? 'bg-pantone-blue/10 text-pantone-blue border border-pantone-blue/30 hover:bg-pantone-blue/20 active:scale-95'
+                  : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-900 border border-zinc-200/80 active:scale-95',
+            )}
+            title={isCurrentPlaying ? dict.pauseEpisode : (isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode)}
+          >
+            {isCurrentPlaying
+              ? (
+                  <>
+                    <Pause className="size-4 fill-current" />
+                    <span>{dict.pauseEpisode}</span>
+                    <ActivePlaybackTimer />
+                  </>
+                )
+              : (
+                  <>
+                    <Play className="size-4 fill-current ml-0.5" />
+                    <span>{isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode}</span>
+                  </>
+                )}
+          </button>
+        </div>
 
-        <div className="flex items-center gap-2">
+        {/* Center: TabsList (when showFooter is true) */}
+        {showFooter && (
+          <div className="order-3 sm:order-2 w-full sm:w-auto flex justify-center">
+            <TabsList className="bg-zinc-100/80 p-1 border border-zinc-200/60 rounded-xl">
+              <TabsTrigger value="summary" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.summary}</TabsTrigger>
+              <TabsTrigger value="podcast" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.podcast}</TabsTrigger>
+              <TabsTrigger value="references" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.references}</TabsTrigger>
+            </TabsList>
+          </div>
+        )}
+
+        {/* Right: Share Button & Status */}
+        <div className="order-2 sm:order-3 flex items-center gap-2">
           {shareMessage && (
-            <span className="text-xs text-zinc-500 animate-in fade-in" aria-live="polite">
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in" aria-live="polite">
               {shareMessage}
             </span>
           )}
@@ -215,24 +237,25 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
           <button
             type="button"
             onClick={() => void handleShare()}
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 min-h-[44px] touch-manipulation"
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all min-h-[44px] touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500',
+              hasCopied
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs'
+                : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950',
+            )}
             title={dict.shareMoment}
           >
-            <Share2 className="size-4" aria-hidden="true" />
-            <span className="hidden sm:inline font-semibold">{dict.shareMoment}</span>
+            {hasCopied
+              ? (
+                  <Check className="size-4 text-emerald-600 stroke-[2.5]" aria-hidden="true" />
+                )
+              : (
+                  <Share2 className="size-4" aria-hidden="true" />
+                )}
+            <span className="hidden sm:inline font-semibold">{hasCopied ? dict.linkCopied : dict.shareMoment}</span>
           </button>
         </div>
       </div>
-
-      {showFooter && (
-        <div className="px-6 pb-3 pt-1">
-          <TabsList className="bg-zinc-100/80 p-1 border border-zinc-200/60 rounded-xl">
-            <TabsTrigger value="summary" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.summary}</TabsTrigger>
-            <TabsTrigger value="podcast" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.podcast}</TabsTrigger>
-            <TabsTrigger value="references" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.references}</TabsTrigger>
-          </TabsList>
-        </div>
-      )}
     </div>
   )
 

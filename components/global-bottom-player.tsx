@@ -164,7 +164,7 @@ export function GlobalBottomPlayer() {
       aria-label="全域播放器"
       className="fixed bottom-0 inset-x-0 z-50 transition-all duration-300 ease-out animate-in slide-in-from-bottom-6"
     >
-      <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 shadow-[0_-10px_35px_-5px_rgba(0,0,0,0.1)] px-4 py-2.5 sm:px-6 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 shadow-[0_-10px_35px_-5px_rgba(0,0,0,0.1)] px-3 py-2 sm:px-6 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="max-w-4xl mx-auto flex flex-col gap-2">
           {/* Progress Slider (Scrubber) */}
           <div className="flex items-center gap-3 w-full">
@@ -189,15 +189,20 @@ export function GlobalBottomPlayer() {
           {/* Main Controls Row */}
           <div className="flex items-center justify-between gap-2 sm:gap-4">
             {/* Left: Episode Meta Info */}
-            <div className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[280px] sm:max-w-xs md:max-w-sm">
-              {/* Podcast Artwork & Soundwave Animation */}
-              <div className="relative flex-shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0 sm:min-w-0 sm:flex-1 sm:max-w-xs md:max-w-sm">
+              {/* Podcast Artwork (Clickable on Mobile/Desktop) & Soundwave Animation */}
+              <Link
+                href={getArticlePath(currentEpisode.date, currentEpisode.variant)}
+                className="relative flex-shrink-0 group block"
+                aria-label={currentEpisode.title}
+                title={currentEpisode.title}
+              >
                 <Image
                   src={isEn ? '/podcast-cover-en.png' : '/podcast-cover.png'}
                   alt={currentEpisode.title}
                   width={40}
                   height={40}
-                  className="size-10 rounded-lg object-cover shadow-xs border border-zinc-200/80 dark:border-zinc-700/80"
+                  className="size-10 rounded-lg object-cover shadow-xs border border-zinc-200/80 dark:border-zinc-700/80 group-hover:scale-105 transition-transform"
                 />
                 {isPlaying && (
                   <span className="absolute -bottom-1 -right-1 flex h-2.5 w-2.5">
@@ -205,10 +210,10 @@ export function GlobalBottomPlayer() {
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                   </span>
                 )}
-              </div>
+              </Link>
 
-              {/* Title & Date */}
-              <div className="min-w-0 flex-1">
+              {/* Title & Date (Hidden on mobile to keep player spacious and clutter-free) */}
+              <div className="hidden sm:block min-w-0 flex-1">
                 <Link
                   href={getArticlePath(currentEpisode.date, currentEpisode.variant)}
                   className="block text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate hover:text-pantone-blue transition-colors"
@@ -429,13 +434,13 @@ export function GlobalBottomPlayer() {
                 )}
               </div>
 
-              {/* Close Button */}
+              {/* Close Button (Desktop/Tablet only; hidden on mobile for clean breathing room) */}
               <button
                 type="button"
                 onClick={closePlayer}
                 aria-label={dict.closePlayer}
                 title={dict.closePlayer}
-                className="inline-flex items-center justify-center size-10 rounded-full text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
+                className="hidden sm:inline-flex items-center justify-center size-10 rounded-full text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
               >
                 <X className="size-4.5" />
               </button>
