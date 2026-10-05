@@ -223,3 +223,42 @@ export function getEpisodeListenStatus(date: string, variant?: string): { status
     return { status: 'unheard', progress: 0, duration: 0 }
   }
 }
+
+export const VOLUME_STORAGE_KEY = 'daily_podcast_volume'
+export const MUTED_STORAGE_KEY = 'daily_podcast_muted'
+
+export function saveVolumePreference(volume: number, isMuted: boolean): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1.0))
+    localStorage.setItem(VOLUME_STORAGE_KEY, String(clamped))
+    localStorage.setItem(MUTED_STORAGE_KEY, isMuted ? 'true' : 'false')
+  }
+  catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function getVolumePreference(): { volume: number, isMuted: boolean } {
+  if (typeof window === 'undefined') {
+    return { volume: 1.0, isMuted: false }
+  }
+  try {
+    const rawVolume = localStorage.getItem(VOLUME_STORAGE_KEY)
+    const rawMuted = localStorage.getItem(MUTED_STORAGE_KEY)
+    let volume = 1.0
+    if (rawVolume !== null) {
+      const parsed = Number(rawVolume)
+      if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+        volume = parsed
+      }
+    }
+    const isMuted = rawMuted === 'true'
+    return { volume, isMuted }
+  }
+  catch {
+    return { volume: 1.0, isMuted: false }
+  }
+}

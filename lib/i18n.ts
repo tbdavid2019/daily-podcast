@@ -23,6 +23,9 @@ export interface I18nDictionary {
   completed: string
   inProgress: string
   playbackSpeed: string
+  volume: string
+  mute: string
+  unmute: string
   rewind10s: string
   forward10s: string
   closePlayer: string
@@ -65,6 +68,9 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     completed: '已聽完',
     inProgress: '收聽中',
     playbackSpeed: '播放速度',
+    volume: '音量',
+    mute: '靜音',
+    unmute: '取消靜音',
     rewind10s: '倒轉 10 秒',
     forward10s: '快轉 10 秒',
     closePlayer: '關閉播放列',
@@ -105,6 +111,9 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     completed: 'Completed',
     inProgress: 'Listening',
     playbackSpeed: 'Speed',
+    volume: 'Volume',
+    mute: 'Mute',
+    unmute: 'Unmute',
     rewind10s: 'Back 10s',
     forward10s: 'Forward 10s',
     closePlayer: 'Close Player',

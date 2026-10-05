@@ -273,6 +273,45 @@ describe('localStorage episode playback progress persistence', () => {
     assert.match(source, /dict\.completed/)
     assert.match(source, /dict\.relisten/)
   })
+
+  it('persists and restores audio volume preferences with clamping and mute handling', async () => {
+    const { getVolumePreference, saveVolumePreference } = await import('../lib/playback-storage')
+
+    // Default when empty
+    assert.deepEqual(getVolumePreference(), { volume: 1.0, isMuted: false })
+
+    // Saves normal volume
+    saveVolumePreference(0.65, false)
+    assert.deepEqual(getVolumePreference(), { volume: 0.65, isMuted: false })
+
+    // Saves muted state
+    saveVolumePreference(0.65, true)
+    assert.deepEqual(getVolumePreference(), { volume: 0.65, isMuted: true })
+
+    // Clamps values above 1.0 and below 0.0
+    saveVolumePreference(1.5, false)
+    assert.equal(getVolumePreference().volume, 1.0)
+
+    saveVolumePreference(-0.2, false)
+    assert.equal(getVolumePreference().volume, 0.0)
+  })
+
+  it('renders expandable volume slider on desktop hover in global bottom player', async () => {
+    const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
+
+    // Uses VolumeControl component with hover and drag handling
+    assert.match(source, /function VolumeControl/)
+    assert.match(source, /onMouseEnter=\{handleMouseEnter\}/)
+    assert.match(source, /onMouseLeave=\{handleMouseLeave\}/)
+    // Expandable slider container: w-0 when closed, expands to w-20 or w-24 when open
+    assert.match(source, /isOpen \? 'w-20 md:w-24 opacity-100 mr-2 pointer-events-auto' : 'w-0 opacity-0 mr-0 pointer-events-none'/)
+    // Dynamic volume icons
+    assert.match(source, /VolumeX/)
+    assert.match(source, /Volume1/)
+    assert.match(source, /Volume2/)
+    // Rendered within right control cluster in GlobalBottomPlayer
+    assert.match(source, /<VolumeControl dict=\{dict\} \/>/)
+  })
 })
 
 

@@ -1,5 +1,6 @@
 'use client'
 
+import * as SliderPrimitive from '@radix-ui/react-slider'
 import {
   Check,
   ChevronUp,
@@ -7,6 +8,9 @@ import {
   Pause,
   Play,
   Share2,
+  Volume1,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import Image from 'next/image'
@@ -75,6 +79,118 @@ function Forward10Icon({ className }: { className?: string }) {
         10
       </text>
     </svg>
+  )
+}
+
+function VolumeControl({ dict }: { dict: typeof dictionaries.zh | typeof dictionaries.en }) {
+  const { volume, isMuted, setVolume, toggleMute } = useAudioPlayer()
+  const [isHovered, setIsHovered] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    setIsHovered(true)
+  }
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = setTimeout(() => {
+      setIsHovered(false)
+    }, 180)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isDragging) {
+      return
+    }
+    const handleGlobalPointerUp = () => setIsDragging(false)
+    window.addEventListener('pointerup', handleGlobalPointerUp)
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp)
+  }, [isDragging])
+
+  const isOpen = isHovered || isDragging || isFocused
+  const effectiveVolume = isMuted ? 0 : volume
+
+  return (
+    <div
+      className={cn(
+        'hidden sm:flex items-center rounded-full transition-all duration-300 ease-out select-none',
+        isOpen
+          ? 'bg-zinc-100 dark:bg-zinc-800/90 pl-3 pr-1 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 shadow-xs'
+          : 'bg-transparent px-0 py-0 border-transparent',
+      )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocusCapture={() => setIsFocused(true)}
+      onBlurCapture={() => setIsFocused(false)}
+    >
+      {/* Expandable Volume Slider (positioned left of speaker icon, expanding outwards) */}
+      <div
+        className={cn(
+          'transition-all duration-300 ease-out flex items-center overflow-hidden',
+          isOpen ? 'w-20 md:w-24 opacity-100 mr-2 pointer-events-auto' : 'w-0 opacity-0 mr-0 pointer-events-none',
+        )}
+      >
+        <SliderPrimitive.Root
+          value={[Math.round(effectiveVolume * 100)]}
+          max={100}
+          step={1}
+          onValueChange={([val]) => setVolume(val / 100)}
+          onPointerDown={() => setIsDragging(true)}
+          className="relative flex w-full touch-none select-none items-center cursor-pointer py-1.5"
+          aria-label={dict.volume}
+          aria-valuenow={Math.round(effectiveVolume * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+            <SliderPrimitive.Range className="absolute h-full bg-pantone-blue rounded-full" />
+          </SliderPrimitive.Track>
+          <SliderPrimitive.Thumb
+            className="block size-3.5 rounded-full border-2 border-pantone-blue bg-white shadow-xs transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pantone-blue"
+            aria-label={dict.volume}
+          />
+        </SliderPrimitive.Root>
+      </div>
+
+      {/* Speaker Icon Button */}
+      <button
+        type="button"
+        onClick={toggleMute}
+        aria-label={isMuted || volume === 0 ? dict.unmute : dict.mute}
+        title={`${dict.volume}: ${Math.round(effectiveVolume * 100)}% (${isMuted || volume === 0 ? dict.unmute : dict.mute})`}
+        className={cn(
+          'inline-flex items-center justify-center rounded-full transition-all touch-manipulation',
+          isOpen
+            ? 'size-8 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'
+            : 'size-10 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 min-w-[44px] min-h-[44px]',
+        )}
+      >
+        {effectiveVolume === 0
+          ? (
+              <VolumeX className="size-4.5 text-zinc-400 dark:text-zinc-500" />
+            )
+          : effectiveVolume < 0.5
+            ? (
+                <Volume1 className="size-4.5" />
+              )
+            : (
+                <Volume2 className="size-4.5" />
+              )}
+      </button>
+    </div>
   )
 }
 
@@ -276,8 +392,11 @@ export function GlobalBottomPlayer() {
               </button>
             </div>
 
-            {/* Right: Speed Menu, Share & Dismiss */}
+            {/* Right: Volume, Speed Menu, Share & Dismiss */}
             <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Volume Hover Control */}
+              <VolumeControl dict={dict} />
+
               {/* Speed Popover Trigger */}
               <div className="relative" ref={speedMenuRef}>
                 <button

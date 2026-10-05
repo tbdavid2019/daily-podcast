@@ -6,9 +6,11 @@ import { applyPlaybackStart } from '@/lib/playback-share'
 import {
   getEpisodeProgress,
   getLastEpisode,
+  getVolumePreference,
   markEpisodeCompleted,
   markEpisodeProgress,
   saveLastEpisode,
+  saveVolumePreference,
   SPEED_STORAGE_KEY,
 } from '@/lib/playback-storage'
 
@@ -21,6 +23,8 @@ export interface AudioPlayerContextType {
   currentEpisode: AudioEpisode | null
   isPlaying: boolean
   playbackRate: PlaybackRate
+  volume: number
+  isMuted: boolean
   isLoading: boolean
   hasError: boolean
   isPlayerVisible: boolean
@@ -29,6 +33,8 @@ export interface AudioPlayerContextType {
   seek: (time: number) => void
   skip: (seconds: number) => void
   setPlaybackRate: (rate: PlaybackRate) => void
+  setVolume: (volume: number) => void
+  toggleMute: () => void
   closePlayer: () => void
   openPlayer: () => void
   audioRef: React.RefObject<HTMLAudioElement | null>
@@ -69,14 +75,28 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [isPlayerVisible, setIsPlayerVisible] = useState(false)
+  const [volume, setVolumeState] = useState<number>(1.0)
+  const [isMuted, setIsMutedState] = useState<boolean>(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const lastSavedTimeRef = useRef<number>(0)
+  const prevVolumeRef = useRef<number>(1.0)
 
-  // Restore last played episode and progress upon client mount
+  // Restore last played episode, progress, and volume upon client mount
   useEffect(() => {
     try {
+      const { volume: savedVol, isMuted: savedMuted } = getVolumePreference()
+      setVolumeState(savedVol)
+      setIsMutedState(savedMuted)
+      if (savedVol > 0) {
+        prevVolumeRef.current = savedVol
+      }
+      if (audioRef.current) {
+        audioRef.current.volume = savedVol
+        audioRef.current.muted = savedMuted
+      }
+
       const { episode, isVisible } = getLastEpisode()
       if (episode) {
         const savedProgress = getEpisodeProgress(episode.date, episode.variant)
@@ -162,6 +182,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
       audio.src = episode.audioSrc
       audio.playbackRate = playbackRate
+      audio.volume = volume
+      audio.muted = isMuted
 
       if (targetStart !== undefined && targetStart > 0) {
         pendingSeekRef.current = targetStart
@@ -198,7 +220,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         }
       }
     }
-  }, [currentEpisode, playbackRate])
+  }, [currentEpisode, isMuted, playbackRate, volume])
 
   const togglePlayPause = useCallback(() => {
     const audio = audioRef.current
@@ -341,10 +363,75 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     setIsPlaying(false)
   }
 
+  const setVolume = useCallback((newVolume: number) => {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(newVolume) ? newVolume : 1.0))
+    setVolumeState(clamped)
+    if (clamped > 0) {
+      prevVolumeRef.current = clamped
+      if (isMuted) {
+        setIsMutedState(false)
+        if (audioRef.current) {
+          audioRef.current.muted = false
+          audioRef.current.volume = clamped
+        }
+        saveVolumePreference(clamped, false)
+        return
+      }
+    }
+    else {
+      setIsMutedState(true)
+      if (audioRef.current) {
+        audioRef.current.muted = true
+        audioRef.current.volume = 0
+      }
+      saveVolumePreference(0, true)
+      return
+    }
+
+    if (audioRef.current) {
+      audioRef.current.volume = clamped
+    }
+    saveVolumePreference(clamped, isMuted)
+  }, [isMuted])
+
+  const toggleMute = useCallback(() => {
+    setIsMutedState((prevMuted) => {
+      const nextMuted = !prevMuted
+      if (audioRef.current) {
+        audioRef.current.muted = nextMuted
+      }
+      if (!nextMuted) {
+        if (volume === 0) {
+          const restored = prevVolumeRef.current > 0 ? prevVolumeRef.current : 1.0
+          setVolumeState(restored)
+          if (audioRef.current) {
+            audioRef.current.volume = restored
+          }
+          saveVolumePreference(restored, false)
+          return false
+        }
+      }
+      saveVolumePreference(volume, nextMuted)
+      return nextMuted
+    })
+  }, [volume])
+
+  const handleVolumeChange = () => {
+    const audio = audioRef.current
+    if (!audio) {
+      return
+    }
+    setVolumeState(audio.volume)
+    setIsMutedState(audio.muted)
+    saveVolumePreference(audio.volume, audio.muted)
+  }
+
   const playerContextValue = useMemo<AudioPlayerContextType>(() => ({
     currentEpisode,
     isPlaying,
     playbackRate,
+    volume,
+    isMuted,
     isLoading,
     hasError,
     isPlayerVisible,
@@ -353,6 +440,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     seek,
     skip,
     setPlaybackRate,
+    setVolume,
+    toggleMute,
     closePlayer,
     openPlayer,
     audioRef,
@@ -362,6 +451,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     currentEpisode,
     isPlaying,
     playbackRate,
+    volume,
+    isMuted,
     isLoading,
     hasError,
     isPlayerVisible,
@@ -370,6 +461,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     seek,
     skip,
     setPlaybackRate,
+    setVolume,
+    toggleMute,
     closePlayer,
     openPlayer,
     getCurrentTime,
@@ -394,6 +487,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
           onTimeUpdate={handleTimeUpdate}
           onDurationChange={handleDurationChange}
           onLoadedMetadata={handleLoadedMetadata}
+          onVolumeChange={handleVolumeChange}
           onWaiting={() => setIsLoading(true)}
           onPlaying={() => setIsLoading(false)}
           onCanPlay={() => setIsLoading(false)}
