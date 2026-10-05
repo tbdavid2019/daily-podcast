@@ -176,34 +176,37 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
         </CardTitle>
       </CardHeader>
 
-      <div className={cn('px-4 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3', showFooter && 'pb-3')}>
-        {/* Play toggle button (Left) */}
-        <div className="order-1 flex items-center">
+      <div className={cn('px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-3', showFooter && 'pb-3')}>
+        {/* Play toggle button (Left: icon-only on mobile, text on desktop) */}
+        <div className="shrink-0 flex items-center">
           <button
             type="button"
             onClick={() => void handlePlayToggle()}
             className={cn(
-              'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 shadow-xs min-h-[44px] touch-manipulation select-none',
+              'inline-flex items-center justify-center gap-2 rounded-full p-2.5 sm:px-4 sm:py-2 text-sm font-semibold transition-all duration-200 shadow-xs min-h-[44px] min-w-[44px] touch-manipulation select-none',
               isCurrentPlaying
                 ? 'bg-pantone-blue text-white hover:bg-pantone-blue/90 shadow-md ring-2 ring-pantone-blue/30 active:scale-95'
                 : isCurrentEpisode
                   ? 'bg-pantone-blue/10 text-pantone-blue border border-pantone-blue/30 hover:bg-pantone-blue/20 active:scale-95'
                   : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-900 border border-zinc-200/80 active:scale-95',
             )}
+            aria-label={isCurrentPlaying ? dict.pauseEpisode : (isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode)}
             title={isCurrentPlaying ? dict.pauseEpisode : (isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode)}
           >
             {isCurrentPlaying
               ? (
                   <>
-                    <Pause className="size-4 fill-current" />
-                    <span>{dict.pauseEpisode}</span>
-                    <ActivePlaybackTimer />
+                    <Pause className="size-4.5 sm:size-4 fill-current" />
+                    <span className="hidden sm:inline">{dict.pauseEpisode}</span>
+                    <span className="hidden sm:inline">
+                      <ActivePlaybackTimer />
+                    </span>
                   </>
                 )
               : (
                   <>
-                    <Play className="size-4 fill-current ml-0.5" />
-                    <span>{isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode}</span>
+                    <Play className="size-4.5 sm:size-4 fill-current ml-0.5" />
+                    <span className="hidden sm:inline">{isCurrentEpisode ? dict.resumeEpisode : dict.playEpisode}</span>
                   </>
                 )}
           </button>
@@ -211,19 +214,19 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
 
         {/* Center: TabsList (when showFooter is true) */}
         {showFooter && (
-          <div className="order-3 sm:order-2 w-full sm:w-auto flex justify-center">
-            <TabsList className="bg-zinc-100/80 p-1 border border-zinc-200/60 rounded-xl">
-              <TabsTrigger value="summary" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.summary}</TabsTrigger>
-              <TabsTrigger value="podcast" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.podcast}</TabsTrigger>
-              <TabsTrigger value="references" className="font-semibold rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.references}</TabsTrigger>
+          <div className="flex-1 flex justify-center min-w-0">
+            <TabsList className="bg-zinc-100/80 p-0.5 sm:p-1 border border-zinc-200/60 rounded-xl">
+              <TabsTrigger value="summary" className="font-semibold text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.summary}</TabsTrigger>
+              <TabsTrigger value="podcast" className="font-semibold text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.podcast}</TabsTrigger>
+              <TabsTrigger value="references" className="font-semibold text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg data-[state=active]:bg-pantone-blue data-[state=active]:text-white data-[state=active]:shadow-xs">{dict.tabs.references}</TabsTrigger>
             </TabsList>
           </div>
         )}
 
         {/* Right: Share Button & Status */}
-        <div className="order-2 sm:order-3 flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-2">
           {shareMessage && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in" aria-live="polite">
+            <span className="hidden sm:inline text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in" aria-live="polite">
               {shareMessage}
             </span>
           )}
@@ -238,19 +241,20 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
             type="button"
             onClick={() => void handleShare()}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all min-h-[44px] touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500',
+              'inline-flex items-center justify-center gap-1.5 rounded-full p-2.5 sm:px-3 sm:py-2 text-sm font-medium transition-all min-h-[44px] min-w-[44px] touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500',
               hasCopied
                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs'
                 : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950',
             )}
+            aria-label={dict.shareMoment}
             title={dict.shareMoment}
           >
             {hasCopied
               ? (
-                  <Check className="size-4 text-emerald-600 stroke-[2.5]" aria-hidden="true" />
+                  <Check className="size-4.5 sm:size-4 text-emerald-600 stroke-[2.5]" aria-hidden="true" />
                 )
               : (
-                  <Share2 className="size-4" aria-hidden="true" />
+                  <Share2 className="size-4.5 sm:size-4" aria-hidden="true" />
                 )}
             <span className="hidden sm:inline font-semibold">{hasCopied ? dict.linkCopied : dict.shareMoment}</span>
           </button>

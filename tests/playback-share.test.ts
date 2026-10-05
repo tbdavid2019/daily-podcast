@@ -55,10 +55,13 @@ describe('timestamped playback sharing', () => {
     assert.match(source, /hasCopied/)
   })
 
-  it('positions tabs list in the center of the control row when footer is shown', async () => {
+  it('positions tabs list in the center of the control row and keeps play button icon-only on mobile', async () => {
     const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
 
-    assert.match(source, /order-3\s+sm:order-2\s+w-full\s+sm:w-auto\s+flex\s+justify-center/)
+    // TabsList sits in center of the single row
+    assert.match(source, /flex-1\s+flex\s+justify-center/)
+    // Play button hides text on mobile to avoid pushing tabs to second line
+    assert.match(source, /<span className="hidden sm:inline">\{isCurrentEpisode \? dict\.resumeEpisode : dict\.playEpisode\}<\/span>/)
   })
 
   it('does not enforce crossOrigin on media element for mobile compatibility', async () => {
