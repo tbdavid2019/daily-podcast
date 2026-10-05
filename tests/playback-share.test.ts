@@ -91,3 +91,33 @@ describe('mapScriptToArticle speaker mapping', () => {
   })
 })
 
+describe('playback rate presets and global player', () => {
+  it('includes 0.5x, 0.75x, and 0.9x listening practice speeds alongside standard rates', async () => {
+    const { PLAYBACK_RATES } = await import('../components/audio-player-context')
+    assert.deepEqual(Array.from(PLAYBACK_RATES), [0.5, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0])
+  })
+
+  it('provides dedicated slower speeds for English listening practice', async () => {
+    const { PLAYBACK_RATES } = await import('../components/audio-player-context')
+    const slowerPracticeRates = PLAYBACK_RATES.filter(r => r < 1.0)
+    assert.deepEqual(slowerPracticeRates, [0.5, 0.75, 0.9])
+  })
+
+  it('keeps global player free of crossOrigin restrictions for audio elements', async () => {
+    const source = await readFile(new URL('../components/audio-player-context.tsx', import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /crossOrigin=/)
+  })
+
+  it('reopens player from article card when toggling play for an existing episode', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+    assert.match(source, /openPlayer\(\)/)
+  })
+
+  it('seeks to shared timestamp when active episode toggles play or hash changes', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+    assert.match(source, /hashchange/)
+    assert.match(source, /seek\(start\)/)
+  })
+})
+
+

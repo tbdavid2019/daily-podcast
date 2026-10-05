@@ -2,6 +2,25 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-05] 全站底部懸浮播放列、英聽練習多段速 (0.5x~0.9x) 與 Codex 審查重繪隔離 (Global Bottom Dock Player, Listening Practice Speeds & Codex Verification)
+
+- **全站底部浮動播放列（Global Bottom Dock Player）**：
+  - 導入全域懸浮播放列（`components/global-bottom-player.tsx`），採毛玻璃質感與行動端安全邊界設計（`backdrop-blur-xl bg-white/95 border-t shadow-2xl`），頁面滾動時播放狀態持續不中斷。
+  - 大幅瘦身文章卡片頂部黏性標頭（Sticky Header），移除原本肥大之卡片內 Web Component 播放器，釋放近 100px 手機垂直可視高度，提供乾淨無干擾之逐字稿與摘要閱讀體驗。
+  - 底部控制列具備：單集標題導引、快轉/倒轉 10 秒（44×44px 觸控無障礙規範）、流暢進度滑動條（Scrubber）、時間戳記分享（`#t=...`）以及最小化關閉鍵。
+- **英聽訓練專屬慢速檔位（0.5x / 0.75x / 0.9x）與常用倍速**：
+  - 針對英語聽力練習需求，特別擴充支援 `0.5x`（慢速練習）、`0.75x`（英聽首選）、`0.9x`（微慢適應）三檔慢速，連同 `1.0x`、`1.25x`、`1.5x`、`2.0x` 共七段精準速度調控。
+  - 速度設定自動同步至本機儲存（`localStorage`），跨集數與重整頁面皆能自動記憶學員喜好的練習速度。
+  - 慢速檔位具備耳機圖示與專屬標記，介面層次分明且單手觸控易於切換。
+- **Codex 審查驗證與時間更新重繪效能隔離（Fast-Updating State Isolation）**：
+  - 呼叫 `codex review --uncommitted` 進行代碼複審，針對「關閉播放列時停止播放與文章卡片重新喚起」、「已選中單集開啟時間戳連結直接定位」完成修正。
+  - 依 Codex 審查建議，將 `currentTime` / `duration` 等高頻更新狀態拆分至獨立的 `AudioTimeContext`，首頁全部文章卡片與 Markdown 渲染全面解耦；音訊播放中時間更新僅驅動計時器與進度條，根除整頁反覆重繪與 Markdown 重新解析之效能消耗。
+- **門禁與全量測試驗證**：
+  - 新增並擴充 `tests/playback-share.test.ts` 單元測試（包含英聽慢速清單、時間戳跳轉與無 crossOrigin 限制驗證），全數通過 `pnpm check`（84 項測試全數綠燈）。
+  - Next.js 15 與 OpenNext Cloudflare Worker 打包編譯測試通過（`pnpm build` 與 `pnpm opennext` 均為 exit code 0）。
+
+---
+
 ## [2026-10-02] Hacker News 高分篩選、三層階梯式容錯與 Codex 審查驗證 (Hacker News High-Points RSS & Tiered Fallback Architecture)
 
 - **整合 `hnrss.org` 高分篩選機制（High-Points RSS Feed）**：

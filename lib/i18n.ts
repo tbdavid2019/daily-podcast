@@ -16,6 +16,14 @@ export interface I18nDictionary {
   linkCopied: string
   shareError: string
   audioNotReady: string
+  playEpisode: string
+  pauseEpisode: string
+  resumeEpisode: string
+  playbackSpeed: string
+  rewind10s: string
+  forward10s: string
+  closePlayer: string
+  listeningPractice: string
   tabs: {
     summary: string
     podcast: string
@@ -47,6 +55,14 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     linkCopied: '連結已複製',
     shareError: '無法複製連結',
     audioNotReady: '音訊處理中，請稍候重試',
+    playEpisode: '播放本集',
+    pauseEpisode: '暫停',
+    resumeEpisode: '繼續播放',
+    playbackSpeed: '播放速度',
+    rewind10s: '倒轉 10 秒',
+    forward10s: '快轉 10 秒',
+    closePlayer: '關閉播放列',
+    listeningPractice: '英聽練習',
     tabs: {
       summary: '總結',
       podcast: 'Podcast',
@@ -76,6 +92,14 @@ export const dictionaries: Record<Language, I18nDictionary> = {
     linkCopied: 'Link Copied',
     shareError: 'Unable to copy link',
     audioNotReady: 'Audio is generating, please retry shortly',
+    playEpisode: 'Play Episode',
+    pauseEpisode: 'Pause',
+    resumeEpisode: 'Resume',
+    playbackSpeed: 'Speed',
+    rewind10s: 'Back 10s',
+    forward10s: 'Forward 10s',
+    closePlayer: 'Close Player',
+    listeningPractice: 'Listening Practice',
     tabs: {
       summary: 'Summary',
       podcast: 'Podcast',
