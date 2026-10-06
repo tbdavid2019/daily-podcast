@@ -4,7 +4,7 @@ import { Check, Pause, Play, Share2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAudioPlayer, useAudioTime } from '@/components/audio-player-context'
+import { useAudioPlayer } from '@/components/audio-player-context'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dictionaries } from '@/lib/i18n'
@@ -31,16 +31,6 @@ markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) =>
   token.attrSet('target', '_blank')
   token.attrSet('rel', 'nofollow noopener noreferrer')
   return defaultLinkRenderer(tokens, idx, options, env, self)
-}
-
-function ActivePlaybackTimer() {
-  const { currentTime, duration } = useAudioTime()
-  return (
-    <span className="font-mono text-xs opacity-80 tabular-nums ml-1">
-      {formatPlaybackTimestamp(currentTime)}
-      {duration > 0 && ` / ${formatPlaybackTimestamp(duration)}`}
-    </span>
-  )
 }
 
 interface ArticleCardProps {
@@ -199,16 +189,6 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
                 <span>{dict.completed}</span>
               </span>
             )}
-            {listenStatus.status === 'in_progress' && (
-              <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-pantone-blue dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/60 select-none">
-                <span className="size-1.5 rounded-full bg-pantone-blue animate-pulse" />
-                <span>
-                  {dict.inProgress}
-                  {' '}
-                  {formatPlaybackTimestamp(listenStatus.progress)}
-                </span>
-              </span>
-            )}
           </div>
           {showSummary && (
             <p className="text-base py-3 text-zinc-700 font-medium leading-relaxed">
@@ -240,9 +220,6 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
                   <>
                     <Pause className="size-4.5 sm:size-4 fill-current" />
                     <span className="hidden sm:inline">{dict.pauseEpisode}</span>
-                    <span className="hidden sm:inline">
-                      <ActivePlaybackTimer />
-                    </span>
                   </>
                 )
               : (

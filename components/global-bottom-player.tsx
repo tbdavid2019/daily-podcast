@@ -28,21 +28,21 @@ function Rewind10Icon({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       aria-hidden="true"
     >
-      <path d="M 12 4 A 8 8 0 1 0 18 6.5" />
-      <path d="M 13 1.5 L 9.5 4 L 13 6.5" />
+      <path d="M3.05 8A9 9 0 1 1 5.64 14.36" />
+      <path d="M3 2v6h6" />
       <text
         x="12"
-        y="14.8"
+        y="15.5"
         textAnchor="middle"
         stroke="none"
         fill="currentColor"
-        fontSize="7.5"
+        fontSize="8.5"
         fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
         fontWeight="800"
       >
@@ -58,21 +58,21 @@ function Forward10Icon({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       aria-hidden="true"
     >
-      <path d="M 12 4 A 8 8 0 1 1 6 6.5" />
-      <path d="M 11 1.5 L 14.5 4 L 11 6.5" />
+      <path d="M20.95 8A9 9 0 1 0 18.36 14.36" />
+      <path d="M21 2v6h-6" />
       <text
         x="12"
-        y="14.8"
+        y="15.5"
         textAnchor="middle"
         stroke="none"
         fill="currentColor"
-        fontSize="7.5"
+        fontSize="8.5"
         fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
         fontWeight="800"
       >
@@ -354,9 +354,9 @@ export function GlobalBottomPlayer() {
                 onClick={() => skip(-10)}
                 aria-label={dict.rewind10s}
                 title={dict.rewind10s}
-                className="inline-flex items-center justify-center size-10 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center size-11 sm:size-12 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
               >
-                <Rewind10Icon className="size-6" />
+                <Rewind10Icon className="size-8" />
               </button>
 
               {/* Play / Pause Toggle */}
@@ -386,9 +386,9 @@ export function GlobalBottomPlayer() {
                 onClick={() => skip(10)}
                 aria-label={dict.forward10s}
                 title={dict.forward10s}
-                className="inline-flex items-center justify-center size-10 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center size-11 sm:size-12 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all touch-manipulation min-w-[44px] min-h-[44px]"
               >
-                <Forward10Icon className="size-6" />
+                <Forward10Icon className="size-8" />
               </button>
             </div>
 
