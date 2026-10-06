@@ -24,60 +24,20 @@ import { cn } from '@/lib/utils'
 
 function Rewind10Icon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M3.05 8A9 9 0 1 1 5.64 14.36" />
-      <path d="M3 2v6h6" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        stroke="none"
-        fill="currentColor"
-        fontSize="8.5"
-        fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
-        fontWeight="800"
-      >
-        10
-      </text>
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8S16.41 5 11.99 5z" />
+      <path d="M10.89 16h-.85v-3.26l-1.01.31v-.69l1.77-.63h.09V16z" />
+      <path d="M15.17 14.24c0 .32-.03.6-.1.82s-.17.42-.29.57-.28.26-.45.33-.37.1-.59.1-.41-.03-.59-.1-.33-.18-.46-.33-.23-.34-.3-.57-.11-.5-.11-.82v-.74c0-.32.03-.6.1-.82s.17-.42.29-.57.28-.26.45-.33.37-.1.59-.1.41.03.59.1c.18.07.33.18.46.33s.23.34.3.57.11.5.11.82v.74zm-.85-.86c0-.19-.01-.35-.04-.48s-.07-.23-.12-.31-.11-.14-.19-.17-.16-.05-.25-.05-.18.02-.25.05-.14.09-.19.17-.09.18-.12.31-.04.29-.04.48v.97c0 .19.01.35.04.48s.07.24.12.32.11.14.19.17.16.05.25.05.18-.02.25-.05.14-.09.19-.17.09-.19.11-.32.04-.29.04-.48v-.97z" />
     </svg>
   )
 }
 
 function Forward10Icon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M20.95 8A9 9 0 1 0 18.36 14.36" />
-      <path d="M21 2v6h-6" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        stroke="none"
-        fill="currentColor"
-        fontSize="8.5"
-        fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
-        fontWeight="800"
-      >
-        10
-      </text>
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8 0 4.42 3.58 8 8 8s8-3.58 8-8h-2z" />
+      <path d="M10.86 15.94v-4.27h-.09L9 12.3v.69l1.01-.31v3.26h.85z" />
+      <path d="M12.25 13.44v.74c0 1.9 1.31 1.82 1.44 1.82s1.44.09 1.44-1.82v-.74c0-1.9-1.31-1.82-1.44-1.82s-1.44-.09-1.44 1.82zm2.04-.12v.97c0 .77-.21 1.03-.59 1.03s-.6-.26-.6-1.03v-.97c0-.75.22-1.01.59-1.01s.6.26.6 1.01z" />
     </svg>
   )
 }
