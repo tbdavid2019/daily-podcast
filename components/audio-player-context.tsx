@@ -37,6 +37,7 @@ export interface AudioPlayerContextType {
   toggleMute: () => void
   closePlayer: () => void
   openPlayer: () => void
+  updateCurrentEpisode: (episode: AudioEpisode) => void
   audioRef: React.RefObject<HTMLAudioElement | null>
   getCurrentTime: () => number
   getDuration: () => number
@@ -83,6 +84,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const lastSavedTimeRef = useRef<number>(0)
   const prevVolumeRef = useRef<number>(1.0)
 
+  const playbackRateRef = useRef<PlaybackRate>(playbackRate)
+  playbackRateRef.current = playbackRate
+
   // Restore last played episode, progress, and volume upon client mount
   useEffect(() => {
     try {
@@ -111,19 +115,26 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         }
         if (audioRef.current) {
           audioRef.current.src = episode.audioSrc
-          audioRef.current.playbackRate = playbackRate
+          audioRef.current.playbackRate = playbackRateRef.current
         }
       }
     }
     catch {
       // Ignore storage read errors on initial mount
     }
-  }, [playbackRate])
+  }, [])
 
   const setPlaybackRate = useCallback((rate: PlaybackRate) => {
     setPlaybackRateState(rate)
+    playbackRateRef.current = rate
     if (audioRef.current) {
-      audioRef.current.playbackRate = rate
+      try {
+        audioRef.current.playbackRate = rate
+        audioRef.current.defaultPlaybackRate = rate
+      }
+      catch (error) {
+        console.warn('Failed to set audio playback rate:', error)
+      }
     }
     try {
       localStorage.setItem(SPEED_STORAGE_KEY, String(rate))
@@ -132,6 +143,17 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       // Ignore localStorage write failures
     }
   }, [])
+
+  const updateCurrentEpisode = useCallback((episode: AudioEpisode) => {
+    setCurrentEpisode(episode)
+    saveLastEpisode(episode, isPlayerVisible)
+    if (audioRef.current && !isPlaying) {
+      audioRef.current.src = episode.audioSrc
+      audioRef.current.playbackRate = playbackRateRef.current
+      setCurrentTime(0)
+      setDuration(episode.duration || 0)
+    }
+  }, [isPlayerVisible, isPlaying])
 
   const seek = useCallback((time: number) => {
     const audio = audioRef.current
@@ -181,7 +203,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       setIsLoading(true)
 
       audio.src = episode.audioSrc
-      audio.playbackRate = playbackRate
+      audio.playbackRate = playbackRateRef.current
       audio.volume = volume
       audio.muted = isMuted
 
@@ -326,7 +348,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         markEpisodeProgress(currentEpisode.date, currentEpisode.variant, audio.currentTime, audio.duration)
       }
     }
-    audio.playbackRate = playbackRate
+    audio.playbackRate = playbackRateRef.current
 
     if (pendingSeekRef.current !== null) {
       applyPlaybackStart(audio, pendingSeekRef.current)
@@ -444,6 +466,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     toggleMute,
     closePlayer,
     openPlayer,
+    updateCurrentEpisode,
     audioRef,
     getCurrentTime,
     getDuration,
@@ -465,6 +488,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     toggleMute,
     closePlayer,
     openPlayer,
+    updateCurrentEpisode,
     getCurrentTime,
     getDuration,
   ])

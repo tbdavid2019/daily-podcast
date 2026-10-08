@@ -166,6 +166,17 @@ describe('playback rate presets and global player', () => {
     // Artwork thumbnail is wrapped in link pointing to episode
     assert.match(source, /<Link\s+href=\{getArticlePath\(currentEpisode\.date,\s*currentEpisode\.variant\)\}\s+className="relative flex-shrink-0/)
   })
+
+  it('keeps mount effect dependency array empty to prevent playbackRate from aborting playback', async () => {
+    const source = await readFile(new URL('../components/audio-player-context.tsx', import.meta.url), 'utf8')
+    // The mount effect should run once on mount [] and not depend on [playbackRate]
+    assert.match(source, /\/\/ Restore last played episode[\s\S]*?\}\s*catch[\s\S]*?\}\s*,\s*\[\]\)/)
+  })
+
+  it('ensures article card checks audioSrc freshness when matching current episode', async () => {
+    const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+    assert.match(source, /isCurrentEpisode = isSameEpisode && currentEpisode\?\.audioSrc === audio/)
+  })
 })
 
 describe('localStorage episode playback progress persistence', () => {

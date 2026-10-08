@@ -968,6 +968,7 @@ ${fullContentString}
         today: displayDate,
         variant,
         phase: 'audio',
+        force,
       }
       const childInstanceId = await buildChildWorkflowInstanceId(event.instanceId)
       const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(

@@ -61,11 +61,30 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     isPlayerVisible,
     hasError,
     getCurrentTime,
+    updateCurrentEpisode,
   } = useAudioPlayer()
 
-  const isCurrentEpisode = currentEpisode?.date === article.date
+  const isSameEpisode = currentEpisode?.date === article.date
     && (currentEpisode?.variant ?? 'hacker-news') === (article.variant ?? 'hacker-news')
+  const isCurrentEpisode = isSameEpisode && currentEpisode?.audioSrc === audio
   const isCurrentPlaying = isCurrentEpisode && isPlaying
+
+  useEffect(() => {
+    if (
+      isSameEpisode
+      && currentEpisode
+      && currentEpisode.audioSrc !== audio
+      && !isPlaying
+    ) {
+      updateCurrentEpisode({
+        date: article.date,
+        variant: article.variant,
+        title: article.title,
+        audioSrc: audio,
+        updatedAt: article.updatedAt,
+      })
+    }
+  }, [article.date, article.title, article.updatedAt, article.variant, audio, currentEpisode, isPlaying, isSameEpisode, updateCurrentEpisode])
 
   const renderedBlogHtml = useMemo(
     () => article.blogContent ? markdownRenderer.render(article.blogContent) : '',
