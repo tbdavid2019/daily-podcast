@@ -324,3 +324,69 @@ test('curateStoriesWithDecision dynamically floats within minBudget and maxBudge
     globalThis.fetch = originalFetch
   }
 })
+
+test('curateStoriesWithDecision preserves source caps during minimum backfill', async () => {
+  const mockStories: Story[] = [
+    // 6 HN stories (all high score > 0.50)
+    { id: 'hn-1', title: 'HN 1', source: 'hacker-news' },
+    { id: 'hn-2', title: 'HN 2', source: 'hacker-news' },
+    { id: 'hn-3', title: 'HN 3', source: 'hacker-news' },
+    { id: 'hn-4', title: 'HN 4', source: 'hacker-news' },
+    { id: 'hn-5', title: 'HN 5', source: 'hacker-news' },
+    { id: 'hn-6', title: 'HN 6', source: 'hacker-news' },
+    // 3 Reddit stories (scores below threshold < 0.50)
+    { id: 'red-1', title: 'Reddit 1', source: 'reddit' },
+    { id: 'red-2', title: 'Reddit 2', source: 'reddit' },
+    { id: 'red-3', title: 'Reddit 3', source: 'reddit' },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(init?.body as string)
+    const questions = body.questions as Record<string, { type: string, instructions: string }>
+    const answers: Record<string, { type: 'noul', noul: number }> = {}
+
+    for (const qKey of Object.keys(questions)) {
+      if (qKey.includes('hn-1')) answers[qKey] = { type: 'noul', noul: 0.95 }
+      else if (qKey.includes('hn-2')) answers[qKey] = { type: 'noul', noul: 0.90 }
+      else if (qKey.includes('hn-3')) answers[qKey] = { type: 'noul', noul: 0.85 }
+      else if (qKey.includes('hn-4')) answers[qKey] = { type: 'noul', noul: 0.80 }
+      else if (qKey.includes('hn-5')) answers[qKey] = { type: 'noul', noul: 0.75 }
+      else if (qKey.includes('hn-6')) answers[qKey] = { type: 'noul', noul: 0.70 }
+      else if (qKey.includes('red-1')) answers[qKey] = { type: 'noul', noul: 0.42 }
+      else if (qKey.includes('red-2')) answers[qKey] = { type: 'noul', noul: 0.38 }
+      else answers[qKey] = { type: 'noul', noul: 0.30 }
+    }
+
+    return new Response(JSON.stringify({
+      model: 'clef-flash',
+      answers,
+      usage: { input_tokens: 600, output_tokens: 0 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  try {
+    const targetLimits = {
+      'hacker-news': 4, // cap HN at 4
+      'reddit': 3,
+    }
+
+    const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' }, {
+      targetLimits,
+      minBudget: 6, // requires 6
+      maxBudget: 9,
+      minScoreThreshold: 0.50,
+    })
+
+    // Total must be 6 (minBudget reached)
+    assert.equal(result.length, 6)
+    // HN must NOT exceed its cap of 4, even though 6 HN stories scored > 0.70
+    const hnCount = result.filter(s => s.source === 'hacker-news').length
+    const redCount = result.filter(s => s.source === 'reddit').length
+    assert.equal(hnCount, 4)
+    assert.equal(redCount, 2)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})

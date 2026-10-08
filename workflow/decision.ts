@@ -340,10 +340,32 @@ export async function curateStoriesWithDecision(
 
     finalSelection = selected
 
-    // 若通過門檻的數量不足 minKeepCount（預設保底 6 篇），從 deferred 補足最高分的故事
+    // 若通過門檻的數量不足 minKeepCount（預設保底 6 篇）：
+    // 第一階段：優先從 deferred 中挑選「仍符合來源配額上限」的故事（按分數由高到低，確保社群多樣性）
     if (finalSelection.length < minKeepCount) {
-      const needed = minKeepCount - finalSelection.length
-      finalSelection.push(...deferred.slice(0, needed))
+      const remainingDeferred: Story[] = []
+      for (const story of deferred) {
+        if (finalSelection.length >= minKeepCount) {
+          remainingDeferred.push(story)
+          continue
+        }
+        const src = story.source || 'unknown'
+        const limit = limits[src]
+        const count = sourceCounts[src] || 0
+        if (typeof limit !== 'number' || count < limit) {
+          finalSelection.push(story)
+          sourceCounts[src] = count + 1
+        }
+        else {
+          remainingDeferred.push(story)
+        }
+      }
+
+      // 第二階段：若其他來源候選全數耗盡仍未達 minKeepCount，再依分數補足缺額
+      if (finalSelection.length < minKeepCount) {
+        const needed = minKeepCount - finalSelection.length
+        finalSelection.push(...remainingDeferred.slice(0, needed))
+      }
     }
   }
   else {
