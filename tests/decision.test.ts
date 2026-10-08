@@ -4,6 +4,7 @@ import {
   chunkArray,
   curateStoriesWithDecision,
   DEFAULT_DECISION_TIMEOUT_MS,
+  isObituaryOrMemorial,
   normalizeSystemOneEndpoint,
   parseDecisionTimeoutMs,
   resolveDecisionTiers,
@@ -390,3 +391,54 @@ test('curateStoriesWithDecision preserves source caps during minimum backfill', 
     globalThis.fetch = originalFetch
   }
 })
+
+test('isObituaryOrMemorial accurately detects death notices and obituaries', () => {
+  assert.equal(isObituaryOrMemorial('Margaret Hamilton has died'), true)
+  assert.equal(isObituaryOrMemorial('Niklaus Wirth passed away at 89'), true)
+  assert.equal(isObituaryOrMemorial('軟體工程之母 Margaret Hamilton 辭世'), true)
+  assert.equal(isObituaryOrMemorial('開源社群哀悼：資深開發者逝世，享年 62 歲'), true)
+  assert.equal(isObituaryOrMemorial('Show HN: In Memoriam - A tribute site'), true)
+  assert.equal(isObituaryOrMemorial('Show HN: Building a high-throughput queue in Rust'), false)
+  assert.equal(isObituaryOrMemorial('PostgreSQL 17 Released with Performance Improvements'), false)
+  assert.equal(isObituaryOrMemorial(''), false)
+  assert.equal(isObituaryOrMemorial(undefined), false)
+})
+
+test('curateStoriesWithDecision automatically filters out obituaries before curation', async () => {
+  const stories: Story[] = [
+    { id: 'hn-1', title: 'Margaret Hamilton has died', source: 'hacker-news' },
+    { id: 'hn-2', title: 'Linux Kernel 6.12 Features', source: 'hacker-news' },
+    { id: 'hn-3', title: 'SQLite in the Browser with WASM', source: 'hacker-news' },
+    { id: 'hn-4', title: 'Docker Agent Framework Announced', source: 'hacker-news' },
+    { id: 'hn-5', title: 'Postgres Vector Search Optimizations', source: 'hacker-news' },
+    { id: 'hn-6', title: 'Building Reliable Distributed Systems', source: 'hacker-news' },
+    { id: 'hn-7', title: 'AI Engineering Patterns in 2026', source: 'hacker-news' },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    model: 'clef-flash',
+    answers: {
+      fit_0_0_hn_2: { type: 'noul', noul: 0.9 },
+      fit_0_1_hn_3: { type: 'noul', noul: 0.9 },
+      fit_0_2_hn_4: { type: 'noul', noul: 0.9 },
+      fit_0_3_hn_5: { type: 'noul', noul: 0.9 },
+      fit_0_4_hn_6: { type: 'noul', noul: 0.9 },
+      fit_0_5_hn_7: { type: 'noul', noul: 0.9 },
+    },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+
+  try {
+    const result = await curateStoriesWithDecision(stories, { CLEF_ENABLED: 'true' }, {
+      minBudget: 6,
+      maxBudget: 9,
+    })
+
+    assert.equal(result.some(s => s.id === 'hn-1'), false)
+    assert.equal(result.length, 6)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+

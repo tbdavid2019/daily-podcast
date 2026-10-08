@@ -215,6 +215,14 @@ export interface CurateStoriesOptions {
   delayBetweenBatchesMs?: number
 }
 
+export function isObituaryOrMemorial(title?: string): boolean {
+  if (!title) {
+    return false
+  }
+  return /\b(?:has died|passed away|dies at \d+|dead at \d+|in memoriam|obituary|r\.?i\.?p\.?)\b/i.test(title)
+    || /辭世|逝世|去世|享年|訃告|訃聞|逝去/.test(title)
+}
+
 /**
  * 依據決策模型對候選故事進行批次評分與篩選
  * 採保守分批策略（預設每批 12 篇），避免擠爆模型上下文視窗（4096 tokens）與保護自架 CPU 節點
@@ -224,24 +232,32 @@ export async function curateStoriesWithDecision(
   env: DecisionEnv,
   options: CurateStoriesOptions = {},
 ): Promise<Story[]> {
-  if (!stories.length) {
+  const candidateStories = stories.filter((story) => {
+    if (isObituaryOrMemorial(story.title)) {
+      console.info(`[Decision] Excluding obituary/memorial topic: "${story.title}"`)
+      return false
+    }
+    return true
+  })
+
+  if (!candidateStories.length) {
     return []
   }
 
   // 若使用者明確關閉 Clef
   if (env.CLEF_ENABLED === 'false') {
-    console.info('[Decision] Clef is explicitly disabled via CLEF_ENABLED=false, keeping original stories')
-    return [...stories]
+    console.info('[Decision] Clef is explicitly disabled via CLEF_ENABLED=false, keeping candidate stories')
+    return candidateStories
   }
 
   const batchSize = Math.max(1, options.batchSize || DEFAULT_DECISION_BATCH_SIZE)
   const minThreshold = options.minScoreThreshold ?? DEFAULT_SCORE_THRESHOLD
   const overallTimeoutMs = options.overallTimeoutMs ?? 90_000
   const deadline = Date.now() + overallTimeoutMs
-  const batches = chunkArray(stories, batchSize)
+  const batches = chunkArray(candidateStories, batchSize)
   const scoredStories: Story[] = []
 
-  console.info(`[Decision] Curating ${stories.length} stories across ${batches.length} batch(es) of max ${batchSize}, budget: ${overallTimeoutMs}ms`)
+  console.info(`[Decision] Curating ${candidateStories.length} stories across ${batches.length} batch(es) of max ${batchSize}, budget: ${overallTimeoutMs}ms`)
 
   for (let bIndex = 0; bIndex < batches.length; bIndex++) {
     const batch = batches[bIndex]
@@ -276,7 +292,7 @@ export async function curateStoriesWithDecision(
       questionKeys.push(qKey)
       questions[qKey] = {
         type: 'noul',
-        instructions: 'Is this high-value engineering or technology topic suitable for a deep-dive technical podcast (reject job ads, general news, beginner tutorials, promotional content, or contests)?',
+        instructions: 'Is this high-value engineering or technology topic suitable for a deep-dive technical podcast (strictly reject obituaries, memorials, death notices, job ads, general social/political news, beginner tutorials, promotional marketing, or contests)?',
       }
     }
 
