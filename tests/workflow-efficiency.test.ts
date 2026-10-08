@@ -24,6 +24,8 @@ import {
   formatHistoricalCallbacksContext,
   DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS,
   DEFAULT_PLAN_B_CURATION_CAPS,
+  DEFAULT_PLAN_B_MAX_STORY_BUDGET,
+  DEFAULT_PLAN_B_MIN_STORY_BUDGET,
   DEFAULT_PLAN_B_STORY_BUDGET,
   getDateDaysBefore,
   getDialoguePlan,
@@ -154,7 +156,9 @@ describe('workflow retry budgets', () => {
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['product-hunt'], 5)
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['dev-to'], 6)
 
-    // Default Plan B episode budget is 8 stories
+    // Dynamic quality-driven budget range: 6 ~ 9 stories (default 8)
+    assert.equal(DEFAULT_PLAN_B_MIN_STORY_BUDGET, 6)
+    assert.equal(DEFAULT_PLAN_B_MAX_STORY_BUDGET, 9)
     assert.equal(DEFAULT_PLAN_B_STORY_BUDGET, 8)
 
     // Curation caps prevent single-source domination

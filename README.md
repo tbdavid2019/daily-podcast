@@ -76,23 +76,33 @@
 
 WebMCP 目前仍是實驗性功能。本機測試可在 Chrome 開啟 `chrome://flags/#enable-webmcp-testing`，啟用後重新啟動瀏覽器，再開啟網站。也可以使用 Chrome 的 Model Context Tool Inspector 檢查工具註冊與執行結果。
 
-## 📅 內容排程
+## 📅 內容獲取與 Clef 決策模型篩選機制
 
-為了內容多樣性與系統效率，採用動態排程抓取與隨機化機制：
+專案已全面升級為 **Plan B 全源每日抓取 + Clef/Jev 多層次決策模型篩選 + 品質浮動制**：
 
-| 星期 | 固定來源 (每日) | 輪替來源 (特色內容) | 總篇數 (約) |
-|------|----------------|---------------------|------------|
-| **週一** | Hacker News (7), Reddit (3) | 🚀 GitHub Trending (2) | 12 篇 |
-| **週二** | Hacker News (7), Reddit (3) | 🏆 Product Hunt (2) | 12 篇 |
-| **週三** | Hacker News (7), Reddit (3) | 💻 Dev.to (3) | 13 篇 |
-| **週四** | Hacker News (7), Reddit (3) | 🚀 GitHub Trending (2) | 12 篇 |
-| **週五** | Hacker News (7), Reddit (3) | 🏆 Product Hunt (2) | 12 篇 |
-| **週末** | Hacker News (7), Reddit (3) | - | 10 篇 |
+### 1. 每日候選池（Candidate Pool）
+每日固定自 5 大技術社群平行抓取約 32 篇候選報導（消耗 5 次外部請求，遠低於 Cloudflare 50 次限額）：
+- **Hacker News**: 10 篇（高點數精選 + 官方備援）
+- **Reddit**: 6 篇（跨板塊精選 + 7 天去重）
+- **GitHub Trending**: 5 篇（熱門開源專案）
+- **Product Hunt**: 5 篇（最新產品動態）
+- **Dev.to**: 6 篇（社群工程實踐與深度好文）
 
-### 🎲 隨機化選文機制
-- **Reddit**: 每版保留前 K 名後再隨機抽樣，並套用近 7 天去重，避免熱門貼文連續霸榜。
-- **GitHub Trending**: 從 **Top 10** 熱門專案中**隨機挑選**，增加不同專案的曝光機會。
-- **Product Hunt**: 從 **Top 10** 熱門產品中**隨機挑選**，不會只介紹第一名。
+### 2. 多層次 System One 決策引擎（Decision Engine）
+- **主力節點**: `https://clef.create360.ai/v1/systemone`（Clef Flash，50 秒逾時）
+- **備援節點**: `https://clef.aiurl.tw/v1/systemone`（自建 CPU 節點）
+- **雲端備援**: `https://api.typesafe.ai/v1/systemone`（TypeSafe Jev Cloud）
+- 依據「工程深度與技術價值」嚴格評估每篇故事的適題度機率（Suitability Score），自動過濾商業行銷廣告、新手入門廢文與純活動公告。
+
+### 3. 品質浮動制（Dynamic Quality-Driven Budget）
+- **篇數區間**: 預設 **6 ～ 9 篇**（依當日優質技術新聞多寡動態取捨）
+  - **品質門檻**: `decisionScore >= 0.50`
+  - **大新聞日**: 若高分好文多，上限收斂至 **9 篇**，兼顧資訊量與聽眾專注力。
+  - **技術清淡日**: 若達標篇數較少，自動挑選次高分後補至 **6 篇保底**，絕不硬塞劣質內容，確保單篇探討深度。
+- **來源多樣性上限（Curation Caps）**:
+  - Hacker News 最多 4 篇、其餘各來源最多 2～3 篇，保證跨社群多元觀點。
+- **容錯備援（Plan A Fallback）**:
+  - 若明確設定 `CLEF_ENABLED="false"`，系統自動回退至原始星期輪替排程（HN/Reddit 固定、GitHub/PH/Dev.to 依星期輪替）。
 
 ---
 

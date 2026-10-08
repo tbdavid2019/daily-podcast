@@ -40,6 +40,8 @@ export const DEFAULT_PLAN_B_CURATION_CAPS: Record<NonNullable<Story['source']>, 
   'dev-to': 3,
 }
 
+export const DEFAULT_PLAN_B_MIN_STORY_BUDGET = 6
+export const DEFAULT_PLAN_B_MAX_STORY_BUDGET = 9
 export const DEFAULT_PLAN_B_STORY_BUDGET = 8
 
 export function getPlanBCurationCaps(budget?: number): Record<NonNullable<Story['source']>, number> {

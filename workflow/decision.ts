@@ -42,7 +42,7 @@ export const DEFAULT_CLEF_BACKUP_URL = 'https://clef.aiurl.tw/v1/systemone'
 export const DEFAULT_JEV_URL = 'https://api.typesafe.ai/v1/systemone'
 export const DEFAULT_DECISION_TIMEOUT_MS = 50_000 // 50 seconds timeout for CPU backup node
 export const DEFAULT_DECISION_BATCH_SIZE = 12 // Conservative batch size to prevent token overflow (< 2500 tokens)
-export const DEFAULT_SCORE_THRESHOLD = 0.45 // Minimum suitability probability
+export const DEFAULT_SCORE_THRESHOLD = 0.50 // Minimum suitability probability (quality threshold)
 
 export function normalizeSystemOneEndpoint(rawUrl: string): string {
   let url = rawUrl.trim().replace(/\/$/, '')
@@ -207,6 +207,8 @@ export interface CurateStoriesOptions {
   batchSize?: number
   minScoreThreshold?: number
   targetBudget?: number
+  minBudget?: number
+  maxBudget?: number
   targetLimits?: Record<string, number>
   timeoutMs?: number
   overallTimeoutMs?: number
@@ -309,8 +311,9 @@ export async function curateStoriesWithDecision(
 
   // 排序：高分優先
   const sorted = [...scoredStories].sort((a, b) => (b.decisionScore ?? 0) - (a.decisionScore ?? 0))
-  const targetFloor = options.targetBudget ? Math.min(options.targetBudget, 5) : 5
+  const targetFloor = options.minBudget ?? (options.targetBudget ? Math.min(options.targetBudget, 5) : 5)
   const minKeepCount = Math.min(sorted.length, targetFloor)
+  const effectiveMaxBudget = options.maxBudget ?? options.targetBudget
 
   // 依來源限制與分數挑選故事
   let finalSelection: Story[] = []
@@ -337,7 +340,7 @@ export async function curateStoriesWithDecision(
 
     finalSelection = selected
 
-    // 若通過門檻的數量不足 minKeepCount，從 deferred 補足最高分的故事
+    // 若通過門檻的數量不足 minKeepCount（預設保底 6 篇），從 deferred 補足最高分的故事
     if (finalSelection.length < minKeepCount) {
       const needed = minKeepCount - finalSelection.length
       finalSelection.push(...deferred.slice(0, needed))
@@ -348,11 +351,11 @@ export async function curateStoriesWithDecision(
     finalSelection = filtered.length >= minKeepCount ? filtered : sorted.slice(0, minKeepCount)
   }
 
-  // 若有指定總預算限制，截取前 N 篇
-  if (typeof options.targetBudget === 'number' && options.targetBudget > 0 && finalSelection.length > options.targetBudget) {
-    finalSelection = finalSelection.slice(0, options.targetBudget)
+  // 若有指定最大篇數限制 (maxBudget，預設上限 9 篇)，截取前 N 篇
+  if (typeof effectiveMaxBudget === 'number' && effectiveMaxBudget > 0 && finalSelection.length > effectiveMaxBudget) {
+    finalSelection = finalSelection.slice(0, effectiveMaxBudget)
   }
 
-  console.info(`[Decision] Curated ${finalSelection.length} stories from ${stories.length} candidates. Top score: ${finalSelection[0]?.decisionScore?.toFixed(3)}, Lowest: ${finalSelection[finalSelection.length - 1]?.decisionScore?.toFixed(3)}`)
+  console.info(`[Decision] Curated ${finalSelection.length} stories (target range ${minKeepCount}-${effectiveMaxBudget ?? 'unlimited'}) from ${stories.length} candidates. Top score: ${finalSelection[0]?.decisionScore?.toFixed(3)}, Lowest: ${finalSelection[finalSelection.length - 1]?.decisionScore?.toFixed(3)}`)
   return finalSelection
 }

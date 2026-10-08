@@ -29,7 +29,8 @@ import {
   CONTENT_FETCH_STEP_CONFIG,
   DECISION_STEP_CONFIG,
   DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS,
-  DEFAULT_PLAN_B_STORY_BUDGET,
+  DEFAULT_PLAN_B_MAX_STORY_BUDGET,
+  DEFAULT_PLAN_B_MIN_STORY_BUDGET,
   extractKeywords,
   findRelevantHistoricalTopics,
   formatHistoricalCallbacksContext,
@@ -82,6 +83,7 @@ interface Env extends CloudflareEnv {
   // 新增時區設定
   TIMEZONE_OFFSET?: string
   TIMEZONE_NAME?: string
+  MIN_STORY_BUDGET?: string
   MAX_STORY_BUDGET?: string
   HN_MIN_POINTS?: string
   // 決策模型設定 (Clef / Jev)
@@ -330,15 +332,23 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     const isDecisionEnabled = this.env.CLEF_ENABLED !== 'false'
 
-    // 根據設定或決策模型排程動態設置各來源限制
-    const parsedBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '')
-    const storyBudget = Number.isFinite(parsedBudget) && parsedBudget > 0
-      ? parsedBudget
-      : (isDecisionEnabled ? DEFAULT_PLAN_B_STORY_BUDGET : undefined)
+    // 根據設定或決策模型排程動態設置各來源限制（Plan B 預設品質浮動區間：6 ~ 9 篇）
+    const parsedMinBudget = Number.parseInt(this.env.MIN_STORY_BUDGET || '', 10)
+    const parsedMaxBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '', 10)
+
+    const minStoryBudget = Number.isFinite(parsedMinBudget) && parsedMinBudget > 0
+      ? parsedMinBudget
+      : (isDecisionEnabled ? DEFAULT_PLAN_B_MIN_STORY_BUDGET : undefined)
+
+    const maxStoryBudget = Number.isFinite(parsedMaxBudget) && parsedMaxBudget > 0
+      ? parsedMaxBudget
+      : (isDecisionEnabled ? DEFAULT_PLAN_B_MAX_STORY_BUDGET : undefined)
+
+    const storyBudget = maxStoryBudget
 
     const scheduledStoryLimits = getScheduledStoryLimits(dayOfWeek)
     const storyLimits = isDecisionEnabled
-      ? getPlanBCurationCaps(storyBudget)
+      ? getPlanBCurationCaps(maxStoryBudget)
       : (storyBudget
           ? applyStoryBudget(scheduledStoryLimits, storyBudget, SOURCE_PRIORITY)
           : scheduledStoryLimits)
@@ -411,7 +421,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     console.info(isDecisionEnabled ? 'Plan B all-source curation limits:' : 'Plan A source limits based on schedule:', {
       ...storyLimits,
-      budget: storyBudget ?? 'none',
+      minBudget: minStoryBudget ?? 'none',
+      maxBudget: maxStoryBudget ?? 'none',
       dayOfWeek,
       decisionEngine: isDecisionEnabled ? 'active' : 'disabled',
     })
@@ -450,6 +461,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       }
       return curateStoriesWithDecision(rawStories, this.env, {
         targetBudget: storyBudget,
+        minBudget: minStoryBudget,
+        maxBudget: maxStoryBudget,
         targetLimits: storyLimits,
       })
     })

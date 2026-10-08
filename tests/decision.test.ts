@@ -233,3 +233,94 @@ test('curateStoriesWithDecision enforces Plan B per-source caps and overall budg
     globalThis.fetch = originalFetch
   }
 })
+
+test('curateStoriesWithDecision dynamically floats within minBudget and maxBudget based on score', async () => {
+  const candidates: Story[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `item-${i + 1}`,
+    title: `Story ${i + 1}`,
+    source: (i % 2 === 0 ? 'hacker-news' : 'reddit') as Story['source'],
+  }))
+
+  const originalFetch = globalThis.fetch
+
+  try {
+    // Scenario A: Exactly 7 stories score >= 0.50 (between min 6 and max 9) -> selects exactly 7 stories!
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      const questions = body.questions as Record<string, { type: string, instructions: string }>
+      const answers: Record<string, { type: 'noul', noul: number }> = {}
+
+      for (const qKey of Object.keys(questions)) {
+        const match = qKey.match(/item-(\d+)/)
+        const num = match ? Number.parseInt(match[1], 10) : 99
+        answers[qKey] = { type: 'noul', noul: num <= 7 ? 0.70 : 0.20 }
+      }
+
+      return new Response(JSON.stringify({
+        model: 'clef-flash',
+        answers,
+        usage: { input_tokens: 500, output_tokens: 0 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const resA = await curateStoriesWithDecision(candidates, { CLEF_ENABLED: 'true' }, {
+      minBudget: 6,
+      maxBudget: 9,
+      minScoreThreshold: 0.50,
+    })
+    assert.equal(resA.length, 7)
+
+    // Scenario B: Only 4 stories score >= 0.50 -> backfills 2 to meet minBudget of 6!
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      const questions = body.questions as Record<string, { type: string, instructions: string }>
+      const answers: Record<string, { type: 'noul', noul: number }> = {}
+
+      for (const qKey of Object.keys(questions)) {
+        const match = qKey.match(/item-(\d+)/)
+        const num = match ? Number.parseInt(match[1], 10) : 99
+        answers[qKey] = { type: 'noul', noul: num <= 4 ? 0.80 : 0.30 }
+      }
+
+      return new Response(JSON.stringify({
+        model: 'clef-flash',
+        answers,
+        usage: { input_tokens: 500, output_tokens: 0 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const resB = await curateStoriesWithDecision(candidates, { CLEF_ENABLED: 'true' }, {
+      minBudget: 6,
+      maxBudget: 9,
+      minScoreThreshold: 0.50,
+    })
+    assert.equal(resB.length, 6)
+
+    // Scenario C: All 12 stories score >= 0.50 -> capped at maxBudget of 9!
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      const questions = body.questions as Record<string, { type: string, instructions: string }>
+      const answers: Record<string, { type: 'noul', noul: number }> = {}
+
+      for (const qKey of Object.keys(questions)) {
+        answers[qKey] = { type: 'noul', noul: 0.85 }
+      }
+
+      return new Response(JSON.stringify({
+        model: 'clef-flash',
+        answers,
+        usage: { input_tokens: 500, output_tokens: 0 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const resC = await curateStoriesWithDecision(candidates, { CLEF_ENABLED: 'true' }, {
+      minBudget: 6,
+      maxBudget: 9,
+      minScoreThreshold: 0.50,
+    })
+    assert.equal(resC.length, 9)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})

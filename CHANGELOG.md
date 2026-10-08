@@ -2,6 +2,32 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-08] Clef/Jev 多層次決策模型接入、全資訊源每日候選 (Plan B) 與品質浮動制 (Multi-Tier Decision Engine, All-Source Plan B & Dynamic Quality Budget)
+
+- **多層次 System One 決策模型架構（Multi-Tier Decision Engine）**：
+  - 接入 `workflow/decision.ts`，支援三層式階梯容錯架構：
+    - 第一層（主力）：`https://clef.create360.ai/v1/systemone`（`clef-flash` 模型，支援 50 秒逾時保護）。
+    - 第二層（自建備援）：`https://clef.aiurl.tw/v1/systemone`（CPU 自架節點，50 秒逾時保護）。
+    - 第三層（雲端備援）：`https://api.typesafe.ai/v1/systemone`（`jev-latest` 模型，支援 Bearer Auth 金鑰認證）。
+  - 全域執行期限動態倒數（Global Deadline Clamping）：90 秒跨批次動態預算管理，若剩餘時間低於 2 秒自動停止嘗試下一層，嚴格杜絕 Cloudflare Workflow Step 逾時風險。
+  - 將新聞抓取（`get all stories`）與模型評分（`curate stories with decision model`）拆分為獨立 Workflow Step，避免失敗時重複執行耗時的網路抓取。
+- **全資訊源每日候選池與來源多樣性上限（Plan B All-Source Curation）**：
+  - 徹底解除過去僵化的星期輪替排程限制，每天平行自 5 大社群抓取 32 篇候選（Hacker News 10 篇、Reddit 6 篇、GitHub 5 篇、Product Hunt 5 篇、Dev.to 6 篇），僅耗用 5 次外部請求（遠低於 50 次限額）。
+  - 引入來源配額上限（Curation Caps）：Hacker News 最多 4 篇、其餘來源最多 2～3 篇，保證多樣性並防範單一社群霸榜。
+  - 商業宣傳廢文與入門教學自動過濾：依據文章適題度機率（`decisionScore >= 0.50`）嚴格去蕪存菁。
+- **品質浮動制（Dynamic Quality-Driven Story Budget: 6～9 篇）**：
+  - 捨棄過去死板固定篇數（舊版 12～13 篇），改採品質驅動之動態區間（預設保底 6 篇、最高 9 篇）：
+    - 大新聞日：高分技術文章充足時，選取最多 9 篇，資訊量充沛。
+    - 技術清淡日：僅達標少數篇數時，自動由次高分候補補齊至 6 篇保底，確保節目長度（約 9 分鐘）且絕不濫充廣告文。
+    - 平日一般情況：有幾篇高分就選幾篇（7～8 篇），單篇探討更深入、David 與 Cordelia 對話更具技術深度。
+  - 大幅減輕系統開銷：較舊版減少 30%～50% 之 TTS 語音生成與內文抓取負擔，記憶體與 Step 配額更加健康穩固。
+  - 支援透過環境變數 `MIN_STORY_BUDGET` 與 `MAX_STORY_BUDGET` 自訂區間；若設置 `CLEF_ENABLED="false"` 則自動回退 Plan A。
+- **門禁測試與 Codex 審查驗證**：
+  - 新增 `tests/decision.test.ts` 與 `tests/workflow-efficiency.test.ts` 單元測試（包含動態浮動篇數、多層次容錯、來源上限、批次分流），88 項測試全數綠燈通過。
+  - 通過 `codex review` 獨立代碼審查，確認無任何回退瑕疵。
+
+---
+
 ## [2026-10-05] 全站底部懸浮播放列、英聽練習多段速 (0.5x~0.9x) 與 Codex 審查重繪隔離 (Global Bottom Dock Player, Listening Practice Speeds & Codex Verification)
 
 - **全站底部浮動播放列（Global Bottom Dock Player）**：
