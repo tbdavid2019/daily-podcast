@@ -33,6 +33,7 @@ export interface Story {
   upvotes?: number
   subreddit?: string
   hackerNewsUrl?: string
+  decisionScore?: number
 }
 
 export interface GeneratedScriptData {

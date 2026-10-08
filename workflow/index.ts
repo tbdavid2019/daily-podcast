@@ -14,6 +14,7 @@ import {
   getCalendarDayOfWeek,
   parseTimezoneOffset,
 } from '@/worker/workflow-security'
+import { curateStoriesWithDecision } from './decision'
 import {
   AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
@@ -79,6 +80,15 @@ interface Env extends CloudflareEnv {
   TIMEZONE_NAME?: string
   MAX_STORY_BUDGET?: string
   HN_MIN_POINTS?: string
+  // 決策模型設定 (Clef / Jev)
+  CLEF_ENABLED?: string
+  CLEF_BASE_URL?: string
+  CLEF_FALLBACK_BASE_URL?: string
+  CLEF_TIMEOUT_MS?: string
+  JEV_ENABLED?: string
+  JEV_BASE_URL?: string
+  JEV_API_KEY?: string
+  JEV_MODEL?: string
 }
 
 function createKvRequestLogger() {
@@ -406,8 +416,18 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         }
       }
 
+      // If Clef/decision model is enabled, expand candidate limits by 1.5x so the decision model has a broader pool to curate from
+      const candidateLimits = this.env.CLEF_ENABLED !== 'false'
+        ? Object.fromEntries(
+            Object.entries(storyLimits).map(([key, limit]) => [
+              key,
+              typeof limit === 'number' && limit > 0 ? Math.max(limit, Math.ceil(limit * 1.5)) : limit,
+            ]),
+          )
+        : storyLimits
+
       const allStories = await getAllStories(fetchDate, this.env, {
-        limits: storyLimits,
+        limits: candidateLimits,
         excludeRedditIds,
         excludeStoryIds,
         excludeStoryUrls,
@@ -416,7 +436,14 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       if (!allStories.length) {
         throw new Error('no stories found')
       }
-      return allStories as Story[]
+
+      // 決策模型篩選與排序（Clef / Jev）
+      const curatedStories = await curateStoriesWithDecision(allStories, this.env, {
+        targetBudget: storyBudget,
+        targetLimits: storyLimits,
+      })
+
+      return curatedStories as Story[]
     })
 
     kvRequestLogger.checkpoint('after get all stories')
