@@ -28,6 +28,8 @@ import {
   buildTopicArchiveKey,
   CONTENT_FETCH_STEP_CONFIG,
   DECISION_STEP_CONFIG,
+  DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS,
+  DEFAULT_PLAN_B_STORY_BUDGET,
   extractKeywords,
   findRelevantHistoricalTopics,
   formatHistoricalCallbacksContext,
@@ -35,6 +37,7 @@ import {
   getDialoguePlan,
   getExcludedRedditIds,
   getExcludedStoryIdentifiers,
+  getPlanBCurationCaps,
   getScheduledStoryLimits,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
@@ -325,16 +328,20 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
 
-    // 根據星期幾動態設置各來源的限制
+    const isDecisionEnabled = this.env.CLEF_ENABLED !== 'false'
+
+    // 根據設定或決策模型排程動態設置各來源限制
     const parsedBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '')
     const storyBudget = Number.isFinite(parsedBudget) && parsedBudget > 0
       ? parsedBudget
-      : undefined
+      : (isDecisionEnabled ? DEFAULT_PLAN_B_STORY_BUDGET : undefined)
 
     const scheduledStoryLimits = getScheduledStoryLimits(dayOfWeek)
-    const storyLimits = storyBudget
-      ? applyStoryBudget(scheduledStoryLimits, storyBudget, SOURCE_PRIORITY)
-      : scheduledStoryLimits
+    const storyLimits = isDecisionEnabled
+      ? getPlanBCurationCaps(storyBudget)
+      : (storyBudget
+          ? applyStoryBudget(scheduledStoryLimits, storyBudget, SOURCE_PRIORITY)
+          : scheduledStoryLimits)
 
     const getRecentDates = (baseDate: string, days: number) => {
       const base = new Date(`${baseDate}T00:00:00Z`)
@@ -402,10 +409,11 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       topicArchiveDays: topicArchiveIndex.entries.length,
     })
 
-    console.info('Source limits based on schedule:', {
+    console.info(isDecisionEnabled ? 'Plan B all-source curation limits:' : 'Plan A source limits based on schedule:', {
       ...storyLimits,
       budget: storyBudget ?? 'none',
       dayOfWeek,
+      decisionEngine: isDecisionEnabled ? 'active' : 'disabled',
     })
 
     const rawStories = await step.do(`get all stories ${fetchDate}`, CONTENT_FETCH_STEP_CONFIG, async () => {
@@ -417,14 +425,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         }
       }
 
-      // If Clef/decision model is enabled, expand candidate limits by 1.5x so the decision model has a broader pool to curate from
-      const candidateLimits = this.env.CLEF_ENABLED !== 'false'
-        ? Object.fromEntries(
-            Object.entries(storyLimits).map(([key, limit]) => [
-              key,
-              typeof limit === 'number' && limit > 0 ? Math.max(limit, Math.ceil(limit * 1.5)) : limit,
-            ]),
-          )
+      // If Clef/decision model is enabled (Plan B), fetch open candidates across all 5 sources daily
+      const candidateLimits = isDecisionEnabled
+        ? DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS
         : storyLimits
 
       const allStories = await getAllStories(fetchDate, this.env, {

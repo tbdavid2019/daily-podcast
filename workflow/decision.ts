@@ -309,7 +309,8 @@ export async function curateStoriesWithDecision(
 
   // 排序：高分優先
   const sorted = [...scoredStories].sort((a, b) => (b.decisionScore ?? 0) - (a.decisionScore ?? 0))
-  const minKeepCount = Math.min(sorted.length, Math.max(5, options.targetBudget ? Math.min(options.targetBudget, 5) : 5))
+  const targetFloor = options.targetBudget ? Math.min(options.targetBudget, 5) : 5
+  const minKeepCount = Math.min(sorted.length, targetFloor)
 
   // 依來源限制與分數挑選故事
   let finalSelection: Story[] = []

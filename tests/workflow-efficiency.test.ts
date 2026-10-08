@@ -22,10 +22,14 @@ import {
   buildTopicArchiveKey,
   findRelevantHistoricalTopics,
   formatHistoricalCallbacksContext,
+  DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS,
+  DEFAULT_PLAN_B_CURATION_CAPS,
+  DEFAULT_PLAN_B_STORY_BUDGET,
   getDateDaysBefore,
   getDialoguePlan,
   getExcludedRedditIds,
   getExcludedStoryIdentifiers,
+  getPlanBCurationCaps,
   getScheduledStoryLimits,
   isAudioCheckpointForInstance,
   normalizeDedupeUrl,
@@ -142,6 +146,33 @@ describe('workflow retry budgets', () => {
     assert.equal(getScheduledStoryLimits(3)['dev-to'], 3)
   })
 
+  it('provides open candidate pools and bounded curation caps under Plan B', () => {
+    // All 5 sources are fetched daily under Plan B
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['hacker-news'], 10)
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS.reddit, 6)
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['github-trending'], 5)
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['product-hunt'], 5)
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['dev-to'], 6)
+
+    // Default Plan B episode budget is 8 stories
+    assert.equal(DEFAULT_PLAN_B_STORY_BUDGET, 8)
+
+    // Curation caps prevent single-source domination
+    const defaultCaps = getPlanBCurationCaps()
+    assert.equal(defaultCaps['hacker-news'], 4)
+    assert.equal(defaultCaps.reddit, 3)
+    assert.equal(defaultCaps['github-trending'], 3)
+    assert.equal(defaultCaps['product-hunt'], 2)
+    assert.equal(defaultCaps['dev-to'], 3)
+
+    // Proportional scaling for higher budgets (e.g. 10 stories)
+    const scaledCaps = getPlanBCurationCaps(10)
+    assert.equal(scaledCaps['hacker-news'], 5)
+    assert.equal(scaledCaps.reddit, 4)
+    assert.equal(scaledCaps['github-trending'], 4)
+    assert.equal(scaledCaps['product-hunt'], 3)
+    assert.equal(scaledCaps['dev-to'], 4)
+  })
 })
 
 describe('workflow compact checkpoints', () => {

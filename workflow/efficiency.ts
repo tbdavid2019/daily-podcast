@@ -23,6 +23,39 @@ export function getScheduledStoryLimits(dayOfWeek: number): Record<NonNullable<S
   }
 }
 
+// Plan B: 每日全資訊源候選抓取上限與決策篩選配額
+export const DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS: Record<NonNullable<Story['source']>, number> = {
+  'hacker-news': 10,
+  'reddit': 6,
+  'github-trending': 5,
+  'product-hunt': 5,
+  'dev-to': 6,
+}
+
+export const DEFAULT_PLAN_B_CURATION_CAPS: Record<NonNullable<Story['source']>, number> = {
+  'hacker-news': 4,
+  'reddit': 3,
+  'github-trending': 3,
+  'product-hunt': 2,
+  'dev-to': 3,
+}
+
+export const DEFAULT_PLAN_B_STORY_BUDGET = 8
+
+export function getPlanBCurationCaps(budget?: number): Record<NonNullable<Story['source']>, number> {
+  if (!budget || budget <= 8) {
+    return { ...DEFAULT_PLAN_B_CURATION_CAPS }
+  }
+  const scale = budget / 8
+  return {
+    'hacker-news': Math.min(8, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['hacker-news'] * scale)),
+    'reddit': Math.min(5, Math.round(DEFAULT_PLAN_B_CURATION_CAPS.reddit * scale)),
+    'github-trending': Math.min(4, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['github-trending'] * scale)),
+    'product-hunt': Math.min(3, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['product-hunt'] * scale)),
+    'dev-to': Math.min(4, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['dev-to'] * scale)),
+  }
+}
+
 export function getDialoguePlan(storyCount: number): DialoguePlan {
   const count = Math.max(1, Math.floor(storyCount))
   const targetLines = Math.min(32, Math.max(8, count * 2 + 4))

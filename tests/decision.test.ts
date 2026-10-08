@@ -163,3 +163,73 @@ test('curateStoriesWithDecision gracefully falls back when all tiers fail', asyn
     globalThis.fetch = originalFetch
   }
 })
+
+test('curateStoriesWithDecision enforces Plan B per-source caps and overall budget', async () => {
+  const mockStories: Story[] = [
+    // 4 HN stories (all high score)
+    { id: 'hn-1', title: 'HN Top 1', source: 'hacker-news' },
+    { id: 'hn-2', title: 'HN Top 2', source: 'hacker-news' },
+    { id: 'hn-3', title: 'HN Top 3', source: 'hacker-news' },
+    { id: 'hn-4', title: 'HN Top 4', source: 'hacker-news' },
+    // 2 Dev.to stories (high score)
+    { id: 'dev-1', title: 'Dev.to Gem 1', source: 'dev-to' },
+    { id: 'dev-2', title: 'Dev.to Gem 2', source: 'dev-to' },
+    // 2 Reddit stories (moderate score)
+    { id: 'red-1', title: 'Reddit Good', source: 'reddit' },
+    { id: 'red-2', title: 'Reddit Low', source: 'reddit' },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(init?.body as string)
+    const questions = body.questions as Record<string, { type: string, instructions: string }>
+    const answers: Record<string, { type: 'noul', noul: number }> = {}
+
+    for (const qKey of Object.keys(questions)) {
+      if (qKey.includes('hn-1')) answers[qKey] = { type: 'noul', noul: 0.95 }
+      else if (qKey.includes('hn-2')) answers[qKey] = { type: 'noul', noul: 0.90 }
+      else if (qKey.includes('hn-3')) answers[qKey] = { type: 'noul', noul: 0.85 }
+      else if (qKey.includes('hn-4')) answers[qKey] = { type: 'noul', noul: 0.80 }
+      else if (qKey.includes('dev-1')) answers[qKey] = { type: 'noul', noul: 0.92 }
+      else if (qKey.includes('dev-2')) answers[qKey] = { type: 'noul', noul: 0.88 }
+      else if (qKey.includes('red-1')) answers[qKey] = { type: 'noul', noul: 0.70 }
+      else answers[qKey] = { type: 'noul', noul: 0.30 } // red-2 filtered
+    }
+
+    return new Response(JSON.stringify({
+      model: 'clef-flash',
+      answers,
+      usage: { input_tokens: 600, output_tokens: 0 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  try {
+    const targetLimits = {
+      'hacker-news': 2, // cap HN to at most 2 stories
+      'dev-to': 2,
+      'reddit': 2,
+    }
+    const result = await curateStoriesWithDecision(mockStories, {
+      CLEF_ENABLED: 'true',
+    }, {
+      targetLimits,
+      targetBudget: 4, // podcast budget is 4
+      minScoreThreshold: 0.45,
+    })
+
+    // Despite 4 HN stories scoring high, HN cap of 2 is respected
+    const hnCount = result.filter(s => s.source === 'hacker-news').length
+    const devCount = result.filter(s => s.source === 'dev-to').length
+    assert.equal(hnCount, 2)
+    assert.equal(devCount, 2)
+    assert.equal(result.length, 4)
+    // Ordered by score descending
+    assert.equal(result[0].id, 'hn-1') // 0.95
+    assert.equal(result[1].id, 'dev-1') // 0.92
+    assert.equal(result[2].id, 'hn-2') // 0.90
+    assert.equal(result[3].id, 'dev-2') // 0.88
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
