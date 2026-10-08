@@ -45,4 +45,5 @@ export interface GeneratedScriptData {
   storySummaries: string[]
   displayDate: string
   generatedAt?: number
+  audio?: string
 }

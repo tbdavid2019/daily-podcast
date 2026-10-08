@@ -242,7 +242,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         }
       }
     }
-  }, [currentEpisode, isMuted, playbackRate, volume])
+  }, [currentEpisode, isMuted, volume])
 
   const togglePlayPause = useCallback(() => {
     const audio = audioRef.current

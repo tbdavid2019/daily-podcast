@@ -35,7 +35,7 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
   // Construct audio path based on new workflow convention
   // Path: {yyyy}/{mm}/{dd}/{env}/{variant}-{date}.mp3
   // Note: The audio workflow uploads to: `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
-  const audioPath = `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
+  const audioPath = data.audio || `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
 
   // Format dialogue as string for the frontend
   const isEnglish = variant === 'en'

@@ -148,8 +148,27 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
     const rssCacheKey = buildRssCacheKey(runEnv, variant)
 
-    // Output R2 Key
-    const podcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
+    // 1. Load Script from KV
+    const scriptData = await step.do('load script from kv', IO_STEP_CONFIG, async () => {
+      const data = await this.env.HACKER_NEWS_KV.get(scriptKey)
+      if (!data) {
+        throw new Error(`Script not found in KV: ${scriptKey}`)
+      }
+      return JSON.parse(data) as GeneratedScriptData
+    })
+
+    const dialogue = scriptData.dialogue
+    if (!dialogue || dialogue.length === 0) {
+      console.warn('Dialogue is empty, aborting audio generation')
+      return
+    }
+
+    // Output R2 Key: If forced rerun, append generated timestamp to ensure CDN edge cache busting
+    const isForced = Boolean(params.force)
+    const basePodcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
+    const podcastKey = isForced
+      ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${scriptData.generatedAt || Date.now()}.mp3`
+      : basePodcastKey
 
     console.info('Audio Generation Config:', {
       variant,
@@ -157,21 +176,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       scriptKey,
       podcastKey,
       isGeminiTTS,
+      isForced,
     })
-
-    // 1. Load Script from KV
-    const dialogue = await step.do('load script from kv', IO_STEP_CONFIG, async () => {
-      const data = await this.env.HACKER_NEWS_KV.get(scriptKey)
-      if (!data) {
-        throw new Error(`Script not found in KV: ${scriptKey}`)
-      }
-      return (JSON.parse(data) as GeneratedScriptData).dialogue
-    })
-
-    if (!dialogue || dialogue.length === 0) {
-      console.warn('Dialogue is empty, aborting audio generation')
-      return
-    }
 
     console.info(`Loaded script with ${dialogue.length} lines`)
 
@@ -368,10 +374,15 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     try {
       await step.do('cleanup audio checkpoints', IO_STEP_CONFIG, async () => {
-        await Promise.all([
+        const cleanupTasks: Promise<unknown>[] = [
           this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey]),
           this.env.HACKER_NEWS_KV.delete(rssCacheKey),
-        ])
+        ]
+        if (scriptData.audio !== podcastKey) {
+          scriptData.audio = podcastKey
+          cleanupTasks.push(this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData)))
+        }
+        await Promise.all(cleanupTasks)
       })
     }
     catch (error) {
