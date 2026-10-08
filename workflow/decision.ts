@@ -160,23 +160,34 @@ export async function callSingleTier(
 export async function callDecisionSystemOne(
   request: SystemOneRequest,
   env: DecisionEnv,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number, deadline?: number } = {},
 ): Promise<{ response: SystemOneResponse, tierUsed: string }> {
   const tiers = resolveDecisionTiers(env, options.timeoutMs)
   let lastError: Error | null = null
 
   for (const tier of tiers) {
+    const remainingMs = options.deadline ? options.deadline - Date.now() : tier.timeoutMs
+    if (remainingMs <= 2000) {
+      console.warn(`[Decision System One] Skipping tier ${tier.name} due to low time budget (${remainingMs}ms remaining)`)
+      break
+    }
+
+    const effectiveTier: DecisionTier = {
+      ...tier,
+      timeoutMs: Math.min(tier.timeoutMs, Math.max(1000, remainingMs)),
+    }
+
     try {
-      console.info(`[Decision System One] Attempting tier: ${tier.name} (${tier.url})`)
+      console.info(`[Decision System One] Attempting tier: ${effectiveTier.name} (${effectiveTier.url}), timeout: ${effectiveTier.timeoutMs}ms`)
       const start = Date.now()
-      const response = await callSingleTier(tier, request)
+      const response = await callSingleTier(effectiveTier, request)
       const durationMs = Date.now() - start
-      console.info(`[Decision System One] Success via ${tier.name} in ${durationMs}ms, tokens: in=${response.usage?.input_tokens ?? 0}`)
-      return { response, tierUsed: tier.name }
+      console.info(`[Decision System One] Success via ${effectiveTier.name} in ${durationMs}ms, tokens: in=${response.usage?.input_tokens ?? 0}`)
+      return { response, tierUsed: effectiveTier.name }
     }
     catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err))
-      console.warn(`[Decision System One] Tier ${tier.name} failed:`, error.message)
+      console.warn(`[Decision System One] Tier ${effectiveTier.name} failed:`, error.message)
       lastError = error
     }
   }
@@ -198,6 +209,7 @@ export interface CurateStoriesOptions {
   targetBudget?: number
   targetLimits?: Record<string, number>
   timeoutMs?: number
+  overallTimeoutMs?: number
   delayBetweenBatchesMs?: number
 }
 
@@ -222,13 +234,26 @@ export async function curateStoriesWithDecision(
 
   const batchSize = Math.max(1, options.batchSize || DEFAULT_DECISION_BATCH_SIZE)
   const minThreshold = options.minScoreThreshold ?? DEFAULT_SCORE_THRESHOLD
+  const overallTimeoutMs = options.overallTimeoutMs ?? 90_000
+  const deadline = Date.now() + overallTimeoutMs
   const batches = chunkArray(stories, batchSize)
   const scoredStories: Story[] = []
 
-  console.info(`[Decision] Curating ${stories.length} stories across ${batches.length} batch(es) of max ${batchSize}`)
+  console.info(`[Decision] Curating ${stories.length} stories across ${batches.length} batch(es) of max ${batchSize}, budget: ${overallTimeoutMs}ms`)
 
   for (let bIndex = 0; bIndex < batches.length; bIndex++) {
     const batch = batches[bIndex]
+
+    if (Date.now() >= deadline - 3000) {
+      console.warn(`[Decision] Curation deadline reached before batch ${bIndex + 1}/${batches.length}, using neutral score for remaining`)
+      for (const story of batch) {
+        scoredStories.push({
+          ...story,
+          decisionScore: 0.5,
+        })
+      }
+      continue
+    }
 
     if (bIndex > 0 && options.delayBetweenBatchesMs) {
       await new Promise(resolve => setTimeout(resolve, options.delayBetweenBatchesMs))
@@ -257,7 +282,7 @@ export async function curateStoriesWithDecision(
       const { response, tierUsed } = await callDecisionSystemOne(
         { model: 'clef-flash', state, questions },
         env,
-        { timeoutMs: options.timeoutMs },
+        { timeoutMs: options.timeoutMs, deadline },
       )
 
       for (const [idx, story] of batch.entries()) {

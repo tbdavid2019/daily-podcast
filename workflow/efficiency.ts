@@ -117,6 +117,15 @@ export const CONTENT_FETCH_STEP_CONFIG = {
   timeout: '3 minutes',
 } satisfies WorkflowStepConfig
 
+export const DECISION_STEP_CONFIG = {
+  retries: {
+    limit: 1,
+    delay: '5 seconds',
+    backoff: 'exponential',
+  },
+  timeout: '3 minutes',
+} satisfies WorkflowStepConfig
+
 export const AI_STEP_CONFIG = {
   retries: {
     limit: 1,

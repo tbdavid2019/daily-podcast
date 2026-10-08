@@ -27,6 +27,7 @@ import {
   buildStoryDedupeKey,
   buildTopicArchiveKey,
   CONTENT_FETCH_STEP_CONFIG,
+  DECISION_STEP_CONFIG,
   extractKeywords,
   findRelevantHistoricalTopics,
   formatHistoricalCallbacksContext,
@@ -407,7 +408,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       dayOfWeek,
     })
 
-    const stories = await step.do(`get all stories ${fetchDate}`, CONTENT_FETCH_STEP_CONFIG, async () => {
+    const rawStories = await step.do(`get all stories ${fetchDate}`, CONTENT_FETCH_STEP_CONFIG, async () => {
       if (isEnglish && !force) {
         const hnScriptRaw = await kvGet<GeneratedScriptData>(`script:${runEnv}:hacker-news:${displayDate}`, 'json')
         if (hnScriptRaw?.stories && hnScriptRaw.stories.length > 0) {
@@ -437,16 +438,20 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         throw new Error('no stories found')
       }
 
-      // 決策模型篩選與排序（Clef / Jev）
-      const curatedStories = await curateStoriesWithDecision(allStories, this.env, {
+      return allStories as Story[]
+    })
+
+    const stories = await step.do('curate stories with decision model', DECISION_STEP_CONFIG, async () => {
+      if (isEnglish && !force) {
+        return rawStories
+      }
+      return curateStoriesWithDecision(rawStories, this.env, {
         targetBudget: storyBudget,
         targetLimits: storyLimits,
       })
-
-      return curatedStories as Story[]
     })
 
-    kvRequestLogger.checkpoint('after get all stories')
+    kvRequestLogger.checkpoint('after get all stories and curate')
 
     const storiesPerSource = stories.reduce<Record<string, number>>((acc, story) => {
       const source = story.source || 'unknown'
