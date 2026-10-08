@@ -2,6 +2,22 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-08] Cloudflare CDN 音訊實體路徑 Cache-Busting、2x 倍速播放中止修復與訃聞嚴格過濾 (CDN Audio Path Cache-Busting, 2x Playback Speed Fix & Obituary Guardrails)
+
+- **Cloudflare CDN 音訊實體路徑 Cache-Busting（Audio Path Cache-Busting on Force Rerun）**：
+  - **排查發現**：Cloudflare 自訂網域 R2（`r2.david888.com`）在處理音訊串流分段讀取（Byte-Range Requests）時，快取鍵規則會忽略網址後方 Query String（`?t=...`）；且 R2 音訊物件預設為 `max-age=31536000, immutable`（快取 1 年）。當同一天重新生成節目並覆寫 R2 同名物件時，Cloudflare 全球邊緣節點（特別是台灣 TPE POP）依然會回傳舊版音檔，即使使用者開啟無痕視窗也無法繞過邊緣節點的 `HIT` 快取。
+  - **架構升級**：在 `lib/utils.ts`、`workflow/types.ts` 與 `workflow/audio.ts` 中支援由 KV 腳本動態指定 `audio` 實體版本路徑。
+  - **版本隔離機制**：當觸發重跑（`params.force`）時，系統會自動賦予帶有時間戳或版本後綴的全新 R2 Key（例如 `-v2.mp3` 或帶生成時間戳），上傳完成時回寫 KV 腳本並清除 RSS 快取。
+  - **徹底杜絕快取殘留**：重跑生成的音訊擁有 100% 全新唯一的實體網址路徑，徹底破除 CDN 同名鎖死 1 年的隱患，無論瀏覽器、CDN 節點或 Podcast 訂閱客戶端皆保證即時讀取最新單集。
+- **2x 倍速播放中斷崩潰修復（2x Playback Speed Abort Bug Fix）**：
+  - **問題根因**：`AudioPlayerProvider` 的 mount `useEffect` 依賴了 `[playbackRate]`，當使用者點選 2x（或任意倍速）時，會造成整個 mount effect 重新執行並對 `audioRef.current.src` 重新賦值。HTML5 `<audio>` 在播放中若被重新賦值 `src`，會立即中斷當前解碼並拋出 `AbortError`，造成播放器介面卡死，必須重新載入整頁才能恢復。
+  - **修復實現**：改用 `useRef` 保存即時播放速度，設定倍速時直接對底層音訊元素套用 `audio.playbackRate = rate`，徹底消除重複賦值 `src` 的行為；切換倍速時播放持續流暢無卡頓，且記憶速度設定至 `localStorage`。
+  - **單集即時同步（Episode Auto-Sync）**：文章卡片 `isCurrentEpisode` 改為嚴格校驗當前 `audioSrc`；當後端重新生成單集時，前端會自動辨識並同步更新底端播放器，防止使用者點擊「繼續播放」時載入舊網址。
+- **訃聞與悼念性質主題嚴格過濾機制（Strict Obituary & Memorial Filter）**：
+  - 在 `workflow/decision.ts` 與 `workflow/prompt.ts` 建立雙重審查防護網，針對各社群中純粹個人逝世、生平紀念或悼念文章（如 Margaret Hamilton 辭世）進行嚴格過濾，確保每日早晨節目聚焦於活躍之技術進展、架構創新與開源動態。
+
+---
+
 ## [2026-10-08] Clef/Jev 多層次決策模型接入、全資訊源每日候選 (Plan B) 與品質浮動制 (Multi-Tier Decision Engine, All-Source Plan B & Dynamic Quality Budget)
 
 - **多層次 System One 決策模型架構（Multi-Tier Decision Engine）**：

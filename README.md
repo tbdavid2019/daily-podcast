@@ -12,7 +12,9 @@
 
 ## 🆕 最近更新
 
-- **🧩 WebMCP AI Agent 工具支援 (2026-08-23)**：網站現在會在支援 WebMCP 的 Chrome 瀏覽器中註冊 `list_recent_episodes`、`get_episode` 與 `open_episode` 工具，讓瀏覽器內的 AI Agent 可以探索近期集數、取得指定日期內容並開啟 Podcast 頁面。詳見下方的 [WebMCP 使用方式](#webmcp-使用方式) 與 [CHANGELOG.md](CHANGELOG.md)。
+- **🚀 Cloudflare CDN 音訊實體路徑 Cache-Busting 與 2x 倍速播放修復 (2026-10-08)**：修復 Cloudflare 自訂網域 R2 忽略 Byte-Range 音訊 Query String 快取鍵，導致同一天強制重跑音訊時被 Edge 節點（如台灣 TPE POP）鎖死 1 年舊音檔的問題；全面改以動態版本化 R2 實體路徑（如 `-v2.mp3`）徹底繞過 CDN 快取。同時修復播放器切換 2x 倍速時因重複賦值 `audio.src` 導致拋出 `AbortError` 卡死的問題，改由 `useRef` 保存速度並即時無感套用。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🧠 Clef/Jev 多層次決策模型接入、全資訊源每日候選 (Plan B) 與品質浮動制 (2026-10-08)**：接入三層式階梯容錯架構（Clef Flash ➜ 自架節點 ➜ Jev Cloud），每日自 5 大社群收集 32 篇候選，依分數動態決定當日選題篇數（6～9 篇品質浮動制），並建立嚴格訃聞/悼念防護網，兼顧主題多樣性、資訊密度與 Cloudflare Free Plan 預算。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🎧 全站底部懸浮播放列與英聽練習多段速 (2026-10-05)**：導入毛玻璃全域懸浮播放列，支援 10 秒倒轉/快轉與即時分享時間戳；新增 0.5x、0.75x、0.9x 專屬英聽練習慢速檔位，並提供英文版高解析度封面與時間更新重繪隔離最佳化。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **📄 llms.txt / llms-full.txt AI 規範整合 (2026-08-10)**：遵循 llmstxt.org 標準新增 `/llms.txt` 與 `/llms-full.txt`，提供 LLM 與 AI Agent 的精簡與完整網站結構索引、API 說明與探索鏈結。同時注入 `Link: </llms.txt>; rel="llms-txt"; type="text/markdown"` HTTP 探索標頭。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🧪 自架來源、完整 Podcast 對話與 Free Plan 驗證 (2026-08-02)**：文章全文與討論內容依序由三台自架 Markdown reader 取得：`https://create360.ai`、`http://git.glsoft.ai:8083`、`http://60.248.142.126:8083`。Podcast 腳本維持直接閱讀完整原始內容，不改成只吃摘要；每個成功取得的故事都必須有男女主持人的完整觀點交換，重要故事再展開 2–3 個來回。正式重跑結果為 7 則故事、19 段對話、6,059 字純對話；23 個 Gemini TTS segment 分成 5 批，每批最多 5 次外部請求，未超過 Cloudflare Workers Free Plan 的 50 次限制。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **⚡ Web Worker 邊緣快取與 KV 去重 (2026-07-20)**：啟用 Cloudflare Workers Cache，在 Worker invocation 前快取 HTML 與 RSS；HTML 的 Edge TTL 為 10 分鐘、瀏覽器為 60 秒，RSC／router payload 則在外層 Worker 強制 `private, no-store`。移除會累積完整 Podcast script 的全域 `Map`，改用 React request-scoped cache 去除同一 SSR 的重複 KV reads，並新增實際 header 與 build gate 回歸測試。詳見 [CHANGELOG.md](CHANGELOG.md)。
