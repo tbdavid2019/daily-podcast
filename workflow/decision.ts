@@ -338,10 +338,10 @@ export async function curateStoriesWithDecision(
   let finalSelection: Story[] = []
   if (options.targetLimits && Object.keys(options.targetLimits).length > 0) {
     const limits = options.targetLimits
-    const hnLimit = limits['hacker-news'] ?? 8
-    const hnFloor = Math.min(options.hnFloor ?? 6, hnLimit)
-    const hnTarget = Math.min(options.hnTarget ?? 7, hnLimit)
-    const maxSecondary = options.maxSecondaryStories ?? 4
+    const hnLimit = limits['hacker-news'] ?? 10
+    const hnFloor = Math.min(options.hnFloor ?? 8, hnLimit)
+    const hnTarget = Math.min(options.hnTarget ?? 10, hnLimit)
+    const maxSecondary = options.maxSecondaryStories ?? 2
 
     // 分流：Hacker News 與副來源獨立評估
     const hnStories = sorted.filter(s => s.source === 'hacker-news')
@@ -352,7 +352,7 @@ export async function curateStoriesWithDecision(
     let selectedHn: Story[] = []
 
     if (hnQualified.length >= hnTarget) {
-      // 超過或達到目標篇數：取至上限 (最多 hnLimit 篇，例如 8 篇)
+      // 超過或達到目標篇數：取至上限 (最多 hnLimit 篇，例如 10 篇)
       selectedHn = hnQualified.slice(0, hnLimit)
     }
     else if (hnQualified.length >= hnFloor) {

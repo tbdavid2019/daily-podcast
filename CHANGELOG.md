@@ -2,14 +2,26 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
-## [2026-10-09] 決策評估體系校準、雙軌選題機制 (Two-Tier Selection)、Hacker News 保底 6 篇 (目標 7~8 篇) 與官方 RSS 雙軌備援 (Curation System Calibration, Two-Tier Story Selection & HN Dominance Floor)
+## [2026-10-09] 決策評估體系升級「方案 A」：Hacker News 擴至 10 篇 (保底 8 篇 / 目標 10 篇)、客座副來源精選 2 篇、總篇數 12 篇 (Plan A Curation Upgrade: 10 HN Stories, 2 Curated Guests, 12 Total Budget)
 
-- **Hacker News 核心主軌保底與雙軌選題機制（Two-Tier Story Selection & HN Floor Guarantee）**：
-  - **問題根因排查**：在 2026-10-08 及 10-09 節目中，發現副來源（Dev.to、Reddit 等）佔據過半篇幅，Hacker News 僅入選 1 篇，嚴重偏離以 Hacker News 為核心的科技 Podcast 定位。
-  - **雙軌選題架構（Two-Tier Selection Mechanism）**：
-    - **第一軌（主來源 HN 專用軌）**：HN 候選篇數由 10 篇大幅擴增至 30 篇。設立硬性保底底線 `hnFloor = 6` 篇、目標 `hnTarget = 7` 篇（上限 8 篇）。即便評分嚴格，系統亦保證 HN 優先入選 6～8 篇，徹底鞏固核心科技社群話題。
-    - **第二軌（客座副來源配額軌）**：其餘副來源（Reddit、Dev.to、GitHub Trending、Product Hunt）合計上限嚴格收緊為最多 3～4 篇（`maxSecondaryStories = 4`），且嚴格執行單一來源硬性上限（Dev.to: 1, GitHub: 1, Product Hunt: 1, Reddit: 2），杜絕任何客座來源喧賓奪主。
-    - **動態總篇數預算升級**：單集選題區間由 6～9 篇提升為 **9～12 篇（預設 11 篇）**，確保 7～8 篇 HN 搭配 3～4 篇優質客座精華。
+- **方案 A 核心規格落地（Plan A Implementation）**：
+  - **Hacker News 擴充至 10 篇（佔比達 83.3%）**：
+    - 將 HN 硬性保底由 6 篇提高至 `hnFloor = 8` 篇、入選目標由 7 篇提升至 `hnTarget = 10` 篇、來源上限由 8 篇提升至 `hnLimit = 10` 篇。
+    - HN 候選抓取數量擴充至 35 篇（由官方 RSS 與 hnrss.org points>=100 競速去重抓取，不增加任何額外 HTTP 請求次數）。
+  - **副來源嚴格收緊至最多 2 篇（Strict Secondary Guest Cap）**：
+    - 其餘客座副來源（Reddit、Dev.to、GitHub Trending、Product Hunt）合計上限收緊為最多 2 篇（`maxSecondaryStories = 2`），且單一來源嚴格限制最多 1 篇（Reddit: 1, GitHub: 1, Product Hunt: 1, Dev.to: 1），僅作為各社群最高分之點綴亮點。
+  - **固定 12 篇黃金總量（Optimal 12-Story Budget）**：
+    - 總預算設定為 10～12 篇（預設 12 篇），確保 10 篇純粹高品質黑客新聞搭檔 2 篇跨社群精選，節目總長約 18～21 分鐘。
+  - **Worker 限制全維度安全驗證**：
+    - 經平台限制與實測推算，10 篇 HN + 2 篇客座僅需約 32 步 Workflow Steps（遠低於 1,024 步上限，佔比 < 3.5%）；單一 step 外部 fetch 最多 7 次（遠低於 50 次限額）；TTS 分段與組裝持續受 5 句/批次與 5 MiB R2 Multipart 串流保護，零記憶體溢位風險。
+  - **測試套件擴充**：
+    - 新增 `tests/decision.test.ts` 與 `tests/workflow-efficiency.test.ts` 針對方案 A 預設計算、配額縮放與雙軌挑選的自動化單元測試，93 項測試全數通過。
+
+- **決策評估體系校準、雙軌選題機制 (Two-Tier Selection) 與官方 RSS 雙軌備援**：
+  - **雙軌選題架構（Two-Tier Selection Mechanism）**：設立主來源 HN 專用主軌與客座副來源配額軌，以演算法徹底杜絕客座來源喧賓奪主。
+  - **Hacker News 官方 RSS 雙軌競爭與高可靠 Fallback**：同步請求官方 RSS 與高分 RSS，解決連線逾時問題，注入標準瀏覽器標頭防止 HTTP 419 阻擋。
+  - **Clef System One 決策評分 Prompt 校準**：以頂級每日黑客與技術新聞播報為基準，獎勵深度架構與系統突破，嚴格過濾宣傳文與訃聞。
+  - **來源品質與多語系嚴格過濾**：引入 Unicode Script 與停用詞過濾 Dev.to 非英語系垃圾文，修復 GitHub Trending 星數抓取問題。
 - **Hacker News 官方 RSS 雙軌競爭與高可靠 Fallback（Official HN RSS Ingestion & Fallback）**：
   - 徹底解決 `hnrss.org` 偶發網路逾時或連線中斷（`UND_ERR_CONNECT_TIMEOUT`）問題。
   - 同步請求官方 RSS（`https://news.ycombinator.com/rss`）與高分 RSS（`hnrss.org` points>=100），透過 `Promise.all` 競速抓取並全域去重合併，候選數量擴充至 30 篇。

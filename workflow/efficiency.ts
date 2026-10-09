@@ -25,7 +25,7 @@ export function getScheduledStoryLimits(dayOfWeek: number): Record<NonNullable<S
 
 // Plan B: 每日全資訊源候選抓取上限與決策篩選配額
 export const DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS: Record<NonNullable<Story['source']>, number> = {
-  'hacker-news': 30,
+  'hacker-news': 35,
   'reddit': 6,
   'github-trending': 5,
   'product-hunt': 5,
@@ -33,30 +33,31 @@ export const DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS: Record<NonNullable<Story['sour
 }
 
 export const DEFAULT_PLAN_B_CURATION_CAPS: Record<NonNullable<Story['source']>, number> = {
-  'hacker-news': 8,
-  'reddit': 2,
+  'hacker-news': 10,
+  'reddit': 1,
   'github-trending': 1,
   'product-hunt': 1,
   'dev-to': 1,
 }
 
-export const DEFAULT_HN_FLOOR_STORIES = 6
-export const DEFAULT_HN_TARGET_STORIES = 7
-export const DEFAULT_PLAN_B_MIN_STORY_BUDGET = 9
+export const DEFAULT_HN_FLOOR_STORIES = 8
+export const DEFAULT_HN_TARGET_STORIES = 10
+export const DEFAULT_MAX_SECONDARY_STORIES = 2
+export const DEFAULT_PLAN_B_MIN_STORY_BUDGET = 10
 export const DEFAULT_PLAN_B_MAX_STORY_BUDGET = 12
-export const DEFAULT_PLAN_B_STORY_BUDGET = 11
+export const DEFAULT_PLAN_B_STORY_BUDGET = 12
 
 export function getPlanBCurationCaps(budget?: number): Record<NonNullable<Story['source']>, number> {
-  if (!budget || budget <= 11) {
+  if (!budget || budget <= 12) {
     return { ...DEFAULT_PLAN_B_CURATION_CAPS }
   }
-  const scale = budget / 11
+  const scale = budget / 12
   return {
-    'hacker-news': Math.min(10, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['hacker-news'] * scale)),
-    'reddit': Math.min(3, Math.round(DEFAULT_PLAN_B_CURATION_CAPS.reddit * scale)),
-    'github-trending': Math.min(2, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['github-trending'] * scale)),
-    'product-hunt': Math.min(2, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['product-hunt'] * scale)),
-    'dev-to': Math.min(2, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['dev-to'] * scale)),
+    'hacker-news': Math.min(12, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['hacker-news'] * scale)),
+    'reddit': Math.min(2, Math.round(DEFAULT_PLAN_B_CURATION_CAPS.reddit * scale)),
+    'github-trending': Math.min(1, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['github-trending'] * scale)),
+    'product-hunt': Math.min(1, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['product-hunt'] * scale)),
+    'dev-to': Math.min(1, Math.round(DEFAULT_PLAN_B_CURATION_CAPS['dev-to'] * scale)),
   }
 }
 

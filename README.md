@@ -12,7 +12,8 @@
 
 ## 🆕 最近更新
 
-- **🎯 決策評估體系校準、雙軌選題 (Two-Tier Selection) 與 HN 保底 6 篇 (2026-10-09)**：修復副來源喧賓奪主問題，建立「主來源 HN 專用軌（保底 6 篇、目標 7～8 篇）」與「客座副來源配額軌（合計最多 4 篇，單源 1～2 篇）」之雙軌選題架構。同時將 Hacker News 候選池擴增至 30 篇，並行併入 YC 官方 RSS（`https://news.ycombinator.com/rss`）與瀏覽器標頭作為高可靠 Fallback。校準 Clef System One 評分 Prompt 聚焦深度技術與架構，並加入 Dev.to 非目標語系過濾與 GitHub Trending 真實星數解析。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🎯 決策評估體系升級「方案 A」：Hacker News 擴至 10 篇、客座精選 2 篇、總篇數 12 篇 (2026-10-09)**：全面採用「方案 A」策展政策，將主來源 Hacker News 硬性保底提升至 8 篇、入選目標與上限提升至 10 篇（HN 內容佔比達 83.3%），HN 候選池擴增至 35 篇（YC 官方 RSS 與 hnrss.org 競速去重）。客座副來源（Reddit、Dev.to、GitHub Trending、Product Hunt）合計上限收緊為最多 2 篇（單源最多 1 篇），單集總量鎖定為 12 篇黃金組合（10 篇黑客熱議 + 2 篇客座亮點）。詳見 [CHANGELOG.md](CHANGELOG.md)。
+- **🎯 決策評估體系校準、雙軌選題 (Two-Tier Selection) 與官方 RSS 雙軌備援 (2026-10-09)**：修復副來源喧賓奪主問題，建立主來源專用軌與客座配額軌之雙軌選題架構。校準 Clef System One 評分 Prompt 聚焦深度技術與架構，並加入 Dev.to 非目標語系過濾與 GitHub Trending 真實星數解析。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🚀 Cloudflare CDN 音訊實體路徑 Cache-Busting 與 2x 倍速播放修復 (2026-10-08)**：修復 Cloudflare 自訂網域 R2 忽略 Byte-Range 音訊 Query String 快取鍵，導致同一天強制重跑音訊時被 Edge 節點（如台灣 TPE POP）鎖死 1 年舊音檔的問題；全面改以動態版本化 R2 實體路徑（如 `-v2.mp3`）徹底繞過 CDN 快取。同時修復播放器切換 2x 倍速時因重複賦值 `audio.src` 導致拋出 `AbortError` 卡死的問題，改由 `useRef` 保存速度並即時無感套用。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🧠 Clef/Jev 多層次決策模型接入、全資訊源每日候選 (Plan B) 與品質浮動制 (2026-10-08)**：接入三層式階梯容錯架構（Clef Flash ➜ 自架節點 ➜ Jev Cloud），每日自 5 大社群收集 32 篇候選，依分數動態決定當日選題篇數（6～9 篇品質浮動制），並建立嚴格訃聞/悼念防護網，兼顧主題多樣性、資訊密度與 Cloudflare Free Plan 預算。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🎧 全站底部懸浮播放列與英聽練習多段速 (2026-10-05)**：導入毛玻璃全域懸浮播放列，支援 10 秒倒轉/快轉與即時分享時間戳；新增 0.5x、0.75x、0.9x 專屬英聽練習慢速檔位，並提供英文版高解析度封面與時間更新重繪隔離最佳化。詳見 [CHANGELOG.md](CHANGELOG.md)。
