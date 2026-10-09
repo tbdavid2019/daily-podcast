@@ -562,3 +562,60 @@ test('curateStoriesWithDecision enforces Plan A defaults (10 HN stories, 2 secon
   }
 })
 
+test('curateStoriesWithDecision enforces Plan B defaults (10 HN stories, 4 secondary, 14 total)', async () => {
+  // 15 HN stories and 6 secondary stories
+  const mockStories: Story[] = [
+    ...Array.from({ length: 15 }, (_, i) => ({
+      id: `hn-${i + 1}`,
+      title: `HN Technical Article ${i + 1}`,
+      source: 'hacker-news' as const,
+    })),
+    { id: 'red-1', title: 'Reddit AI Discussion 1', source: 'reddit' as const },
+    { id: 'red-2', title: 'Reddit AI Discussion 2', source: 'reddit' as const },
+    { id: 'dev-1', title: 'Dev.to Architecture Guide 1', source: 'dev-to' as const },
+    { id: 'gh-1', title: 'GitHub Cool Repo 1 (1000 ⭐)', source: 'github-trending' as const },
+    { id: 'ph-1', title: 'Product Hunt Launch 1', source: 'product-hunt' as const },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    model: 'clef-flash',
+    answers: Object.fromEntries(
+      mockStories.map((s, idx) => [`fit_0_${idx}_${s.id}`, { type: 'noul', noul: 0.90 - idx * 0.01 }]),
+    ),
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+
+  try {
+    const targetLimits = {
+      'hacker-news': 10,
+      'reddit': 2,
+      'github-trending': 1,
+      'product-hunt': 1,
+      'dev-to': 1,
+    }
+
+    const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' }, {
+      targetLimits,
+      minBudget: 11,
+      maxBudget: 14,
+      hnFloor: 8,
+      hnTarget: 10,
+      maxSecondaryStories: 4,
+    })
+
+    const hnStories = result.filter(s => s.source === 'hacker-news')
+    const secondaryStories = result.filter(s => s.source !== 'hacker-news')
+
+    // HN must have exactly 10 stories
+    assert.equal(hnStories.length, 10)
+    // Secondary sources must have at most 4
+    assert.equal(secondaryStories.length, 4)
+    // Total must be 14
+    assert.equal(result.length, 14)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+

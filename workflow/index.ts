@@ -697,8 +697,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
       const dialoguePlan = getDialoguePlan(allStoryContents.length)
-      const targetMinChars = Math.min(5600, Math.max(4800, allStoryContents.length * 430))
-      const targetMaxChars = Math.min(6500, Math.max(5600, allStoryContents.length * 500))
+      const targetMinChars = Math.min(6500, Math.max(4800, allStoryContents.length * 450))
+      const targetMaxChars = Math.min(7800, Math.max(5800, allStoryContents.length * 520))
 
       console.info('Dynamic dialogue lines calculation:', {
         storyCount: allStoryContents.length,
@@ -740,7 +740,7 @@ ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 - Each story must have at least one complete exchange between Cordelia and David.
 - David must explain the core technical mechanisms and principles for each story.
 - 2-3 most important or controversial stories should have extended exchanges.
-- Keep total word count around 1800-2400 words (matching 15-20 min TTS pace).
+- Keep total word count around 2000-2800 words (matching 18-24 min TTS pace).
 - Substantive turns should be 60-120 words; quick transitions 25-50 words. No turn should exceed ${MAX_DIALOGUE_LINE_CHARS} words/chars.
 - Avoid low-information filler; prioritize technical depth, concrete facts, and grounded opinions.
 
@@ -760,7 +760,7 @@ ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 - David 在每個故事都要補充技術背景或核心原理；最重要的故事至少安排一段完整機制解說，不能只做質疑與評論
 - 最重要或最有爭議的 2-3 個故事可以增加來回；資訊較少的故事仍須解釋其價值或不足，不得略過
 - 每段只深入一個故事；相關故事可以自然銜接，但順帶提及不算完成討論
-- 以目前 TTS 語速製作約 15-20 分鐘節目，參考總字數 ${targetMinChars}-${targetMaxChars} 字；請靠具體內容達成，不要重複資訊或加入空話湊字數
+- 以目前 TTS 語速製作約 18-24 分鐘節目，參考總字數 ${targetMinChars}-${targetMaxChars} 字；請靠具體內容達成，不要重複資訊或加入空話湊字數
 - 實質討論通常控制在 220-360 字；必要的開場、追問或轉場可使用 100-180 字，但整集最多四段這類短發言；任何發言不得超過 ${MAX_DIALOGUE_LINE_CHARS} 字
 - 不要為了湊互動增加無資訊短句；每個 dialogue 項目都會產生一次 TTS 請求，應在有限段數內優先保留具體事實、技術細節與有根據的觀點
 

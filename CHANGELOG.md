@@ -2,6 +2,23 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-09] 決策評估體系升級「方案 B」：Hacker News 10 篇 + 充實客座 3~4 篇、總篇數擴增至 13~14 篇、節目時長升至 18~24 分鐘 (Plan B Curation Upgrade: 10 HN Stories, Up to 4 Curated Guests, 13~14 Total Budget)
+
+- **方案 B 核心規格落地（Plan B Full-Featured Implementation）**：
+  - **篇數預算全面升級（11～14 篇，預設 13 篇）**：
+    - 在保有 10 篇 Hacker News 核心骨幹的前提下，適度放寬節目總時長與客座配額，提供更加充沛多元的每日科技廣度。
+    - `DEFAULT_PLAN_B_MIN_STORY_BUDGET = 11`、`DEFAULT_PLAN_B_MAX_STORY_BUDGET = 14`、`DEFAULT_PLAN_B_STORY_BUDGET = 13`。
+  - **Hacker News 核心主軌維持 10 篇（HN Target 10 Stories）**：
+    - `hnFloor = 8`、`hnTarget = 10`、`hnLimit = 10`，確保 Hacker News 在大容量下依舊佔有絕對主導地位（70%～77%）。
+  - **客座副來源配額充實（Up to 4 Secondary Guest Stories）**：
+    - 客座副來源合計上限由 2 篇放寬至最多 4 篇（`maxSecondaryStories = 4`）。
+    - 來源上限配置：Reddit 上限放寬至 2 篇（涵蓋 `r/netsec`、`r/dataengineering`、`r/LocalLLaMA` 等優質板塊），GitHub Trending 1 篇，Product Hunt 1 篇，Dev.to 1 篇。
+  - **對話字數與節目時長自動適配（Expanded Dialogue & Duration Budget）**：
+    - 對話字數區間由 4,800～6,500 字動態擴展至 4,800～7,800 字（`targetMinChars: 6500, targetMaxChars: 7800`），預期節目長度調整為 18～24 分鐘。
+    - 英文版提示詞同步調整目標字數至 2,000～2,800 words。
+  - **自動化測試與安全審查驗證**：
+    - 更新 `tests/workflow-efficiency.test.ts` 與 `tests/decision.test.ts`，新增方案 B 預設配額與 14 篇全規模挑選測試，93 項測試通過。
+
 ## [2026-10-09] 決策評估體系升級「方案 A」：Hacker News 擴至 10 篇 (保底 8 篇 / 目標 10 篇)、客座副來源精選 2 篇、總篇數 12 篇 (Plan A Curation Upgrade: 10 HN Stories, 2 Curated Guests, 12 Total Budget)
 
 - **方案 A 核心規格落地（Plan A Implementation）**：
