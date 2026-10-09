@@ -5,6 +5,7 @@ import {
 } from './efficiency'
 import {
   buildHackerNewsFeedUrl,
+  DEFAULT_HN_BROWSER_HEADERS,
   DEFAULT_HN_MIN_POINTS,
   DEFAULT_HN_TARGET_COUNT,
   HN_OFFICIAL_RSS_URL,
@@ -198,100 +199,74 @@ export async function getHackerNewsTopStories(
   const targetCount = options?.targetCount ?? DEFAULT_HN_TARGET_COUNT
   console.info('[Hacker News] Fetching stories for date:', today, { minPoints, targetCount })
 
-  const collectedStories: Story[] = []
-  const collectedIds = new Set<string>()
-  const collectedUrls = new Set<string>()
-
-  // 1. 優先使用 hnrss.org 高分精選 RSS
-  const hnrssUrl = buildHackerNewsFeedUrl(minPoints)
-  const hnrssController = new AbortController()
-  const hnrssTimeoutId = setTimeout(() => hnrssController.abort(), 15000)
-  try {
-    console.info('[Hacker News] Fetching high-points RSS from:', hnrssUrl)
-    const response = await fetch(hnrssUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; DailyPodcast/1.0)',
-        'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
-      },
-      signal: hnrssController.signal,
-    })
-
-    if (response.ok) {
-      const rssText = await response.text()
-      const parsed = parseHackerNewsRss(rssText)
-      const selected = selectHackerNewsStories(parsed, {
-        excludeIds: options?.excludeIds,
-        excludeUrls: options?.excludeUrls,
+  // 1. 同步併發抓取 hnrss.org (高分精選) 與 YC 官方即時 RSS (news.ycombinator.com/rss)
+  // 兩者平時互相競爭提供候選，若一方網路或服務超時故障，另一方自動作為無縫 Fallback
+  const fetchHnrss = async (): Promise<Story[]> => {
+    const hnrssUrl = buildHackerNewsFeedUrl(minPoints)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 12000)
+    try {
+      console.info('[Hacker News] Fetching high-points RSS from:', hnrssUrl)
+      const response = await fetch(hnrssUrl, {
+        headers: DEFAULT_HN_BROWSER_HEADERS,
+        signal: controller.signal,
       })
-      for (const story of selected) {
-        collectedStories.push(story)
-        if (story.id) {
-          collectedIds.add(story.id)
-        }
-        if (story.url) {
-          collectedUrls.add(normalizeDedupeUrl(story.url))
-        }
+      if (response.ok) {
+        const text = await response.text()
+        const parsed = parseHackerNewsRss(text)
+        console.info(`[Hacker News] hnrss.org returned ${parsed.length} candidate stories (points >= ${minPoints})`)
+        return parsed
       }
-      console.info(`[Hacker News] hnrss.org returned ${selected.length} qualified stories (points >= ${minPoints}, filtered from ${parsed.length} items)`)
-    }
-    else {
       console.warn(`[Hacker News] hnrss.org returned status ${response.status} ${response.statusText}`)
     }
-  }
-  catch (error) {
-    console.warn('[Hacker News] hnrss.org fetch failed or timed out:', error)
-  }
-  finally {
-    clearTimeout(hnrssTimeoutId)
-  }
-
-  // 2. 若高分 RSS 數量不足 targetCount，以官方 RSS 補足或作為備用
-  if (collectedStories.length < targetCount) {
-    const officialController = new AbortController()
-    const officialTimeoutId = setTimeout(() => officialController.abort(), 15000)
-    try {
-      console.info(`[Hacker News] Supplementing stories from official RSS (current: ${collectedStories.length}, target: ${targetCount})`)
-      const response = await fetch(HN_OFFICIAL_RSS_URL, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; DailyPodcast/1.0)',
-          'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
-        },
-        signal: officialController.signal,
-      })
-
-      if (response.ok) {
-        const rssText = await response.text()
-        const parsed = parseHackerNewsRss(rssText)
-        const needed = targetCount - collectedStories.length
-        const supplemented = selectHackerNewsStories(parsed, {
-          excludeIds: options?.excludeIds,
-          excludeUrls: options?.excludeUrls,
-          existingIds: collectedIds,
-          existingUrls: collectedUrls,
-          targetCount: needed,
-        })
-        for (const story of supplemented) {
-          collectedStories.push(story)
-          if (story.id) {
-            collectedIds.add(story.id)
-          }
-          if (story.url) {
-            collectedUrls.add(normalizeDedupeUrl(story.url))
-          }
-        }
-        console.info(`[Hacker News] Official RSS added ${supplemented.length} stories (total now: ${collectedStories.length})`)
-      }
-    }
-    catch (error) {
-      console.error('[Hacker News] Official RSS fetch failed:', error)
+    catch (err: unknown) {
+      console.warn('[Hacker News] hnrss.org fetch failed or timed out:', err instanceof Error ? err.message : err)
     }
     finally {
-      clearTimeout(officialTimeoutId)
+      clearTimeout(timeoutId)
     }
+    return []
   }
 
-  if (collectedStories.length > 0) {
-    return collectedStories
+  const fetchOfficial = async (): Promise<Story[]> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 12000)
+    try {
+      console.info('[Hacker News] Fetching official YC front-page RSS from:', HN_OFFICIAL_RSS_URL)
+      const response = await fetch(HN_OFFICIAL_RSS_URL, {
+        headers: DEFAULT_HN_BROWSER_HEADERS,
+        signal: controller.signal,
+      })
+      if (response.ok) {
+        const text = await response.text()
+        const parsed = parseHackerNewsRss(text)
+        console.info(`[Hacker News] Official RSS returned ${parsed.length} fresh candidate stories`)
+        return parsed
+      }
+      console.warn(`[Hacker News] Official RSS returned status ${response.status} ${response.statusText}`)
+    }
+    catch (err: unknown) {
+      console.warn('[Hacker News] Official RSS fetch failed or timed out:', err instanceof Error ? err.message : err)
+    }
+    finally {
+      clearTimeout(timeoutId)
+    }
+    return []
+  }
+
+  const [hnrssResult, officialResult] = await Promise.all([fetchHnrss(), fetchOfficial()])
+  // 合併候選池並進行全域去重與過濾
+  const combinedCandidates = [...hnrssResult, ...officialResult]
+  const selectedStories = selectHackerNewsStories(combinedCandidates, {
+    excludeIds: options?.excludeIds,
+    excludeUrls: options?.excludeUrls,
+    targetCount,
+  })
+
+  console.info(`[Hacker News] Combined pool produced ${selectedStories.length} unique stories (from hnrss: ${hnrssResult.length}, official: ${officialResult.length}, target: ${targetCount})`)
+
+  if (selectedStories.length > 0) {
+    return selectedStories
   }
 
   // 3. Fallback: 使用原有的網頁抓取方式
@@ -551,7 +526,7 @@ export async function getGitHubTrendingStories() {
     const repoName = titleLink.attr('href')?.replace('/', '') || ''
     const title = titleLink.text().trim()
     const description = $el.find('p').text().trim()
-    const starsText = $el.find('.octicon-star').parent().text().trim()
+    const starsText = $el.find('a[href$="/stargazers"]').text().trim() || $el.find('.octicon-star').parent().text().trim()
     const stars = Number.parseInt(starsText.replace(/,/g, '')) || 0
 
     if (!repoName || !title)
@@ -564,7 +539,7 @@ export async function getGitHubTrendingStories() {
 
     return {
       id: repoName.replace('/', '-'),
-      title: `${title} (${stars} ⭐)`,
+      title: stars > 0 ? `${title} (${stars.toLocaleString()} ⭐)` : title,
       url: targetUrl,
       source: 'github-trending' as const,
       sourceUrl: originalUrl,
@@ -573,12 +548,8 @@ export async function getGitHubTrendingStories() {
     }
   }).get().filter(Boolean) as Story[]
 
-  // 隨機從前 10 名中挑選
-  const pool = stories.slice(0, 10)
-  const shuffled = pool.sort(() => 0.5 - Math.random())
-
-  console.info(`[GitHub] Selected ${GITHUB_CONFIG.MAX_REPOS} stories randomly from top ${pool.length}`)
-  return shuffled.slice(0, GITHUB_CONFIG.MAX_REPOS)
+  console.info(`[GitHub] Selected top ${Math.min(stories.length, GITHUB_CONFIG.MAX_REPOS)} trending repositories`)
+  return stories.slice(0, GITHUB_CONFIG.MAX_REPOS)
 }
 
 export async function getProductHuntStories() {
@@ -723,6 +694,33 @@ export async function getProductHuntStories() {
   return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
 }
 
+/**
+ * 檢查文章標題語言，確保僅收錄英文與中文，過濾非預期語系（如泰文、葡萄牙文、土耳其文等）
+ */
+export function isSupportedArticleLanguage(text: string): boolean {
+  if (!text)
+    return true
+  // 嚴格過濾非拉丁與非中文字元（泰文、斯拉夫語/俄語、阿拉伯語、印地語、希伯來語、韓語等）
+  if (/[\p{Script=Thai}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Devanagari}\p{Script=Hebrew}\p{Script=Hangul}]/u.test(text)) {
+    return false
+  }
+  // 過濾拉丁字母書寫之非英語系常見停用詞（葡萄牙語、西班牙語、土耳其語、法語、德語等）
+  const lower = ` ${text.toLowerCase()} `
+  const foreignPatterns = [
+    /\b(?:como o|para o|com o|uma|não|você|se encaixa|desenvolvimento)\b/i, // Portuguese
+    /\b(?:por qué|cómo|también|de la|de los|en el|con el)\b/i, // Spanish
+    /\b(?:ile|veya|için|nasıl|kusursuz|senkronizasyon|mimari)\b/i, // Turkish
+    /\b(?:avec le|pour les|dans le|sur le|ce que)\b/i, // French
+    /\b(?:mit dem|für die|über die|nicht der)\b/i, // German
+  ]
+  for (const pattern of foreignPatterns) {
+    if (pattern.test(lower)) {
+      return false
+    }
+  }
+  return true
+}
+
 export async function getDevToStories() {
   // Dev.to 抓取設定
   const DEV_TO_CONFIG = {
@@ -785,6 +783,12 @@ export async function getDevToStories() {
       if (!title || !link)
         return null
 
+      // 語言過濾
+      if (!isSupportedArticleLanguage(title)) {
+        console.info(`[Dev.to Filter] 過濾非目標語系文章: ${title}`)
+        return null
+      }
+
       // Filter logic
       if (DEV_TO_CONFIG.ENABLE_FILTER) {
         const titleLower = title.toLowerCase()
@@ -831,6 +835,11 @@ export async function getDevToStories() {
 
     if (!title || !href)
       return null
+
+    if (!isSupportedArticleLanguage(title)) {
+      console.info(`[Dev.to Filter] 過濾非目標語系文章: ${title}`)
+      return null
+    }
 
     // 檢查標題和描述是否包含活動類型關鍵字
     if (DEV_TO_CONFIG.ENABLE_FILTER) {

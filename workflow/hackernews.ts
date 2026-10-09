@@ -5,6 +5,10 @@ import { normalizeDedupeUrl } from './efficiency'
 export const DEFAULT_HN_MIN_POINTS = 100
 export const DEFAULT_HN_TARGET_COUNT = 7
 export const HN_OFFICIAL_RSS_URL = 'https://news.ycombinator.com/rss'
+export const DEFAULT_HN_BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+}
 
 export interface SelectHackerNewsStoriesOptions {
   excludeIds?: Set<string>

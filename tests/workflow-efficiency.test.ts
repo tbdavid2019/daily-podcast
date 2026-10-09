@@ -149,33 +149,33 @@ describe('workflow retry budgets', () => {
   })
 
   it('provides open candidate pools and bounded curation caps under Plan B', () => {
-    // All 5 sources are fetched daily under Plan B
-    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['hacker-news'], 10)
+    // All 5 sources are fetched daily under Plan B (HN expanded to 30)
+    assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['hacker-news'], 30)
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS.reddit, 6)
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['github-trending'], 5)
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['product-hunt'], 5)
     assert.equal(DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS['dev-to'], 6)
 
-    // Dynamic quality-driven budget range: 6 ~ 9 stories (default 8)
-    assert.equal(DEFAULT_PLAN_B_MIN_STORY_BUDGET, 6)
-    assert.equal(DEFAULT_PLAN_B_MAX_STORY_BUDGET, 9)
-    assert.equal(DEFAULT_PLAN_B_STORY_BUDGET, 8)
+    // Dynamic quality-driven budget range: 9 ~ 12 stories (default 11)
+    assert.equal(DEFAULT_PLAN_B_MIN_STORY_BUDGET, 9)
+    assert.equal(DEFAULT_PLAN_B_MAX_STORY_BUDGET, 12)
+    assert.equal(DEFAULT_PLAN_B_STORY_BUDGET, 11)
 
-    // Curation caps prevent single-source domination
+    // Curation caps prevent single-source domination while preserving HN dominance
     const defaultCaps = getPlanBCurationCaps()
-    assert.equal(defaultCaps['hacker-news'], 4)
-    assert.equal(defaultCaps.reddit, 3)
-    assert.equal(defaultCaps['github-trending'], 3)
-    assert.equal(defaultCaps['product-hunt'], 2)
-    assert.equal(defaultCaps['dev-to'], 3)
+    assert.equal(defaultCaps['hacker-news'], 8)
+    assert.equal(defaultCaps.reddit, 2)
+    assert.equal(defaultCaps['github-trending'], 1)
+    assert.equal(defaultCaps['product-hunt'], 1)
+    assert.equal(defaultCaps['dev-to'], 1)
 
-    // Proportional scaling for higher budgets (e.g. 10 stories)
-    const scaledCaps = getPlanBCurationCaps(10)
-    assert.equal(scaledCaps['hacker-news'], 5)
-    assert.equal(scaledCaps.reddit, 4)
-    assert.equal(scaledCaps['github-trending'], 4)
-    assert.equal(scaledCaps['product-hunt'], 3)
-    assert.equal(scaledCaps['dev-to'], 4)
+    // Proportional scaling for higher budgets (e.g. 14 stories)
+    const scaledCaps = getPlanBCurationCaps(14)
+    assert.equal(scaledCaps['hacker-news'], 10)
+    assert.equal(scaledCaps.reddit, 3)
+    assert.equal(scaledCaps['github-trending'], 1)
+    assert.equal(scaledCaps['product-hunt'], 1)
+    assert.equal(scaledCaps['dev-to'], 1)
   })
 })
 

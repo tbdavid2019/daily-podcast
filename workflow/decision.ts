@@ -210,6 +210,9 @@ export interface CurateStoriesOptions {
   minBudget?: number
   maxBudget?: number
   targetLimits?: Record<string, number>
+  hnFloor?: number
+  hnTarget?: number
+  maxSecondaryStories?: number
   timeoutMs?: number
   overallTimeoutMs?: number
   delayBetweenBatchesMs?: number
@@ -292,7 +295,7 @@ export async function curateStoriesWithDecision(
       questionKeys.push(qKey)
       questions[qKey] = {
         type: 'noul',
-        instructions: 'Is this high-value engineering or technology topic suitable for a deep-dive technical podcast (strictly reject obituaries, memorials, death notices, job ads, general social/political news, beginner tutorials, promotional marketing, or contests)?',
+        instructions: 'Rate the suitability of this topic for a premier daily hacker & tech news podcast (like Hacker News Daily). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, security research, and hacker tech culture. Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, beginner tutorials, corporate PR marketing, or general non-tech news.',
       }
     }
 
@@ -331,58 +334,96 @@ export async function curateStoriesWithDecision(
   const minKeepCount = Math.min(sorted.length, targetFloor)
   const effectiveMaxBudget = options.maxBudget ?? options.targetBudget
 
-  // 依來源限制與分數挑選故事
+  // 依來源限制與分數挑選故事（雙軌制：確保 Hacker News 核心主力地位，副來源點綴多樣性）
   let finalSelection: Story[] = []
   if (options.targetLimits && Object.keys(options.targetLimits).length > 0) {
     const limits = options.targetLimits
-    const sourceCounts: Record<string, number> = {}
-    const selected: Story[] = []
-    const deferred: Story[] = []
+    const hnLimit = limits['hacker-news'] ?? 8
+    const hnFloor = Math.min(options.hnFloor ?? 6, hnLimit)
+    const hnTarget = Math.min(options.hnTarget ?? 7, hnLimit)
+    const maxSecondary = options.maxSecondaryStories ?? 4
 
-    for (const story of sorted) {
+    // 分流：Hacker News 與副來源獨立評估
+    const hnStories = sorted.filter(s => s.source === 'hacker-news')
+    const secondaryStories = sorted.filter(s => s.source !== 'hacker-news')
+
+    // 1. Hacker News 主軌挑選
+    const hnQualified = hnStories.filter(s => (s.decisionScore ?? 0) >= minThreshold)
+    let selectedHn: Story[] = []
+
+    if (hnQualified.length >= hnTarget) {
+      // 超過或達到目標篇數：取至上限 (最多 hnLimit 篇，例如 8 篇)
+      selectedHn = hnQualified.slice(0, hnLimit)
+    }
+    else if (hnQualified.length >= hnFloor) {
+      // 介於保底與目標篇數之間：保留全部合格文章
+      selectedHn = hnQualified
+    }
+    else {
+      // 合格數量不足保底篇數：取全部合格文章，並由未達門檻文章中依最高分依序補足至保底篇數 (hnFloor 篇)
+      const needed = Math.min(hnStories.length, hnFloor) - hnQualified.length
+      const unqualified = hnStories.filter(s => (s.decisionScore ?? 0) < minThreshold)
+      selectedHn = [...hnQualified, ...unqualified.slice(0, needed)]
+    }
+
+    // 2. 副來源客座軌挑選 (嚴格限制每源上限，且總量不超過 maxSecondary)
+    const secondaryCounts: Record<string, number> = {}
+    const selectedSecondary: Story[] = []
+
+    for (const story of secondaryStories) {
+      if (selectedSecondary.length >= maxSecondary) {
+        break
+      }
       const src = story.source || 'unknown'
       const limit = limits[src]
-      const count = sourceCounts[src] || 0
+      const count = secondaryCounts[src] || 0
       const passesThreshold = (story.decisionScore ?? 0) >= minThreshold
 
       if (passesThreshold && (typeof limit !== 'number' || count < limit)) {
-        selected.push(story)
-        sourceCounts[src] = count + 1
-      }
-      else {
-        deferred.push(story)
+        selectedSecondary.push(story)
+        secondaryCounts[src] = count + 1
       }
     }
 
-    finalSelection = selected
+    finalSelection = [...selectedHn, ...selectedSecondary]
 
-    // 若通過門檻的數量不足 minKeepCount（預設保底 6 篇）：
-    // 第一階段：優先從 deferred 中挑選「仍符合來源配額上限」的故事（按分數由高到低，確保社群多樣性）
+    // 若通過門檻或合格數量未達 minKeepCount：
+    // 第一階段：優先從未入選的故事中挑選「仍符合來源配額上限」的故事（按分數由高到低，確保社群多樣性與遵守上限）
     if (finalSelection.length < minKeepCount) {
-      const remainingDeferred: Story[] = []
-      for (const story of deferred) {
+      const selectedIds = new Set(finalSelection.map(s => s.id))
+      const currentCounts: Record<string, number> = {
+        'hacker-news': selectedHn.length,
+        ...secondaryCounts,
+      }
+      const unselected = sorted.filter(s => s.id && !selectedIds.has(s.id))
+      const remainingUnselected: Story[] = []
+
+      for (const story of unselected) {
         if (finalSelection.length >= minKeepCount) {
-          remainingDeferred.push(story)
+          remainingUnselected.push(story)
           continue
         }
         const src = story.source || 'unknown'
         const limit = limits[src]
-        const count = sourceCounts[src] || 0
+        const count = currentCounts[src] || 0
         if (typeof limit !== 'number' || count < limit) {
           finalSelection.push(story)
-          sourceCounts[src] = count + 1
+          currentCounts[src] = count + 1
         }
         else {
-          remainingDeferred.push(story)
+          remainingUnselected.push(story)
         }
       }
 
-      // 第二階段：若其他來源候選全數耗盡仍未達 minKeepCount，再依分數補足缺額
+      // 第二階段：若所有來源上限皆已滿仍未達 minKeepCount，再依分數補齊缺額
       if (finalSelection.length < minKeepCount) {
         const needed = minKeepCount - finalSelection.length
-        finalSelection.push(...remainingDeferred.slice(0, needed))
+        finalSelection.push(...remainingUnselected.slice(0, needed))
       }
     }
+
+    // 最終按分數由高到低排序呈現
+    finalSelection.sort((a, b) => (b.decisionScore ?? 0) - (a.decisionScore ?? 0))
   }
   else {
     const filtered = sorted.filter(s => (s.decisionScore ?? 0) >= minThreshold)

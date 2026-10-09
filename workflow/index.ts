@@ -29,6 +29,8 @@ import {
   CONTENT_FETCH_STEP_CONFIG,
   DECISION_STEP_CONFIG,
   DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS,
+  DEFAULT_HN_FLOOR_STORIES,
+  DEFAULT_HN_TARGET_STORIES,
   DEFAULT_PLAN_B_MAX_STORY_BUDGET,
   DEFAULT_PLAN_B_MIN_STORY_BUDGET,
   extractKeywords,
@@ -464,6 +466,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         minBudget: minStoryBudget,
         maxBudget: maxStoryBudget,
         targetLimits: storyLimits,
+        hnFloor: DEFAULT_HN_FLOOR_STORIES,
+        hnTarget: DEFAULT_HN_TARGET_STORIES,
       })
     })
 

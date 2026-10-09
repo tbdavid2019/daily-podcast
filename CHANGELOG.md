@@ -2,6 +2,30 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-09] 決策評估體系校準、雙軌選題機制 (Two-Tier Selection)、Hacker News 保底 6 篇 (目標 7~8 篇) 與官方 RSS 雙軌備援 (Curation System Calibration, Two-Tier Story Selection & HN Dominance Floor)
+
+- **Hacker News 核心主軌保底與雙軌選題機制（Two-Tier Story Selection & HN Floor Guarantee）**：
+  - **問題根因排查**：在 2026-10-08 及 10-09 節目中，發現副來源（Dev.to、Reddit 等）佔據過半篇幅，Hacker News 僅入選 1 篇，嚴重偏離以 Hacker News 為核心的科技 Podcast 定位。
+  - **雙軌選題架構（Two-Tier Selection Mechanism）**：
+    - **第一軌（主來源 HN 專用軌）**：HN 候選篇數由 10 篇大幅擴增至 30 篇。設立硬性保底底線 `hnFloor = 6` 篇、目標 `hnTarget = 7` 篇（上限 8 篇）。即便評分嚴格，系統亦保證 HN 優先入選 6～8 篇，徹底鞏固核心科技社群話題。
+    - **第二軌（客座副來源配額軌）**：其餘副來源（Reddit、Dev.to、GitHub Trending、Product Hunt）合計上限嚴格收緊為最多 3～4 篇（`maxSecondaryStories = 4`），且嚴格執行單一來源硬性上限（Dev.to: 1, GitHub: 1, Product Hunt: 1, Reddit: 2），杜絕任何客座來源喧賓奪主。
+    - **動態總篇數預算升級**：單集選題區間由 6～9 篇提升為 **9～12 篇（預設 11 篇）**，確保 7～8 篇 HN 搭配 3～4 篇優質客座精華。
+- **Hacker News 官方 RSS 雙軌競爭與高可靠 Fallback（Official HN RSS Ingestion & Fallback）**：
+  - 徹底解決 `hnrss.org` 偶發網路逾時或連線中斷（`UND_ERR_CONNECT_TIMEOUT`）問題。
+  - 同步請求官方 RSS（`https://news.ycombinator.com/rss`）與高分 RSS（`hnrss.org` points>=100），透過 `Promise.all` 競速抓取並全域去重合併，候選數量擴充至 30 篇。
+  - 為官方 RSS 請求注入標準瀏覽器標頭（`DEFAULT_HN_BROWSER_HEADERS`），避免 Cloudflare / HN 返回 HTTP 419 (Page Expired) 反爬蟲阻擋。
+- **Clef System One 決策評分 Prompt 校準（Targeted Podcast Curation Prompt）**：
+  - 重新校準評分 Prompt，以「頂級每日黑客與技術新聞播報（如同 Hacker News Daily）」為基準。
+  - **高分偏好（0.80～1.00）**：前沿 AI/LLM 架構突破、開發者核心工具、資料庫系統、深層系統架構、重大開源釋出、資安漏洞分析及駭客工程文化。
+  - **低分過濾（0.00～0.30）**：入門新手教學、行銷 PR 宣傳、求職招募、訃聞悼念、未成熟之展示文。
+- **來源品質與多語系嚴格過濾（Language & Star Quality Guardrails）**：
+  - **Dev.to 語系防護網**：引入 `isSupportedArticleLanguage`，以 Unicode Script 正則嚴格過濾非拉丁與非中文語系（如泰文、斯拉夫文/俄文、阿拉伯文、印地文、韓文等），並以正則過濾葡萄牙文、土耳其文、西班牙文、法文、德文常見停用詞，確保內容為繁中播報適配之技術好文。
+  - **GitHub Trending 星數解析修復**：修正 GitHub Trending 星數抓取邏輯（改由 `a[href$="/stargazers"]` 擷取，修復舊版抓取為 `0 ⭐` 的問題），並取消隨機排序，依真實 Star 排名保留最熱門專案。
+- **門禁測試與 Codex 審查驗證**：
+  - 新增 `tests/decision.test.ts` 雙軌選題與保底機制單元測試，更新 `tests/workflow-efficiency.test.ts` 預期指標，全套 92 項測試與 Build Gate 通過。
+
+---
+
 ## [2026-10-08] Cloudflare CDN 音訊實體路徑 Cache-Busting、2x 倍速播放中止修復與訃聞嚴格過濾 (CDN Audio Path Cache-Busting, 2x Playback Speed Fix & Obituary Guardrails)
 
 - **Cloudflare CDN 音訊實體路徑 Cache-Busting（Audio Path Cache-Busting on Force Rerun）**：
