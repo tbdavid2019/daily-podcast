@@ -2,16 +2,15 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
-## [2026-10-12] 修復 Hacker News 主軌遺失問題：三軌並行競速 (Algolia API / hnrss / 官方 RSS)、日期偏移修正與客座來源嚴格硬上限 (Fix Missing HN Mainline: Algolia Triple Redundancy, fetchDate UTC Alignment & Hard Secondary Caps)
+## [2026-10-12] 修復 Hacker News 主軌遺失問題：自建 2md 三大節點 Markdown 專用解析、Algolia 備援 Fallback、日期偏移修正與客座來源嚴格硬上限 (Fix Missing HN Mainline: 2md Markdown Primary Pipeline, Algolia Fallback, fetchDate UTC Alignment & Hard Secondary Caps)
 
-- **Hacker News 抓取管線全面重構與三軌並行容錯（Algolia API Triple Redundancy）**：
-  - **排查原因**：官方 RSS（`news.ycombinator.com/rss`）在 Cloudflare Workers 邊緣節點上常遭 HTTP 419 ("Sorry") 反爬蟲攔截；而 Reader 備援代理爬蟲抓取時返回 157 bytes 錯誤 HTML 繞過了原先的 50 字長度檢查，導致 HN 候選解析為 0 篇。
-  - **接入官方 Algolia Search API 作為第一主軌**：
-    - 新增 `workflow/hackernews.ts` 中的 Algolia API 查詢邏輯（`HN_ALGOLIA_FRONT_PAGE_URL` 與日期區間過濾 `buildHnAlgoliaDateUrl`）。
-    - 官方 Algolia API 回應時間小於 200ms、回傳乾淨 JSON 結構，且完全免疫 Cloudflare HTTP 419 阻擋，單次即能穩定提供 30 篇以上精準黑客新聞候選。
-  - **三軌並行競速抓取（Triple Concurrent Fetch & Merge）**：
-    - `getHackerNewsTopStories` 同步發起 Algolia API、`hnrss.org` 與官方 RSS 請求，競速並行抓取、正規化後依 ID 與 URL 去重合併。
-    - 在 `getContentFromReader` 中加入反爬蟲錯誤頁面檢測（如 "Sorry"、"Attention Required"），杜絕無效 HTML 污染解析。
+- **Hacker News 抓取管線全面重構與自建 2md 專用解析（2md Primary Markdown Pipeline & Algolia Fallback）**：
+  - **排查原因**：官方 RSS（`news.ycombinator.com/rss`）在 Cloudflare Workers 邊緣節點上常遭 HTTP 419 ("Sorry") 反爬蟲攔截；而舊版爬蟲 fallback 傳入 `format: 'html'`，導致節點回傳包含 "Sorry" 的 157 bytes 錯誤頁面，且舊代碼只用 Cheerio 尋找 HTML class，缺乏專屬的 Markdown 解析器，造成 HN 候選解析為 0 篇。
+  - **自建 2md 三大節點全面擔當第一主軌（Primary Pipeline）**：
+    - 在 `workflow/hackernews.ts` 新增專用 `parseHackerNewsMarkdown` 解析器，針對 `2md.aiurl.tw`、`2md.glsoft.ai` 與 `create360.ai` 回傳的乾淨 Markdown 進行精準提取（支援標題內括號如 `[pdf]`、提取點數 points、評論數、ID 與補全相對連結），單次即可穩定產出 30 篇完整黑客新聞每日歸檔。
+    - 在 `workflow/utils.ts` 中以 `Accept: text/plain` 規格對齊 2md 節點群，並與官方 RSS、`hnrss.org` 並發請求合併。
+  - **保留 Algolia Search API 作為後備兜底（Fallback Track）**：
+    - 當自建 2md 節點群與 RSS 篇數不足時，自動觸發免費公共端點 Algolia Search API（`buildHnAlgoliaDateUrl` 與 `HN_ALGOLIA_FRONT_PAGE_URL`）作為安全兜底，確保黑客新聞主線永不中斷。
 
 - **日期傳遞修正與主線保底斷路器（Date Parameter Fix & Mainline Safety Breaker）**：
   - **修正抓取日期偏移**：先前在排程執行時 `worker/index.ts` 傳遞 `today = operationDate`（台灣時間 2026-10-12），造成 `workflow/index.ts` 誤將 `fetchDate` 設定為今日（2026-10-12），但在 UTC 00:30 排程執行時今日 HN 首頁幾無足量文章。現已修正為若為今日或未指定時自動抓取 UTC 昨天的完整歸檔日。

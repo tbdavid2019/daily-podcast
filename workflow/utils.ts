@@ -11,6 +11,7 @@ import {
   DEFAULT_HN_TARGET_COUNT,
   HN_ALGOLIA_FRONT_PAGE_URL,
   HN_OFFICIAL_RSS_URL,
+  parseHackerNewsMarkdown,
   parseHackerNewsRss,
   parseHnAlgoliaResponse,
   parseHnMinPoints,
@@ -135,9 +136,15 @@ export async function getContentFromReaderBatch(urls: readonly string[]): Promis
 }
 
 async function getContentFromReader(url: string, format: 'html' | 'markdown', selector?: { include?: string, exclude?: string }) {
-  const readerHeaders: HeadersInit = {
+  const readerHeaders: Record<string, string> = {
     'X-Retain-Images': 'none',
-    'X-Return-Format': format,
+  }
+
+  if (format === 'markdown') {
+    readerHeaders.Accept = 'text/plain'
+  }
+  else {
+    readerHeaders['X-Return-Format'] = 'html'
   }
 
   if (selector?.include) {
@@ -206,45 +213,30 @@ export async function getHackerNewsTopStories(
   const targetCount = options?.targetCount ?? DEFAULT_HN_TARGET_COUNT
   console.info('[Hacker News] Fetching stories for date:', today, { minPoints, targetCount })
 
-  // 1. 同步併發抓取 Algolia (高可靠 REST API)、hnrss.org (高分精選) 與 YC 官方即時 RSS (news.ycombinator.com/rss)
-  // 三者互相競爭並無縫 Fallback，杜絕因單一服務 419 或逾時導致主線選題真空
-  const fetchAlgolia = async (): Promise<Story[]> => {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+  // 1. 主要來源軌道：優先使用自建 2md/Jina Reader 節點群抓取每日歸檔頁，並搭配官方即時 RSS 與 hnrss.org 進行並發競速
+  const fetchReaderArchive = async (): Promise<Story[]> => {
     try {
-      const dateUrl = buildHnAlgoliaDateUrl(today, minPoints)
-      console.info('[Hacker News] Fetching Algolia stories from:', dateUrl)
-      const response = await fetch(dateUrl, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      })
-      if (response.ok) {
-        const json = await response.json()
-        const parsed = parseHnAlgoliaResponse(json)
-        console.info(`[Hacker News] Algolia returned ${parsed.length} candidate stories for date ${today}`)
+      const url = `https://news.ycombinator.com/front?day=${today}`
+      console.info('[Hacker News] Fetching daily archive via self-hosted reader nodes:', url)
+      const md = await getContentFromReader(url, 'markdown')
+      if (md) {
+        const parsed = parseHackerNewsMarkdown(md)
+        console.info(`[Hacker News] Self-hosted reader returned ${parsed.length} candidate stories for date ${today}`)
         if (parsed.length >= 10) {
           return parsed
         }
-        // 若指定日期候選數量偏少，以 Algolia front page 補充熱門文章
-        const fpResponse = await fetch(HN_ALGOLIA_FRONT_PAGE_URL, {
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        })
-        if (fpResponse.ok) {
-          const fpJson = await fpResponse.json()
-          const fpParsed = parseHnAlgoliaResponse(fpJson)
-          console.info(`[Hacker News] Algolia front page supplemented ${fpParsed.length} stories`)
+        // 若當日歸檔篇數偏少，嘗試由首頁補充
+        const fpMd = await getContentFromReader('https://news.ycombinator.com/', 'markdown')
+        if (fpMd) {
+          const fpParsed = parseHackerNewsMarkdown(fpMd)
+          console.info(`[Hacker News] Self-hosted reader front page supplemented ${fpParsed.length} stories`)
           return [...parsed, ...fpParsed]
         }
         return parsed
       }
-      console.warn(`[Hacker News] Algolia returned status ${response.status} ${response.statusText}`)
     }
     catch (err: unknown) {
-      console.warn('[Hacker News] Algolia fetch failed or timed out:', err instanceof Error ? err.message : err)
-    }
-    finally {
-      clearTimeout(timeoutId)
+      console.warn('[Hacker News] Self-hosted reader fetch failed:', err instanceof Error ? err.message : err)
     }
     return []
   }
@@ -302,56 +294,107 @@ export async function getHackerNewsTopStories(
     return []
   }
 
-  const [algoliaResult, hnrssResult, officialResult] = await Promise.all([
-    fetchAlgolia(),
+  const [readerResult, hnrssResult, officialResult] = await Promise.all([
+    fetchReaderArchive(),
     fetchHnrss(),
     fetchOfficial(),
   ])
-  // 合併候選池並進行全域去重與過濾
-  const combinedCandidates = [...algoliaResult, ...hnrssResult, ...officialResult]
-  const selectedStories = selectHackerNewsStories(combinedCandidates, {
+
+  // 合併自建節點與 RSS 候選池並進行去重與挑選
+  const primaryCandidates = [...readerResult, ...hnrssResult, ...officialResult]
+  const primarySelected = selectHackerNewsStories(primaryCandidates, {
     excludeIds: options?.excludeIds,
     excludeUrls: options?.excludeUrls,
     targetCount,
   })
 
-  console.info(`[Hacker News] Combined pool produced ${selectedStories.length} unique stories (from algolia: ${algoliaResult.length}, hnrss: ${hnrssResult.length}, official: ${officialResult.length}, target: ${targetCount})`)
+  console.info(`[Hacker News] Primary pool produced ${primarySelected.length} unique stories (from reader: ${readerResult.length}, hnrss: ${hnrssResult.length}, official: ${officialResult.length}, target: ${targetCount})`)
 
-  if (selectedStories.length > 0) {
-    return selectedStories
+  if (primarySelected.length >= Math.min(targetCount, 5)) {
+    return primarySelected
   }
 
-  // 3. Fallback: 使用原有的網頁抓取方式
-  console.warn('[Hacker News] RSS feeds returned 0 stories, falling back to web scraping...')
-  const url = `https://news.ycombinator.com/front?day=${today}`
+  // 2. Fallback: 當自建節點與 RSS 獲取不足時，啟用 Algolia Search API 作為後備兜底 (免費社群端點)
+  console.warn(`[Hacker News] Primary sources returned ${primarySelected.length} stories (< target ${targetCount}), falling back to Algolia search API...`)
+  const fetchAlgolia = async (): Promise<Story[]> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    try {
+      const dateUrl = buildHnAlgoliaDateUrl(today, minPoints)
+      console.info('[Hacker News Fallback] Fetching Algolia stories from:', dateUrl)
+      const response = await fetch(dateUrl, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      })
+      if (response.ok) {
+        const json = await response.json()
+        const parsed = parseHnAlgoliaResponse(json)
+        console.info(`[Hacker News Fallback] Algolia returned ${parsed.length} candidate stories for date ${today}`)
+        if (parsed.length >= 10) {
+          return parsed
+        }
+        const fpResponse = await fetch(HN_ALGOLIA_FRONT_PAGE_URL, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+        if (fpResponse.ok) {
+          const fpJson = await fpResponse.json()
+          const fpParsed = parseHnAlgoliaResponse(fpJson)
+          console.info(`[Hacker News Fallback] Algolia front page supplemented ${fpParsed.length} stories`)
+          return [...parsed, ...fpParsed]
+        }
+        return parsed
+      }
+      console.warn(`[Hacker News Fallback] Algolia returned status ${response.status} ${response.statusText}`)
+    }
+    catch (err: unknown) {
+      console.warn('[Hacker News Fallback] Algolia fetch failed or timed out:', err instanceof Error ? err.message : err)
+    }
+    finally {
+      clearTimeout(timeoutId)
+    }
+    return []
+  }
 
-  console.info('[Hacker News] Fetching from web page:', url)
-
-  const html = await getContentFromReader(url, 'html', {})
-
-  console.info('[Hacker News] HTML length from self-hosted reader:', html.length)
-
-  const $ = cheerio.load(html)
-  const items = $('.athing.submission')
-
-  console.info('[Hacker News] Found items from self-hosted reader:', items.length)
-
-  const scrapedStories: Story[] = items.map((i: number, el: any) => ({
-    id: $(el).attr('id'),
-    title: $(el).find('.titleline > a').text(),
-    url: $(el).find('.titleline > a').attr('href'),
-    hackerNewsUrl: `https://news.ycombinator.com/item?id=${$(el).attr('id')}`,
-  })).get()
-
-  const fallbackSelected = selectHackerNewsStories(scrapedStories, {
+  const algoliaResult = await fetchAlgolia()
+  const combinedWithFallback = [...primaryCandidates, ...algoliaResult]
+  const fallbackSelected = selectHackerNewsStories(combinedWithFallback, {
     excludeIds: options?.excludeIds,
     excludeUrls: options?.excludeUrls,
     targetCount,
   })
 
-  console.info(`[Hacker News] Web scraping returned ${fallbackSelected.length} stories (filtered from ${scrapedStories.length} raw items)`)
+  console.info(`[Hacker News] Pool with Algolia fallback produced ${fallbackSelected.length} unique stories (algolia hits: ${algoliaResult.length}, target: ${targetCount})`)
 
-  return fallbackSelected
+  if (fallbackSelected.length > 0) {
+    return fallbackSelected
+  }
+
+  // 3. Emergency Fallback: 使用 HTML 抓取方式
+  console.warn('[Hacker News] All RSS, Reader, and Algolia feeds returned 0 stories, attempting emergency scraping...')
+  const url = `https://news.ycombinator.com/front?day=${today}`
+  const html = await getContentFromReader(url, 'html', {})
+  if (html) {
+    const $ = cheerio.load(html)
+    const items = $('.athing.submission, .athing')
+    const scrapedStories: Story[] = items.map((_i: number, el: any) => ({
+      id: $(el).attr('id'),
+      title: $(el).find('.titleline > a').text(),
+      url: $(el).find('.titleline > a').attr('href'),
+      hackerNewsUrl: `https://news.ycombinator.com/item?id=${$(el).attr('id')}`,
+    })).get()
+
+    const emergencySelected = selectHackerNewsStories(scrapedStories, {
+      excludeIds: options?.excludeIds,
+      excludeUrls: options?.excludeUrls,
+      targetCount,
+    })
+    if (emergencySelected.length > 0) {
+      return emergencySelected
+    }
+  }
+
+  return []
 }
 
 export async function getHackerNewsStory(

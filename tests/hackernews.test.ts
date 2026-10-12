@@ -5,6 +5,7 @@ import {
   buildHnAlgoliaDateUrl,
   HN_ALGOLIA_FRONT_PAGE_URL,
   HN_OFFICIAL_RSS_URL,
+  parseHackerNewsMarkdown,
   parseHackerNewsRss,
   parseHnAlgoliaResponse,
   parseHnMinPoints,
@@ -187,5 +188,52 @@ describe('Hacker News RSS feed and parsing', () => {
 
     assert.deepEqual(parseHnAlgoliaResponse(null), [])
     assert.deepEqual(parseHnAlgoliaResponse({}), [])
+  })
+
+  it('parses Hacker News markdown output from 2md/Jina Reader accurately', () => {
+    const markdownSample = `Title: 10-11 front | Hacker News
+
+URL Source: https://news.ycombinator.com/front?day=2026-10-11
+
+Markdown Content:
+1.[](https://news.ycombinator.com/vote?id=50040547&how=up&goto=front%3Fday%3D2026%2610%3D11)[3rd Yandex Cloud Data Center Was Hit](https://status.yandex.cloud/en/incidents/2136) ([yandex.cloud](https://news.ycombinator.com/from?site=yandex.cloud))
+562 points by [defly](https://news.ycombinator.com/user?id=defly)[21 hours ago](https://news.ycombinator.com/item?id=50040547) | [686 comments](https://news.ycombinator.com/item?id=50040547)
+
+2.[](https://news.ycombinator.com/vote?id=50043026&how=up&goto=front%3Fday%3D2026%2610%3D11)[Terence Tao: Math 2.0 [pdf]](https://teorth.github.io/tao-web/slides/math-2-0-caltech-2026.pdf) ([teorth.github.io](https://news.ycombinator.com/from?site=teorth.github.io))
+355 points by [Anon84](https://news.ycombinator.com/user?id=Anon84)[15 hours ago](https://news.ycombinator.com/item?id=50043026) | [401 comments](https://news.ycombinator.com/item?id=50043026)
+
+3.[](https://news.ycombinator.com/vote?id=50049133&how=up&goto=front%3Fday%3D2026%2610%3D11)[Ask HN: Favorite tools?](item?id=50049133)
+50 points by [smilelamp](https://news.ycombinator.com/user?id=smilelamp)[5 hours ago](https://news.ycombinator.com/item?id=50049133) | [discuss](https://news.ycombinator.com/item?id=50049133)
+`
+
+    const stories = parseHackerNewsMarkdown(markdownSample)
+    assert.equal(stories.length, 3)
+
+    assert.deepEqual(stories[0], {
+      id: '50040547',
+      title: '3rd Yandex Cloud Data Center Was Hit',
+      url: 'https://status.yandex.cloud/en/incidents/2136',
+      source: 'hacker-news',
+      sourceUrl: 'https://status.yandex.cloud/en/incidents/2136',
+      hackerNewsUrl: 'https://news.ycombinator.com/item?id=50040547',
+      score: 562,
+      comments: 686,
+    })
+
+    // Story with brackets in title
+    assert.equal(stories[1].id, '50043026')
+    assert.equal(stories[1].title, 'Terence Tao: Math 2.0 [pdf]')
+    assert.equal(stories[1].url, 'https://teorth.github.io/tao-web/slides/math-2-0-caltech-2026.pdf')
+    assert.equal(stories[1].score, 355)
+    assert.equal(stories[1].comments, 401)
+
+    // Story with relative item?id= URL
+    assert.equal(stories[2].id, '50049133')
+    assert.equal(stories[2].title, 'Ask HN: Favorite tools?')
+    assert.equal(stories[2].url, 'https://news.ycombinator.com/item?id=50049133')
+    assert.equal(stories[2].score, 50)
+
+    assert.deepEqual(parseHackerNewsMarkdown(''), [])
+    assert.deepEqual(parseHackerNewsMarkdown(null as any), [])
   })
 })

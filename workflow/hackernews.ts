@@ -179,3 +179,93 @@ export function selectHackerNewsStories(
 
   return result
 }
+
+/**
+ * 解析由 2md/Jina Reader 抓取的 Hacker News 每日歸檔或首頁 Markdown 格式
+ * 支援標題內帶有括號（如 [pdf]）、點數與評論數提取、相對路徑補全
+ */
+export function parseHackerNewsMarkdown(markdown: string): Story[] {
+  const stories: Story[] = []
+  if (!markdown || typeof markdown !== 'string') {
+    return stories
+  }
+
+  const lines = markdown.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!/^\d+\./.test(line)) {
+      continue
+    }
+
+    let id: string | null = null
+    const voteMatch = line.match(/id=(\d+)/)
+    if (voteMatch) {
+      id = voteMatch[1]
+    }
+
+    const afterVote = line.replace(/^\d+\.(?:\[\]\([^)]*\))?\s*/, '')
+    if (!afterVote.startsWith('[')) {
+      continue
+    }
+
+    const splitIdx = afterVote.search(/\]\((?:https?:\/\/|item\?)/)
+    if (splitIdx === -1) {
+      continue
+    }
+
+    const title = afterVote.slice(1, splitIdx).trim()
+    const rest = afterVote.slice(splitIdx + 2)
+    const closeParenIdx = rest.indexOf(')')
+    if (closeParenIdx === -1) {
+      continue
+    }
+
+    let url = rest.slice(0, closeParenIdx).trim()
+
+    let score: number | undefined
+    let comments: number | undefined
+
+    for (let j = i + 1; j <= Math.min(i + 4, lines.length - 1); j++) {
+      const nextLine = lines[j].trim()
+      if (/^\d+\./.test(nextLine)) {
+        break
+      }
+
+      const pointsMatch = nextLine.match(/(\d+)\s+points?/i)
+      if (pointsMatch) {
+        score = Number.parseInt(pointsMatch[1], 10)
+      }
+
+      const idMatch = nextLine.match(/item\?id=(\d+)/)
+      if (idMatch && !id) {
+        id = idMatch[1]
+      }
+
+      const commentsMatch = nextLine.match(/(\d+)\s+comments?/i)
+      if (commentsMatch) {
+        comments = Number.parseInt(commentsMatch[1], 10)
+      }
+    }
+
+    if (!id || !title || !url) {
+      continue
+    }
+
+    if (url.startsWith('item?id=') || url.startsWith('/')) {
+      url = `https://news.ycombinator.com/${url.replace(/^\//, '')}`
+    }
+
+    stories.push({
+      id,
+      title,
+      url,
+      source: 'hacker-news',
+      sourceUrl: url,
+      hackerNewsUrl: `https://news.ycombinator.com/item?id=${id}`,
+      score,
+      comments,
+    })
+  }
+
+  return stories
+}
