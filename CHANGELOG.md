@@ -2,6 +2,35 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-12] 修復 Hacker News 主軌遺失問題：三軌並行競速 (Algolia API / hnrss / 官方 RSS)、日期偏移修正與客座來源嚴格硬上限 (Fix Missing HN Mainline: Algolia Triple Redundancy, fetchDate UTC Alignment & Hard Secondary Caps)
+
+- **Hacker News 抓取管線全面重構與三軌並行容錯（Algolia API Triple Redundancy）**：
+  - **排查原因**：官方 RSS（`news.ycombinator.com/rss`）在 Cloudflare Workers 邊緣節點上常遭 HTTP 419 ("Sorry") 反爬蟲攔截；而 Reader 備援代理爬蟲抓取時返回 157 bytes 錯誤 HTML 繞過了原先的 50 字長度檢查，導致 HN 候選解析為 0 篇。
+  - **接入官方 Algolia Search API 作為第一主軌**：
+    - 新增 `workflow/hackernews.ts` 中的 Algolia API 查詢邏輯（`HN_ALGOLIA_FRONT_PAGE_URL` 與日期區間過濾 `buildHnAlgoliaDateUrl`）。
+    - 官方 Algolia API 回應時間小於 200ms、回傳乾淨 JSON 結構，且完全免疫 Cloudflare HTTP 419 阻擋，單次即能穩定提供 30 篇以上精準黑客新聞候選。
+  - **三軌並行競速抓取（Triple Concurrent Fetch & Merge）**：
+    - `getHackerNewsTopStories` 同步發起 Algolia API、`hnrss.org` 與官方 RSS 請求，競速並行抓取、正規化後依 ID 與 URL 去重合併。
+    - 在 `getContentFromReader` 中加入反爬蟲錯誤頁面檢測（如 "Sorry"、"Attention Required"），杜絕無效 HTML 污染解析。
+
+- **日期傳遞修正與主線保底斷路器（Date Parameter Fix & Mainline Safety Breaker）**：
+  - **修正抓取日期偏移**：先前在排程執行時 `worker/index.ts` 傳遞 `today = operationDate`（台灣時間 2026-10-12），造成 `workflow/index.ts` 誤將 `fetchDate` 設定為今日（2026-10-12），但在 UTC 00:30 排程執行時今日 HN 首頁幾無足量文章。現已修正為若為今日或未指定時自動抓取 UTC 昨天的完整歸檔日。
+  - **主線熔斷守衛（Mainline Failure Circuit Breaker）**：
+    - 在 Workflow 抓取步驟（`get all stories`）中加入防呆斷路機制：若變體為 `hacker-news` 但 HN 候選為 0 篇時，直接拋出 `[Mainline Failure]` 異常觸發 Workflow Step 自動重試與告警，徹底杜絕生成無主線文章的殘損節目。
+
+- **雙軌決策後備階段客座嚴格硬上限（Strict Secondary Hard Cap Enforcement）**：
+  - **修復後備補齊溢出 Bug**：先前的 `selectStoriesPlanB` 在主線篇數不足時，Stage 2 後備邏輯會盲目補齊所有候選直至達到 `minKeepCount`，導致副來源（GitHub、Dev.to、Reddit 等）突破 4 篇上限。
+  - **強制雙重配額限制**：
+    - 在 Stage 1 後備選題中嚴格加入 `if (isSecondary && totalSecondary >= maxSecondary) continue;`。
+    - 在 Stage 2 後備補齊中，將候補池嚴格限制為僅能從 `remainingHn` 補齊，保證副來源在任何極端情境下絕不突破 `maxSecondaryStories`（最多 4 篇）與各來源單獨上限。
+
+- **測試覆蓋與驗證**：
+  - 在 `tests/hackernews.test.ts` 中新增 Algolia API 網址產生與 JSON 解析測試。
+  - 在 `tests/decision.test.ts` 中新增「HN 候選數極少時副來源硬上限驗證（Zero / Low HN Guard）」測試，確保副來源絕不溢出。
+  - 全套測試（`pnpm check`）94 項測試通過，且 `pnpm build` 建置通過。
+
+---
+
 ## [2026-10-09] 決策評估體系升級「方案 B」：Hacker News 10 篇 + 充實客座 3~4 篇、總篇數擴增至 13~14 篇、節目時長升至 18~24 分鐘 (Plan B Curation Upgrade: 10 HN Stories, Up to 4 Curated Guests, 13~14 Total Budget)
 
 - **方案 B 核心規格落地（Plan B Full-Featured Implementation）**：

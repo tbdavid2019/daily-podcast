@@ -5,11 +5,14 @@ import {
 } from './efficiency'
 import {
   buildHackerNewsFeedUrl,
+  buildHnAlgoliaDateUrl,
   DEFAULT_HN_BROWSER_HEADERS,
   DEFAULT_HN_MIN_POINTS,
   DEFAULT_HN_TARGET_COUNT,
+  HN_ALGOLIA_FRONT_PAGE_URL,
   HN_OFFICIAL_RSS_URL,
   parseHackerNewsRss,
+  parseHnAlgoliaResponse,
   parseHnMinPoints,
   selectHackerNewsStories,
 } from './hackernews'
@@ -166,10 +169,14 @@ async function getContentFromReader(url: string, format: 'html' | 'markdown', se
 
       if (response.ok) {
         const text = await response.text()
-        if (text.trim().length >= MIN_READER_CONTENT_CHARS) {
+        const trimmed = text.trim()
+        const isErrorPage = /^<html[^>]*>[\s\S]*Sorry[\s\S]*<\/html>$/i.test(trimmed)
+          || trimmed.includes('<pre style="word-wrap: break-word; white-space: pre-wrap;">Sorry')
+          || trimmed === 'Sorry'
+        if (trimmed.length >= MIN_READER_CONTENT_CHARS && !isErrorPage) {
           return text
         }
-        console.warn(`Self-hosted reader node ${node} returned insufficient content`)
+        console.warn(`Self-hosted reader node ${node} returned insufficient content or error page`)
         continue
       }
 
@@ -199,8 +206,49 @@ export async function getHackerNewsTopStories(
   const targetCount = options?.targetCount ?? DEFAULT_HN_TARGET_COUNT
   console.info('[Hacker News] Fetching stories for date:', today, { minPoints, targetCount })
 
-  // 1. 同步併發抓取 hnrss.org (高分精選) 與 YC 官方即時 RSS (news.ycombinator.com/rss)
-  // 兩者平時互相競爭提供候選，若一方網路或服務超時故障，另一方自動作為無縫 Fallback
+  // 1. 同步併發抓取 Algolia (高可靠 REST API)、hnrss.org (高分精選) 與 YC 官方即時 RSS (news.ycombinator.com/rss)
+  // 三者互相競爭並無縫 Fallback，杜絕因單一服務 419 或逾時導致主線選題真空
+  const fetchAlgolia = async (): Promise<Story[]> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    try {
+      const dateUrl = buildHnAlgoliaDateUrl(today, minPoints)
+      console.info('[Hacker News] Fetching Algolia stories from:', dateUrl)
+      const response = await fetch(dateUrl, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      })
+      if (response.ok) {
+        const json = await response.json()
+        const parsed = parseHnAlgoliaResponse(json)
+        console.info(`[Hacker News] Algolia returned ${parsed.length} candidate stories for date ${today}`)
+        if (parsed.length >= 10) {
+          return parsed
+        }
+        // 若指定日期候選數量偏少，以 Algolia front page 補充熱門文章
+        const fpResponse = await fetch(HN_ALGOLIA_FRONT_PAGE_URL, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+        if (fpResponse.ok) {
+          const fpJson = await fpResponse.json()
+          const fpParsed = parseHnAlgoliaResponse(fpJson)
+          console.info(`[Hacker News] Algolia front page supplemented ${fpParsed.length} stories`)
+          return [...parsed, ...fpParsed]
+        }
+        return parsed
+      }
+      console.warn(`[Hacker News] Algolia returned status ${response.status} ${response.statusText}`)
+    }
+    catch (err: unknown) {
+      console.warn('[Hacker News] Algolia fetch failed or timed out:', err instanceof Error ? err.message : err)
+    }
+    finally {
+      clearTimeout(timeoutId)
+    }
+    return []
+  }
+
   const fetchHnrss = async (): Promise<Story[]> => {
     const hnrssUrl = buildHackerNewsFeedUrl(minPoints)
     const controller = new AbortController()
@@ -254,16 +302,20 @@ export async function getHackerNewsTopStories(
     return []
   }
 
-  const [hnrssResult, officialResult] = await Promise.all([fetchHnrss(), fetchOfficial()])
+  const [algoliaResult, hnrssResult, officialResult] = await Promise.all([
+    fetchAlgolia(),
+    fetchHnrss(),
+    fetchOfficial(),
+  ])
   // 合併候選池並進行全域去重與過濾
-  const combinedCandidates = [...hnrssResult, ...officialResult]
+  const combinedCandidates = [...algoliaResult, ...hnrssResult, ...officialResult]
   const selectedStories = selectHackerNewsStories(combinedCandidates, {
     excludeIds: options?.excludeIds,
     excludeUrls: options?.excludeUrls,
     targetCount,
   })
 
-  console.info(`[Hacker News] Combined pool produced ${selectedStories.length} unique stories (from hnrss: ${hnrssResult.length}, official: ${officialResult.length}, target: ${targetCount})`)
+  console.info(`[Hacker News] Combined pool produced ${selectedStories.length} unique stories (from algolia: ${algoliaResult.length}, hnrss: ${hnrssResult.length}, official: ${officialResult.length}, target: ${targetCount})`)
 
   if (selectedStories.length > 0) {
     return selectedStories

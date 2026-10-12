@@ -5,9 +5,47 @@ import { normalizeDedupeUrl } from './efficiency'
 export const DEFAULT_HN_MIN_POINTS = 100
 export const DEFAULT_HN_TARGET_COUNT = 7
 export const HN_OFFICIAL_RSS_URL = 'https://news.ycombinator.com/rss'
+export const HN_ALGOLIA_FRONT_PAGE_URL = 'https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=35'
 export const DEFAULT_HN_BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+}
+
+export function buildHnAlgoliaDateUrl(date: string, minPoints = DEFAULT_HN_MIN_POINTS): string {
+  const points = parseHnMinPoints(minPoints, DEFAULT_HN_MIN_POINTS)
+  const start = Math.floor(new Date(`${date}T00:00:00.000Z`).getTime() / 1000)
+  const end = Math.floor(new Date(`${date}T23:59:59.999Z`).getTime() / 1000)
+  return `https://hn.algolia.com/api/v1/search?tags=story&numericFilters=created_at_i>=${start},created_at_i<=${end},points>=${points}&hitsPerPage=35`
+}
+
+export function parseHnAlgoliaResponse(data: unknown): Story[] {
+  if (!data || typeof data !== 'object') {
+    return []
+  }
+  const hits = (data as { hits?: unknown }).hits
+  if (!Array.isArray(hits)) {
+    return []
+  }
+
+  return hits
+    .map((h: any) => {
+      const id = String(h?.objectID || h?.id || '').trim()
+      const title = String(h?.title || '').trim()
+      const url = typeof h?.url === 'string' && h.url.trim() ? h.url.trim() : (id ? `https://news.ycombinator.com/item?id=${id}` : '')
+      const hackerNewsUrl = id ? `https://news.ycombinator.com/item?id=${id}` : ''
+      const score = typeof h?.points === 'number' ? h.points : undefined
+      const comments = typeof h?.num_comments === 'number' ? h.num_comments : undefined
+
+      return {
+        id,
+        title,
+        url,
+        hackerNewsUrl,
+        score,
+        comments,
+      }
+    })
+    .filter((story: Story) => Boolean(story.id && story.url && story.title))
 }
 
 export interface SelectHackerNewsStoriesOptions {

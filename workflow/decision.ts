@@ -406,6 +406,17 @@ export async function curateStoriesWithDecision(
         const src = story.source || 'unknown'
         const limit = limits[src]
         const count = currentCounts[src] || 0
+        const isSecondary = src !== 'hacker-news'
+        const totalSecondary = Object.entries(currentCounts)
+          .filter(([s]) => s !== 'hacker-news')
+          .reduce((sum, [, c]) => sum + c, 0)
+
+        // 副來源嚴格受限於單源 limit 與 maxSecondary 總額限制，絕不可超標！
+        if (isSecondary && totalSecondary >= maxSecondary) {
+          remainingUnselected.push(story)
+          continue
+        }
+
         if (typeof limit !== 'number' || count < limit) {
           finalSelection.push(story)
           currentCounts[src] = count + 1
@@ -415,10 +426,11 @@ export async function curateStoriesWithDecision(
         }
       }
 
-      // 第二階段：若所有來源上限皆已滿仍未達 minKeepCount，再依分數補齊缺額
+      // 第二階段：若 HN 仍有未達門檻的故事且仍未達 minKeepCount，依分數補齊 HN 缺額（副來源絕不喧賓奪主）
       if (finalSelection.length < minKeepCount) {
-        const needed = minKeepCount - finalSelection.length
-        finalSelection.push(...remainingUnselected.slice(0, needed))
+        const remainingHn = remainingUnselected.filter(s => s.source === 'hacker-news')
+        const needed = Math.min(minKeepCount - finalSelection.length, remainingHn.length)
+        finalSelection.push(...remainingHn.slice(0, needed))
       }
     }
 

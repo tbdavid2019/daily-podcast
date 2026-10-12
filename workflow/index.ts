@@ -228,9 +228,11 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // 顯示日期：使用者指定 > 本地時區今天
     const displayDate = userSpecifiedDate || localToday
 
-    // 抓取日期：使用者指定 > UTC 昨天（確保抓取前一天完整內容）
+    // 抓取日期：若未指定日期或指定日期為今天，使用 UTC 昨天（確保抓取前一天完整內容）；若指定過去特定日期，則使用該指定日期
     const utcYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const fetchDate = userSpecifiedDate || utcYesterday
+    const fetchDate = (!userSpecifiedDate || userSpecifiedDate === localToday)
+      ? utcYesterday
+      : userSpecifiedDate
 
     console.info('Date calculation with configurable timezone:', {
       utcNow: now.toISOString(),
@@ -453,6 +455,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
       if (!allStories.length) {
         throw new Error('no stories found')
+      }
+
+      if (variant === 'hacker-news') {
+        const hnStoriesCount = allStories.filter(s => s.source === 'hacker-news').length
+        if (hnStoriesCount === 0) {
+          throw new Error(`[Mainline Failure] No Hacker News stories found for ${fetchDate}. Mainline source must not be empty.`)
+        }
       }
 
       return allStories as Story[]

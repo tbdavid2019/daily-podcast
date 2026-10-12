@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   buildHackerNewsFeedUrl,
+  buildHnAlgoliaDateUrl,
+  HN_ALGOLIA_FRONT_PAGE_URL,
   HN_OFFICIAL_RSS_URL,
   parseHackerNewsRss,
+  parseHnAlgoliaResponse,
   parseHnMinPoints,
   selectHackerNewsStories,
 } from '../workflow/hackernews'
@@ -137,5 +140,52 @@ describe('Hacker News RSS feed and parsing', () => {
     const result4 = selectHackerNewsStories(rawStories, { targetCount: 1 })
     assert.equal(result4.length, 1)
     assert.equal(result4[0].id, '49927100')
+  })
+
+  it('builds Algolia date query URLs with start/end boundaries and points filter', () => {
+    const url = buildHnAlgoliaDateUrl('2026-10-11', 150)
+    assert.ok(url.startsWith('https://hn.algolia.com/api/v1/search?tags=story&numericFilters='))
+    assert.ok(url.includes('created_at_i>=1791676800')) // 2026-10-11T00:00:00Z
+    assert.ok(url.includes('created_at_i<=1791763199')) // 2026-10-11T23:59:59Z
+    assert.ok(url.includes('points>=150'))
+    assert.ok(url.includes('hitsPerPage=35'))
+    assert.equal(HN_ALGOLIA_FRONT_PAGE_URL, 'https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=35')
+  })
+
+  it('parses Algolia response hits into clean story objects', () => {
+    const mockAlgolia = {
+      hits: [
+        {
+          objectID: '50041619',
+          title: 'Bot traffic from Yandex',
+          url: 'https://radar.cloudflare.com/bots/as13238?dateRange=7d',
+          points: 595,
+          num_comments: 239,
+        },
+        {
+          objectID: '50042000',
+          title: 'Ask HN: Any good books?',
+          url: null,
+          points: 80,
+          num_comments: 42,
+        },
+      ],
+    }
+
+    const stories = parseHnAlgoliaResponse(mockAlgolia)
+    assert.equal(stories.length, 2)
+    assert.deepEqual(stories[0], {
+      id: '50041619',
+      title: 'Bot traffic from Yandex',
+      url: 'https://radar.cloudflare.com/bots/as13238?dateRange=7d',
+      hackerNewsUrl: 'https://news.ycombinator.com/item?id=50041619',
+      score: 595,
+      comments: 239,
+    })
+    // Null url falls back to HN item url
+    assert.equal(stories[1].url, 'https://news.ycombinator.com/item?id=50042000')
+
+    assert.deepEqual(parseHnAlgoliaResponse(null), [])
+    assert.deepEqual(parseHnAlgoliaResponse({}), [])
   })
 })

@@ -618,4 +618,68 @@ test('curateStoriesWithDecision enforces Plan B defaults (10 HN stories, 4 secon
   }
 })
 
+test('curateStoriesWithDecision strictly bounds secondary stories to maxSecondary and source caps even when HN candidates are few', async () => {
+  // Only 2 HN stories available, but 10 secondary stories
+  const mockStories: Story[] = [
+    { id: 'hn-1', title: 'HN Tech 1', source: 'hacker-news' as const },
+    { id: 'hn-2', title: 'HN Tech 2', source: 'hacker-news' as const },
+    { id: 'red-1', title: 'Reddit Discussion 1', source: 'reddit' as const },
+    { id: 'red-2', title: 'Reddit Discussion 2', source: 'reddit' as const },
+    { id: 'red-3', title: 'Reddit Discussion 3', source: 'reddit' as const },
+    { id: 'gh-1', title: 'GitHub Repo 1', source: 'github-trending' as const },
+    { id: 'gh-2', title: 'GitHub Repo 2', source: 'github-trending' as const },
+    { id: 'gh-3', title: 'GitHub Repo 3', source: 'github-trending' as const },
+    { id: 'dev-1', title: 'Dev.to Article 1', source: 'dev-to' as const },
+    { id: 'dev-2', title: 'Dev.to Article 2', source: 'dev-to' as const },
+    { id: 'ph-1', title: 'Product Hunt 1', source: 'product-hunt' as const },
+    { id: 'ph-2', title: 'Product Hunt 2', source: 'product-hunt' as const },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    model: 'clef-flash',
+    answers: Object.fromEntries(
+      mockStories.map((s, idx) => [`fit_0_${idx}_${s.id}`, { type: 'noul', noul: 0.95 - idx * 0.01 }]),
+    ),
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+
+  try {
+    const targetLimits = {
+      'hacker-news': 10,
+      'reddit': 2,
+      'github-trending': 1,
+      'product-hunt': 1,
+      'dev-to': 1,
+    }
+
+    const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' }, {
+      targetLimits,
+      minBudget: 11,
+      maxBudget: 14,
+      hnFloor: 8,
+      hnTarget: 10,
+      maxSecondaryStories: 4,
+    })
+
+    const hnStories = result.filter(s => s.source === 'hacker-news')
+    const secondaryStories = result.filter(s => s.source !== 'hacker-news')
+
+    // HN has all available (2)
+    assert.equal(hnStories.length, 2)
+    // Secondary sources MUST NOT exceed maxSecondaryStories (4)
+    assert.ok(secondaryStories.length <= 4, `Secondary stories count (${secondaryStories.length}) should not exceed 4`)
+    // Individual caps must not be breached
+    assert.ok(result.filter(s => s.source === 'github-trending').length <= 1)
+    assert.ok(result.filter(s => s.source === 'dev-to').length <= 1)
+    assert.ok(result.filter(s => s.source === 'product-hunt').length <= 1)
+    assert.ok(result.filter(s => s.source === 'reddit').length <= 2)
+    // Total should be 2 HN + 4 secondary = 6 stories, NOT 11 secondary stories
+    assert.equal(result.length, 6)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+
 
