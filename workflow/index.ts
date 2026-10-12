@@ -460,7 +460,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       if (variant === 'hacker-news') {
         const hnStoriesCount = allStories.filter(s => s.source === 'hacker-news').length
         if (hnStoriesCount === 0) {
-          throw new Error(`[Mainline Failure] No Hacker News stories found for ${fetchDate}. Mainline source must not be empty.`)
+          throw new Error(`[Mainline Failure] No Hacker News stories found for fetchDate=${fetchDate} (displayDate=${displayDate}). Mainline source must not be empty.`)
         }
       }
 

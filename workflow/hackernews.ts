@@ -203,24 +203,44 @@ export function parseHackerNewsMarkdown(markdown: string): Story[] {
       id = voteMatch[1]
     }
 
-    const afterVote = line.replace(/^\d+\.(?:\[\]\([^)]*\))?\s*/, '')
+    const afterVote = line.replace(/^\d+\.\s*(?:\[\]\([^)]*\)\s*)?/, '')
     if (!afterVote.startsWith('[')) {
       continue
     }
 
-    const splitIdx = afterVote.search(/\]\((?:https?:\/\/|item\?)/)
+    const splitIdx = afterVote.search(/\]\((?:https?:\/\/|item\?|\/\/)/)
     if (splitIdx === -1) {
       continue
     }
 
     const title = afterVote.slice(1, splitIdx).trim()
     const rest = afterVote.slice(splitIdx + 2)
-    const closeParenIdx = rest.indexOf(')')
+
+    // 正確解析成對括號，避免 Wikipedia 等網址內部右括號被提前截斷
+    let depth = 1
+    let closeParenIdx = -1
+    for (let k = 0; k < rest.length; k++) {
+      if (rest[k] === '(') {
+        depth++
+      }
+      else if (rest[k] === ')') {
+        depth--
+        if (depth === 0) {
+          closeParenIdx = k
+          break
+        }
+      }
+    }
     if (closeParenIdx === -1) {
       continue
     }
 
     let url = rest.slice(0, closeParenIdx).trim()
+    // 若包含 Markdown 標題屬性（例如 url "title"），過濾取純網址
+    const titleAttrMatch = url.match(/^(\S+)(?:\s+["'][^"']*["'])?$/)
+    if (titleAttrMatch) {
+      url = titleAttrMatch[1]
+    }
 
     let score: number | undefined
     let comments: number | undefined
@@ -251,7 +271,10 @@ export function parseHackerNewsMarkdown(markdown: string): Story[] {
       continue
     }
 
-    if (url.startsWith('item?id=') || url.startsWith('/')) {
+    if (url.startsWith('//')) {
+      url = `https:${url}`
+    }
+    else if (url.startsWith('item?id=') || url.startsWith('/')) {
       url = `https://news.ycombinator.com/${url.replace(/^\//, '')}`
     }
 

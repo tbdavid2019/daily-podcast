@@ -341,7 +341,7 @@ export async function curateStoriesWithDecision(
     const hnLimit = limits['hacker-news'] ?? 10
     const hnFloor = Math.min(options.hnFloor ?? 8, hnLimit)
     const hnTarget = Math.min(options.hnTarget ?? 10, hnLimit)
-    const maxSecondary = options.maxSecondaryStories ?? 4
+    const maxSecondary = Math.max(0, Math.floor(options.maxSecondaryStories ?? 4))
 
     // 分流：Hacker News 與副來源獨立評估
     const hnStories = sorted.filter(s => s.source === 'hacker-news')
@@ -404,9 +404,11 @@ export async function curateStoriesWithDecision(
           continue
         }
         const src = story.source || 'unknown'
-        const limit = limits[src]
-        const count = currentCounts[src] || 0
         const isSecondary = src !== 'hacker-news'
+        const limit = typeof limits[src] === 'number'
+          ? Math.max(0, Math.floor(limits[src]!))
+          : (isSecondary ? 1 : hnLimit)
+        const count = currentCounts[src] || 0
         const totalSecondary = Object.entries(currentCounts)
           .filter(([s]) => s !== 'hacker-news')
           .reduce((sum, [, c]) => sum + c, 0)

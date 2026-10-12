@@ -233,6 +233,28 @@ Markdown Content:
     assert.equal(stories[2].url, 'https://news.ycombinator.com/item?id=50049133')
     assert.equal(stories[2].score, 50)
 
+    // Edge cases identified by Codex & Opencode review:
+    // 1. Spacing after number: "4. [](...)"
+    // 2. Parentheses inside URL (Wikipedia)
+    // 3. Title attribute in markdown link
+    // 4. Protocol-relative URL
+    const edgeCaseSample = `1. [](https://news.ycombinator.com/vote?id=50050001&how=up&goto=front)[Lisp (Programming Language)](https://en.wikipedia.org/wiki/Lisp_(programming_language) "Wikipedia Link") ([wikipedia.org](https://news.ycombinator.com/from?site=wikipedia.org))
+240 points by [coder](https://news.ycombinator.com/user?id=coder) | [50 comments](https://news.ycombinator.com/item?id=50050001)
+
+2.[](https://news.ycombinator.com/vote?id=50050002&how=up&goto=front)[Protocol Relative](//example.org/path/sub)
+120 points by [user2](https://news.ycombinator.com/user?id=user2) | [10 comments](https://news.ycombinator.com/item?id=50050002)
+`
+    const edgeStories = parseHackerNewsMarkdown(edgeCaseSample)
+    assert.equal(edgeStories.length, 2)
+    assert.equal(edgeStories[0].id, '50050001')
+    assert.equal(edgeStories[0].title, 'Lisp (Programming Language)')
+    // Must preserve the closing parenthesis inside the URL
+    assert.equal(edgeStories[0].url, 'https://en.wikipedia.org/wiki/Lisp_(programming_language)')
+    assert.equal(edgeStories[0].score, 240)
+
+    assert.equal(edgeStories[1].id, '50050002')
+    assert.equal(edgeStories[1].url, 'https://example.org/path/sub')
+
     assert.deepEqual(parseHackerNewsMarkdown(''), [])
     assert.deepEqual(parseHackerNewsMarkdown(null as any), [])
   })

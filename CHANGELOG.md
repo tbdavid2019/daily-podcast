@@ -23,10 +23,20 @@
     - 在 Stage 1 後備選題中嚴格加入 `if (isSecondary && totalSecondary >= maxSecondary) continue;`。
     - 在 Stage 2 後備補齊中，將候補池嚴格限制為僅能從 `remainingHn` 補齊，保證副來源在任何極端情境下絕不突破 `maxSecondaryStories`（最多 4 篇）與各來源單獨上限。
 
+- **Codex 與 Opencode 獨立代碼審查與邊界條件強固（Codex & Opencode Review Hardening）**：
+  - **網址成對括號與 Markdown 屬性深度解析（Codex P2 Fix）**：
+    - 修復 Wikipedia 等內部帶有右括號的網址（如 `Lisp_(programming_language)`）遭提前截斷的缺陷，改採括號計數深度平衡解析器。
+    - 支援序號後空白處理（如 `1. [](vote_url)`），確保投票連結與文章標題完整解析。
+    - 支援過濾 Markdown 標題屬性（`[Text](url "title")`）與 protocol-relative URL（`//` 前綴）。
+  - **決策模型輸入防禦性正規化（Opencode P2 Fix）**：
+    - `maxSecondaryStories` 強制實施 `Math.max(0, Math.floor(...))` 正規化，對未明確定義配額之來源賦予預設上限防護，杜絕逃脫配額邊界的風險。
+  - **日誌與熔斷診斷資訊增強**：
+    - 主線熔斷錯誤日誌同步標註 `fetchDate` 與 `displayDate`，方便問題排查。
+
 - **測試覆蓋與驗證**：
-  - 在 `tests/hackernews.test.ts` 中新增 Algolia API 網址產生與 JSON 解析測試。
+  - 在 `tests/hackernews.test.ts` 中新增 Algolia API 網址產生與 JSON 解析測試、2md Markdown 解析測試，以及 Wikipedia 括號網址、序號空格等完整回歸測試。
   - 在 `tests/decision.test.ts` 中新增「HN 候選數極少時副來源硬上限驗證（Zero / Low HN Guard）」測試，確保副來源絕不溢出。
-  - 全套測試（`pnpm check`）94 項測試通過，且 `pnpm build` 建置通過。
+  - 全套測試（`pnpm check`）98 項測試全數綠燈通過，且 `pnpm build` 建置通過。
 
 ---
 
