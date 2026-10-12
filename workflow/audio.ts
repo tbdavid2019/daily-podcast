@@ -166,9 +166,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     // Output R2 Key: If forced rerun, append generated timestamp to ensure CDN edge cache busting
     const isForced = Boolean(params.force)
     const basePodcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
-    const podcastKey = isForced
+    const podcastKey = params.audioKey || (isForced
       ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${scriptData.generatedAt || Date.now()}.mp3`
-      : basePodcastKey
+      : basePodcastKey)
 
     console.info('Audio Generation Config:', {
       variant,
@@ -381,6 +381,17 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         if (scriptData.audio !== podcastKey) {
           scriptData.audio = podcastKey
           cleanupTasks.push(this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData)))
+        }
+        if (podcastKey !== basePodcastKey) {
+          const freshAudio = await this.env.HACKER_NEWS_R2.get(podcastKey)
+          if (freshAudio) {
+            cleanupTasks.push(this.env.HACKER_NEWS_R2.put(basePodcastKey, freshAudio.body, {
+              httpMetadata: {
+                contentType: 'audio/wav',
+                cacheControl: 'public, max-age=60',
+              },
+            }))
+          }
         }
         await Promise.all(cleanupTasks)
       })

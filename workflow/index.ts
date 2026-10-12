@@ -341,13 +341,17 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const parsedMinBudget = Number.parseInt(this.env.MIN_STORY_BUDGET || '', 10)
     const parsedMaxBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '', 10)
 
-    const minStoryBudget = Number.isFinite(parsedMinBudget) && parsedMinBudget > 0
-      ? parsedMinBudget
-      : (isDecisionEnabled ? DEFAULT_PLAN_B_MIN_STORY_BUDGET : undefined)
+    const minStoryBudget = isDecisionEnabled
+      ? (Number.isFinite(parsedMinBudget) && parsedMinBudget >= DEFAULT_PLAN_B_MIN_STORY_BUDGET
+          ? parsedMinBudget
+          : DEFAULT_PLAN_B_MIN_STORY_BUDGET)
+      : (Number.isFinite(parsedMinBudget) && parsedMinBudget > 0 ? parsedMinBudget : undefined)
 
-    const maxStoryBudget = Number.isFinite(parsedMaxBudget) && parsedMaxBudget > 0
-      ? parsedMaxBudget
-      : (isDecisionEnabled ? DEFAULT_PLAN_B_MAX_STORY_BUDGET : undefined)
+    const maxStoryBudget = isDecisionEnabled
+      ? (Number.isFinite(parsedMaxBudget) && parsedMaxBudget >= DEFAULT_PLAN_B_MAX_STORY_BUDGET
+          ? parsedMaxBudget
+          : DEFAULT_PLAN_B_MAX_STORY_BUDGET)
+      : (Number.isFinite(parsedMaxBudget) && parsedMaxBudget > 0 ? parsedMaxBudget : undefined)
 
     const storyBudget = maxStoryBudget
 
@@ -892,6 +896,12 @@ ${fullContentString}
 
     kvRequestLogger.checkpoint('after create intro content')
 
+    const isForced = Boolean(force)
+    const basePodcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
+    const podcastAudioKey = isForced
+      ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${event.timestamp.getTime()}.mp3`
+      : basePodcastKey
+
     // Prepare complete data object
     const scriptData: GeneratedScriptData = {
       title: podcastScript.title,
@@ -902,6 +912,7 @@ ${fullContentString}
       storySummaries,
       displayDate,
       generatedAt: event.timestamp.getTime(),
+      audio: podcastAudioKey,
     }
 
     const nextRedditDedupeIndex = updateRedditDedupeIndex(
@@ -984,6 +995,7 @@ ${fullContentString}
         variant,
         phase: 'audio',
         force,
+        audioKey: podcastAudioKey,
       }
       const childInstanceId = await buildChildWorkflowInstanceId(event.instanceId)
       const { instance, duplicateDetected } = await createIdempotentWorkflowInstance(

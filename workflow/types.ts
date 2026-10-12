@@ -4,6 +4,7 @@ export interface WorkflowParams {
   variant?: string // Default: 'hacker-news'
   phase?: 'script' | 'audio' // Default: 'script'
   type?: string // Alias for variant, for user convenience (e.g. 'main')
+  audioKey?: string
 }
 
 export interface PodcastDialogueLine {

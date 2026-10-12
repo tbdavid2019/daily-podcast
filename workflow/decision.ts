@@ -444,9 +444,24 @@ export async function curateStoriesWithDecision(
     finalSelection = filtered.length >= minKeepCount ? filtered : sorted.slice(0, minKeepCount)
   }
 
-  // 若有指定最大篇數限制 (maxBudget，預設上限 9 篇)，截取前 N 篇
+  // 若有指定最大篇數限制 (maxBudget)，截取前 N 篇；在雙軌制下優先裁減副來源，絕不犧牲 HN 主線保底篇數 (hnFloor)
   if (typeof effectiveMaxBudget === 'number' && effectiveMaxBudget > 0 && finalSelection.length > effectiveMaxBudget) {
-    finalSelection = finalSelection.slice(0, effectiveMaxBudget)
+    if (options.targetLimits && Object.keys(options.targetLimits).length > 0) {
+      const hnFloor = Math.min(options.hnFloor ?? 8, options.targetLimits['hacker-news'] ?? 10)
+      const hnSelected = finalSelection.filter(s => s.source === 'hacker-news')
+      const secondarySelected = finalSelection.filter(s => s.source !== 'hacker-news')
+
+      // 優先保留 HN 篇數 (若預算足夠保留全部已選 HN，若預算吃緊也優先保障 hnFloor)
+      const targetHnCount = Math.min(hnSelected.length, Math.max(hnFloor, effectiveMaxBudget - secondarySelected.length))
+      const remainingForSecondary = Math.max(0, effectiveMaxBudget - targetHnCount)
+      const trimmedSecondary = secondarySelected.slice(0, remainingForSecondary)
+      const trimmedHn = hnSelected.slice(0, effectiveMaxBudget - trimmedSecondary.length)
+
+      finalSelection = [...trimmedHn, ...trimmedSecondary].sort((a, b) => (b.decisionScore ?? 0) - (a.decisionScore ?? 0))
+    }
+    else {
+      finalSelection = finalSelection.slice(0, effectiveMaxBudget)
+    }
   }
 
   console.info(`[Decision] Curated ${finalSelection.length} stories (target range ${minKeepCount}-${effectiveMaxBudget ?? 'unlimited'}) from ${stories.length} candidates. Top score: ${finalSelection[0]?.decisionScore?.toFixed(3)}, Lowest: ${finalSelection[finalSelection.length - 1]?.decisionScore?.toFixed(3)}`)
