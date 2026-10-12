@@ -385,15 +385,16 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         if (podcastKey !== basePodcastKey) {
           const freshAudio = await this.env.HACKER_NEWS_R2.get(podcastKey)
           if (freshAudio) {
+            const freshContentType = freshAudio.httpMetadata?.contentType || (isGeminiTTS ? 'audio/wav' : 'audio/mpeg')
             cleanupTasks.push(this.env.HACKER_NEWS_R2.put(basePodcastKey, freshAudio.body, {
               httpMetadata: {
-                contentType: 'audio/wav',
+                contentType: freshContentType,
                 cacheControl: 'public, max-age=60',
               },
             }))
           }
         }
-        await Promise.all(cleanupTasks)
+        await Promise.allSettled(cleanupTasks)
       })
     }
     catch (error) {

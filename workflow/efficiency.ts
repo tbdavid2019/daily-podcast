@@ -13,16 +13,6 @@ export interface DialoguePlan {
   maxLines: number
 }
 
-export function getScheduledStoryLimits(dayOfWeek: number): Record<NonNullable<Story['source']>, number> {
-  return {
-    'hacker-news': dayOfWeek === 0 ? 10 : 7,
-    'reddit': 3,
-    'github-trending': (dayOfWeek === 1 || dayOfWeek === 4) ? 2 : 0,
-    'product-hunt': (dayOfWeek === 2 || dayOfWeek === 5) ? 2 : 0,
-    'dev-to': dayOfWeek === 3 ? 3 : 0,
-  }
-}
-
 // Plan B: 每日全資訊源候選抓取上限與決策篩選配額
 export const DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS: Record<NonNullable<Story['source']>, number> = {
   'hacker-news': 35,

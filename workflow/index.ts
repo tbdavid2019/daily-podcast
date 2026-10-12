@@ -11,7 +11,6 @@ import {
   buildWorkflowInstanceId,
   createIdempotentWorkflowInstance,
   getCalendarDate,
-  getCalendarDayOfWeek,
   parseTimezoneOffset,
 } from '@/worker/workflow-security'
 import { curateStoriesWithDecision } from './decision'
@@ -42,7 +41,6 @@ import {
   getExcludedRedditIds,
   getExcludedStoryIdentifiers,
   getPlanBCurationCaps,
-  getScheduledStoryLimits,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
   parseRedditDedupeIndex,
@@ -113,61 +111,6 @@ function createKvRequestLogger() {
     console.info('KV request', { count, action, ...detail })
   }
   return { checkpoint, logKv }
-}
-
-// 每輪 workflow 的故事與音訊設定限制
-const SOURCE_PRIORITY: readonly string[] = [
-  'hacker-news',
-  'reddit',
-  'product-hunt',
-  'github-trending',
-  'dev-to',
-]
-
-function applyStoryBudget(
-  limits: Record<string, number>,
-  budget: number,
-  priorityOrder: readonly string[],
-) {
-  const result: Record<string, number> = { ...limits }
-  let total = Object.values(result).reduce((sum, value) => sum + Math.max(0, value || 0), 0)
-
-  if (total <= budget) {
-    return result
-  }
-
-  for (const source of [...priorityOrder].reverse()) {
-    let value = Math.max(0, result[source] || 0)
-    while (value > 0 && total > budget) {
-      value -= 1
-      total -= 1
-    }
-    result[source] = value
-    if (total <= budget) {
-      return result
-    }
-  }
-
-  if (total <= budget) {
-    return result
-  }
-
-  for (const key of Object.keys(result)) {
-    if (priorityOrder.includes(key)) {
-      continue
-    }
-    let value = Math.max(0, result[key] || 0)
-    while (value > 0 && total > budget) {
-      value -= 1
-      total -= 1
-    }
-    result[key] = value
-    if (total <= budget) {
-      break
-    }
-  }
-
-  return result
 }
 
 export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
@@ -330,37 +273,29 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       ? parsedCompletionTokens
       : defaultCompletionTokens
 
-    // 實施週期性排程邏輯
-    const dayOfWeek = getCalendarDayOfWeek(displayDate)
-
-    console.info('Weekly scheduling check:', { displayDate, fetchDate, dayOfWeek })
-
     const isDecisionEnabled = this.env.CLEF_ENABLED !== 'false'
 
-    // 根據設定或決策模型排程動態設置各來源限制（Plan B 預設品質浮動區間：6 ~ 9 篇）
+    // Plan B: 雙軌制全來源精選策展（預設品質區間：11 ~ 14 篇，HN 保底 8 篇、目標 10 篇，副來源至多 4 篇）
     const parsedMinBudget = Number.parseInt(this.env.MIN_STORY_BUDGET || '', 10)
     const parsedMaxBudget = Number.parseInt(this.env.MAX_STORY_BUDGET || '', 10)
 
-    const minStoryBudget = isDecisionEnabled
-      ? (Number.isFinite(parsedMinBudget) && parsedMinBudget >= DEFAULT_PLAN_B_MIN_STORY_BUDGET
-          ? parsedMinBudget
-          : DEFAULT_PLAN_B_MIN_STORY_BUDGET)
-      : (Number.isFinite(parsedMinBudget) && parsedMinBudget > 0 ? parsedMinBudget : undefined)
+    if (Number.isFinite(parsedMinBudget) && parsedMinBudget < DEFAULT_PLAN_B_MIN_STORY_BUDGET) {
+      console.warn(`MIN_STORY_BUDGET (${parsedMinBudget}) is below Plan B minimum (${DEFAULT_PLAN_B_MIN_STORY_BUDGET}), using ${DEFAULT_PLAN_B_MIN_STORY_BUDGET}`)
+    }
+    if (Number.isFinite(parsedMaxBudget) && parsedMaxBudget < DEFAULT_PLAN_B_MAX_STORY_BUDGET) {
+      console.warn(`MAX_STORY_BUDGET (${parsedMaxBudget}) is below Plan B maximum (${DEFAULT_PLAN_B_MAX_STORY_BUDGET}), using ${DEFAULT_PLAN_B_MAX_STORY_BUDGET}`)
+    }
 
-    const maxStoryBudget = isDecisionEnabled
-      ? (Number.isFinite(parsedMaxBudget) && parsedMaxBudget >= DEFAULT_PLAN_B_MAX_STORY_BUDGET
-          ? parsedMaxBudget
-          : DEFAULT_PLAN_B_MAX_STORY_BUDGET)
-      : (Number.isFinite(parsedMaxBudget) && parsedMaxBudget > 0 ? parsedMaxBudget : undefined)
+    const minStoryBudget = Number.isFinite(parsedMinBudget) && parsedMinBudget >= DEFAULT_PLAN_B_MIN_STORY_BUDGET
+      ? parsedMinBudget
+      : DEFAULT_PLAN_B_MIN_STORY_BUDGET
+
+    const maxStoryBudget = Number.isFinite(parsedMaxBudget) && parsedMaxBudget >= DEFAULT_PLAN_B_MAX_STORY_BUDGET
+      ? parsedMaxBudget
+      : DEFAULT_PLAN_B_MAX_STORY_BUDGET
 
     const storyBudget = maxStoryBudget
-
-    const scheduledStoryLimits = getScheduledStoryLimits(dayOfWeek)
-    const storyLimits = isDecisionEnabled
-      ? getPlanBCurationCaps(maxStoryBudget)
-      : (storyBudget
-          ? applyStoryBudget(scheduledStoryLimits, storyBudget, SOURCE_PRIORITY)
-          : scheduledStoryLimits)
+    const storyLimits = getPlanBCurationCaps(maxStoryBudget)
 
     const getRecentDates = (baseDate: string, days: number) => {
       const base = new Date(`${baseDate}T00:00:00Z`)
@@ -428,11 +363,10 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       topicArchiveDays: topicArchiveIndex.entries.length,
     })
 
-    console.info(isDecisionEnabled ? 'Plan B all-source curation limits:' : 'Plan A source limits based on schedule:', {
+    console.info('Plan B all-source curation limits:', {
       ...storyLimits,
-      minBudget: minStoryBudget ?? 'none',
-      maxBudget: maxStoryBudget ?? 'none',
-      dayOfWeek,
+      minBudget: minStoryBudget,
+      maxBudget: maxStoryBudget,
       decisionEngine: isDecisionEnabled ? 'active' : 'disabled',
     })
 
@@ -445,10 +379,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         }
       }
 
-      // If Clef/decision model is enabled (Plan B), fetch open candidates across all 5 sources daily
-      const candidateLimits = isDecisionEnabled
-        ? DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS
-        : storyLimits
+      // Fetch open candidates across all 5 sources daily under Plan B
+      const candidateLimits = DEFAULT_ALL_SOURCE_CANDIDATE_LIMITS
 
       const allStories = await getAllStories(fetchDate, this.env, {
         limits: candidateLimits,
@@ -902,7 +834,10 @@ ${fullContentString}
       ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${event.timestamp.getTime()}.mp3`
       : basePodcastKey
 
-    // Prepare complete data object
+    // Prepare complete data object:
+    // Notice: Do NOT immediately publish unuploaded `podcastAudioKey` to KV; doing so breaks the public
+    // player with a 404 during TTS synthesis (3-5 minutes) and causes RSS head() to fail and drop the episode.
+    // The child audio workflow updates KV with `podcastAudioKey` atomically after the R2 multipart upload succeeds.
     const scriptData: GeneratedScriptData = {
       title: podcastScript.title,
       dialogue: podcastScript.dialogue,
@@ -912,7 +847,7 @@ ${fullContentString}
       storySummaries,
       displayDate,
       generatedAt: event.timestamp.getTime(),
-      audio: podcastAudioKey,
+      audio: basePodcastKey,
     }
 
     const nextRedditDedupeIndex = updateRedditDedupeIndex(
