@@ -130,9 +130,9 @@ export default function RootLayout({
           />
           <Script
             id="webtalk-widget"
-            src="https://webtalk-nine.vercel.app/webtalk.js"
+            src="https://webtalk.david888.com/webtalk.js"
             data-webtalk-scope="origin"
-            data-webtalk-ai-endpoint="https://webtalk-nine.vercel.app/api/webtalk/ai"
+            data-webtalk-ai-endpoint="https://webtalk.david888.com/api/webtalk/ai"
             strategy="lazyOnload"
           />
           <Script
