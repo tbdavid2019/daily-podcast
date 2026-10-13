@@ -135,6 +135,11 @@ export default function RootLayout({
             data-webtalk-ai-endpoint="https://webtalk-nine.vercel.app/api/webtalk/ai"
             strategy="lazyOnload"
           />
+          <Script
+            id="flow-ai-tracking"
+            src="https://flow.aiurl.tw/script.js?siteId=f0a518eb-4d95-4899-a9ea-6295240e8cf4"
+            strategy="afterInteractive"
+          />
 
           <BingBackground />
           <BgToggle />
