@@ -12,7 +12,7 @@ import { PwaServiceWorker } from '@/components/pwa-service-worker'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
 import { WebMcpProvider } from '@/components/webmcp-provider'
-import { podcastDescription, podcastTitle } from '@/config'
+import { brandAssetVersion, podcastDescription, podcastTitle } from '@/config'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -62,14 +62,14 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon.ico' },
-      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/icon.png', type: 'image/png', sizes: '512x512' },
+      { url: `/favicon.ico?v=${brandAssetVersion}` },
+      { url: `/favicon-32x32.png?v=${brandAssetVersion}`, type: 'image/png', sizes: '32x32' },
+      { url: `/favicon.svg?v=${brandAssetVersion}`, type: 'image/svg+xml', sizes: 'any' },
+      { url: `/icons/icon-512.png?v=${brandAssetVersion}`, type: 'image/png', sizes: '512x512' },
     ],
-    shortcut: ['/favicon.ico'],
+    shortcut: [`/favicon.ico?v=${brandAssetVersion}`],
     apple: [
-      { url: '/icons/apple-touch-icon.png', type: 'image/png', sizes: '180x180' },
+      { url: `/icons/apple-touch-icon.png?v=${brandAssetVersion}`, type: 'image/png', sizes: '180x180' },
     ],
   },
   manifest: '/manifest.webmanifest',

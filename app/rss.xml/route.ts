@@ -2,7 +2,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 import { NextResponse } from 'next/server'
 import { Podcast } from 'podcast'
-import { podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
+import { podcastCoverImage, podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
 import { buildRssCacheKey, getArticleByDate, getEpisodeDates } from '@/lib/content'
 import { getBaseUrl } from '@/lib/discovery'
 import { getArticleTimestamp } from '@/lib/utils'
@@ -87,14 +87,14 @@ export async function GET(request: Request) {
     description: podcastDescription,
     feedUrl: `${baseUrl}/rss.xml`,
     siteUrl: baseUrl,
-    imageUrl: `${baseUrl}/podcast-cover.png`,
+    imageUrl: `${baseUrl}${podcastCoverImage}`,
     language: 'zh-CN',
     pubDate: new Date(),
     ttl: 60,
     generator: podcastTitle,
     author: podcastTitle,
     categories: ['technology', 'news'],
-    itunesImage: `${baseUrl}/podcast-cover.png`,
+    itunesImage: `${baseUrl}${podcastCoverImage}`,
     itunesCategory: [{ text: 'Technology' }, { text: 'News' }],
     itunesOwner: {
       name: podcastOwner.name,

@@ -2,6 +2,7 @@
 
 import type { AudioEpisode } from '@/lib/playback-storage'
 import React, { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { brandAssetVersion } from '@/config'
 import { applyPlaybackStart } from '@/lib/playback-share'
 import {
   getEpisodeProgress,
@@ -305,12 +306,12 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       album: currentEpisode.date,
       artwork: [
         {
-          src: isEn ? '/podcast-cover-en.png' : '/podcast-cover.png',
+          src: isEn ? '/podcast-cover-en.png' : `/icons/icon-512.png?v=${brandAssetVersion}`,
           sizes: '512x512',
           type: 'image/png',
         },
         {
-          src: isEn ? '/podcast-cover-en.png' : '/icon.png',
+          src: isEn ? '/podcast-cover-en.png' : `/icons/icon-192.png?v=${brandAssetVersion}`,
           sizes: '192x192',
           type: 'image/png',
         },

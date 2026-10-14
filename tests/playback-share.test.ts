@@ -132,7 +132,9 @@ describe('playback rate presets and global player', () => {
   it('renders official podcast cover artwork in global player without generic HN placeholder', async () => {
     const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
     assert.match(source, /podcast-cover-en\.png/)
-    assert.match(source, /podcast-cover\.png/)
+    assert.match(source, /src=\{isEn \? '\/podcast-cover-en\.png' : podcastCoverImage\}/)
+    const config = await readFile(new URL('../config.ts', import.meta.url), 'utf8')
+    assert.match(config, /podcastCoverImage = `\/podcast-cover\.png\?v=\$\{brandAssetVersion\}`/)
     assert.doesNotMatch(source, /\{\s*isEn \? 'EN' : 'HN'\s*\}/)
   })
 

@@ -18,6 +18,7 @@ import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioTime } from '@/components/audio-player-context'
 import { Slider } from '@/components/ui/slider'
+import { podcastCoverImage } from '@/config'
 import { dictionaries } from '@/lib/i18n'
 import { buildPlaybackShareUrl, formatPlaybackTimestamp, getArticlePath } from '@/lib/playback-share'
 import { cn } from '@/lib/utils'
@@ -274,7 +275,7 @@ export function GlobalBottomPlayer() {
                 title={currentEpisode.title}
               >
                 <Image
-                  src={isEn ? '/podcast-cover-en.png' : '/podcast-cover.png'}
+                  src={isEn ? '/podcast-cover-en.png' : podcastCoverImage}
                   alt={currentEpisode.title}
                   width={40}
                   height={40}
