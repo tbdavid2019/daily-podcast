@@ -1,9 +1,9 @@
-const CACHE_NAME = 'daily-podcast-offline-v3'
+const CACHE_NAME = 'daily-podcast-offline-v4'
 const OFFLINE_PAGE = '/offline'
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
-  '/icons/icon-192.png?v=podcast-20261014',
-  '/icons/icon-512.png?v=podcast-20261014',
+  '/icons/icon-192.png?v=podcast-20261014-material',
+  '/icons/icon-512.png?v=podcast-20261014-material',
 ]
 const OFFLINE_HTML = [
   '<!doctype html><html lang="zh-TW"><head><meta charset="utf-8">',
