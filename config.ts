@@ -2,7 +2,7 @@ export const podcastTitle = 'DAVID888 Daily 每日放送'
 export const podcastTitleEn = 'DAVID888 Daily Tech'
 
 // Change the revision when replacing brand assets to refresh browser/image caches.
-export const brandAssetVersion = 'podcast-20261014-material'
+export const brandAssetVersion = 'podcast-20261014-b'
 export const podcastCoverImage = `/podcast-cover.png?v=${brandAssetVersion}`
 
 export const podcastDescription = '多元科技新聞 Podcast，每日彙整 Hacker News、GitHub Trending、Product Hunt、Dev.to 等優質內容，自動產生台灣繁體中文摘要與 Podcast 節目。'
