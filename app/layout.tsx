@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     locale: 'zh_TW',
     images: [
       {
-        url: '/opengraph-image.png',
+        url: `/opengraph-image.png?v=${brandAssetVersion}`,
         width: 1200,
         height: 630,
         alt: podcastTitle,
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     site: '@david888',
     images: [
       {
-        url: '/twitter-image.png',
+        url: `/twitter-image.png?v=${brandAssetVersion}`,
         width: 1200,
         height: 630,
         alt: podcastTitle,

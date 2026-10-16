@@ -18,6 +18,7 @@ uses that existing SVG and outlined lettering; it is not an AI-generated symbol.
   `public/brand/logo-black.svg`, and `public/brand/logo-white.svg`.
 - Published cover: `public/podcast-cover.png`, 1400 × 1400.
 - Companion logo: `public/logo.png`, 1024 × 1024.
+- Social share banners: `app/opengraph-image.png`, `app/twitter-image.png` (1200 × 630).
 
 The B composition uses `#FFF7E9` paper, `#BF461D` broadcast red, and a black and
 white fallback. It places the Podcasts symbol between `David888` and the large
