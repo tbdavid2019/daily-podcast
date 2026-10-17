@@ -1,5 +1,6 @@
 'use client'
 
+import type { ArticleTab } from '@/lib/playback-share'
 import { Check, Pause, Play, Share2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import Link from 'next/link'
@@ -13,6 +14,9 @@ import {
   formatPlaybackTimestamp,
   getArticlePath,
   getPlaybackStartFromHash,
+  isEpisodePath,
+  isValidArticleTab,
+  parseTabFromUrl,
 } from '@/lib/playback-share'
 import { getEpisodeListenStatus, getEpisodeProgress } from '@/lib/playback-storage'
 import { cn } from '@/lib/utils'
@@ -38,11 +42,24 @@ interface ArticleCardProps {
   staticHost: string
   showSummary?: boolean
   showFooter?: boolean
+  initialTab?: ArticleTab
 }
 
-export function ArticleCard({ article, staticHost = '', showSummary = false, showFooter = false }: ArticleCardProps) {
+export function ArticleCard({
+  article,
+  staticHost = '',
+  showSummary = false,
+  showFooter = false,
+  initialTab,
+}: ArticleCardProps) {
   const isEn = article.variant === 'en'
   const dict = isEn ? dictionaries.en : dictionaries.zh
+  const [activeTab, setActiveTab] = useState<ArticleTab>(() => {
+    if (initialTab && isValidArticleTab(initialTab)) {
+      return initialTab
+    }
+    return 'summary'
+  })
   const [shareMessage, setShareMessage] = useState('')
   const [hasCopied, setHasCopied] = useState(false)
   const [listenStatus, setListenStatus] = useState(() => {
@@ -86,6 +103,43 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     }
   }, [article.date, article.title, article.updatedAt, article.variant, audio, currentEpisode, isPlaying, isSameEpisode, updateCurrentEpisode])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const tabFromUrl = parseTabFromUrl(window.location)
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl)
+    }
+
+    const handlePopState = () => {
+      const nextTab = parseTabFromUrl(window.location) ?? 'summary'
+      setActiveTab(nextTab)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  const handleTabChange = (value: string) => {
+    if (!isValidArticleTab(value)) {
+      return
+    }
+    setActiveTab(value)
+
+    if (typeof window !== 'undefined') {
+      const newPath = getArticlePath(article.date, article.variant, value)
+      const currentHash = window.location.hash
+      const newUrl = currentHash ? `${newPath}${currentHash}` : newPath
+      const currentUrl = window.location.pathname + window.location.hash
+
+      if (currentUrl !== newUrl) {
+        window.history.pushState(null, '', newUrl)
+      }
+    }
+  }
+
   const renderedBlogHtml = useMemo(
     () => article.blogContent ? markdownRenderer.render(article.blogContent) : '',
     [article.blogContent],
@@ -97,7 +151,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     }
 
     const handleHashChange = () => {
-      if (window.location.pathname !== getArticlePath(article.date, article.variant)) {
+      if (!isEpisodePath(window.location.pathname, article.date, article.variant)) {
         return
       }
       const start = getPlaybackStartFromHash(window.location.hash)
@@ -125,7 +179,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
 
   const handlePlayToggle = async () => {
     let start: number | undefined
-    if (typeof window !== 'undefined' && window.location.pathname === getArticlePath(article.date, article.variant)) {
+    if (typeof window !== 'undefined' && isEpisodePath(window.location.pathname, article.date, article.variant)) {
       const hashStart = getPlaybackStartFromHash(window.location.hash)
       if (hashStart !== null) {
         start = hashStart
@@ -164,7 +218,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     const time = isCurrentEpisode
       ? getCurrentTime()
       : (typeof window !== 'undefined' ? (getPlaybackStartFromHash(window.location.hash) ?? getEpisodeProgress(article.date, article.variant)) : 0)
-    const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, time)
+    const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, time, activeTab)
 
     try {
       if (navigator.clipboard?.writeText) {
@@ -313,7 +367,7 @@ export function ArticleCard({ article, staticHost = '', showSummary = false, sho
     <Card className="mb-6 glass border-zinc-200/80 hover:shadow-xl transition-all duration-300 group rounded-2xl">
       {showFooter
         ? (
-            <Tabs defaultValue="summary" className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               {stickyHeader}
               <CardFooter className="flex-col pt-4 bg-white/40 rounded-b-2xl">
                 <TabsContent value="summary" className="w-full prose prose-zinc max-w-none py-6 prose-headings:text-zinc-900 prose-headings:font-bold prose-p:text-zinc-800 prose-p:leading-relaxed prose-a:text-pantone-blue prose-a:font-semibold hover:prose-a:underline">

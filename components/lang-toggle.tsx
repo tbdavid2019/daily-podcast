@@ -3,35 +3,44 @@
 import { Globe } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 
+export function getAlternateLangPath(pathname: string): { isEn: boolean, nextPath: string } {
+  if (pathname === '/en' || pathname === '/en/') {
+    return { isEn: true, nextPath: '/' }
+  }
+  if (pathname === '/' || pathname === '') {
+    return { isEn: false, nextPath: '/en' }
+  }
+
+  const segments = pathname.replace(/^\/+|\/+$/g, '').split('/')
+  if (segments[0] === 'post' && segments[1]) {
+    const date = segments[1]
+    const remaining = segments.slice(2)
+    const hasEn = remaining.includes('en')
+    const tabs = remaining.filter(s => s !== 'en')
+    const tab = tabs[0]
+
+    if (hasEn) {
+      const nextTab = tab && tab !== 'summary' ? `/${tab}` : ''
+      return { isEn: true, nextPath: `/post/${date}${nextTab}` }
+    }
+    const nextTab = tab && tab !== 'summary' ? `/${tab}` : ''
+    return { isEn: false, nextPath: `/post/${date}/en${nextTab}` }
+  }
+
+  const isEn = pathname.startsWith('/en') || pathname.includes('/en/') || pathname.endsWith('/en')
+  if (isEn) {
+    return { isEn: true, nextPath: '/' }
+  }
+  return { isEn: false, nextPath: '/en' }
+}
+
 export function LangToggle() {
   const pathname = usePathname()
   const router = useRouter()
-
-  const isEn = pathname.startsWith('/en') || pathname.endsWith('/en')
+  const { isEn, nextPath } = getAlternateLangPath(pathname || '/')
 
   const toggleLanguage = () => {
-    if (isEn) {
-      if (pathname === '/en') {
-        router.push('/')
-      }
-      else if (pathname.endsWith('/en')) {
-        router.push(pathname.replace(/\/en$/, ''))
-      }
-      else {
-        router.push('/')
-      }
-    }
-    else {
-      if (pathname === '/') {
-        router.push('/en')
-      }
-      else if (pathname.startsWith('/post/')) {
-        router.push(`${pathname}/en`)
-      }
-      else {
-        router.push('/en')
-      }
-    }
+    router.push(nextPath)
   }
 
   return (

@@ -2,6 +2,32 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-17] 支援標準路由直達與深度分頁分享 (Canonical Routes & Deep Tab Linking)
+
+- **文章分頁標準路由直達 (Canonical Routes for Post Tabs)**：
+  - **解決問題**：先前在文章內切換「重點總結」、「Podcast」或「延伸參考」分頁時，瀏覽器網址列固定不變，無法直接複製網址分享特定分頁給他人。
+  - **標準路由體系**：
+    - 中文主軌：
+      - 重點總結：`/post/{date}` 或 `/post/{date}/summary`
+      - Podcast 內文：`/post/{date}/podcast`
+      - 延伸參考：`/post/{date}/references`
+    - 英文版：
+      - 重點總結：`/post/{date}/en` 或 `/post/{date}/en/summary`
+      - Podcast 內文：`/post/{date}/en/podcast`
+      - 延伸參考：`/post/{date}/en/references`
+  - **路由層級實作**：
+    - 在 `app/post/[date]/[variant]/page.tsx` 中自動辨識分頁參數（`summary`、`podcast`、`references`），支援直接將分頁作為路徑片段直達，並產生對應的 OpenGraph 與頁面 Metadata。
+    - 新增 `app/post/[date]/[variant]/[tab]/page.tsx` 完整支援多語言巢狀分頁直達（如 `/post/2026-10-17/en/podcast`）。
+    - 新增 `app/agent-markdown/post/[date]/[variant]/[tab]/route.ts` 與在既有 route 支援分頁正規化，確保 AI Agent 請求 `Accept: text/markdown` 時能取得乾淨內容不報 404。
+- **客戶端流暢切換與無縫分享 (Client-Side State Sync & Deep Sharing)**：
+  - **即時網址連動**：切換分頁時透過 `window.history.pushState` 即時更新瀏覽器網址列，保留背景音訊播放不中斷、無頁面重新整理負擔。
+  - **上一頁/下一頁歷程同步**：監聽 `popstate` 事件，當用戶返回上一頁或回到文章根目錄時自動同步當前分頁（經 Codex 審查回饋修正，返回基礎網址時正確預設回 summary 分頁）。
+  - **深度連結分享**：「分享此時刻」按鈕會將當前選擇的分頁與播放時間戳整合（如 `/post/2026-10-17/podcast#t=120`），收件人開啟即可直達指定分頁並精準定位音訊播放時刻。
+  - **多語言切換按鈕適配 (LangToggle)**：經 Opencode 審查回饋，修復 `components/lang-toggle.tsx` 在分頁網址下切換中英文時的路徑對齊，切換時精準保留當前分頁（如 `/post/2026-10-17/podcast` ↔ `/post/2026-10-17/en/podcast`）。
+- **代碼審查與測試驗證 (Codex & Opencode Review Hardening)**：
+  - 通過 `codex review --uncommitted` 與 `opencode run` 雙重獨立 AI 代碼審查，修正 popstate 歷程回退預設值、if 區塊 ESLint 規範與語法排版。
+  - 全套測試（`pnpm check`）57 項測試全數綠燈通過，`pnpm build` 建置通過。
+
 ## [2026-10-12] 修復 Hacker News 主軌遺失問題：自建 2md 三大節點 Markdown 專用解析、Algolia 備援 Fallback、日期偏移修正與客座來源嚴格硬上限 (Fix Missing HN Mainline: 2md Markdown Primary Pipeline, Algolia Fallback, fetchDate UTC Alignment & Hard Secondary Caps)
 
 - **Hacker News 抓取管線全面重構與自建 2md 專用解析（2md Primary Markdown Pipeline & Algolia Fallback）**：

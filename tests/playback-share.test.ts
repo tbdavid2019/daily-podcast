@@ -7,7 +7,10 @@ import {
   formatPlaybackTimestamp,
   getArticlePath,
   getPlaybackStartFromHash,
+  getTabFromPath,
+  isEpisodePath,
   parsePlaybackStart,
+  parseTabFromUrl,
 } from '../lib/playback-share'
 
 describe('timestamped playback sharing', () => {
@@ -15,6 +18,51 @@ describe('timestamped playback sharing', () => {
     assert.equal(
       buildPlaybackShareUrl('https://podcast.example', '2026-07-31', 'hacker-news', 379.8),
       'https://podcast.example/post/2026-07-31#t=379',
+    )
+  })
+
+  it('builds canonical tab route paths for default and named variants', () => {
+    assert.equal(getArticlePath('2026-10-17', 'hacker-news', 'podcast'), '/post/2026-10-17/podcast')
+    assert.equal(getArticlePath('2026-10-17', 'hacker-news', 'references'), '/post/2026-10-17/references')
+    assert.equal(getArticlePath('2026-10-17', 'hacker-news', 'summary'), '/post/2026-10-17')
+    assert.equal(getArticlePath('2026-10-17', 'en', 'podcast'), '/post/2026-10-17/en/podcast')
+    assert.equal(getArticlePath('2026-10-17', 'en', 'references'), '/post/2026-10-17/en/references')
+    assert.equal(getArticlePath('2026-10-17', 'en', 'summary'), '/post/2026-10-17/en')
+  })
+
+  it('matches episode paths regardless of active tab segment', () => {
+    assert.equal(isEpisodePath('/post/2026-10-17', '2026-10-17', 'hacker-news'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/podcast', '2026-10-17', 'hacker-news'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/references', '2026-10-17', 'hacker-news'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/summary', '2026-10-17', 'hacker-news'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/en', '2026-10-17', 'en'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/en/podcast', '2026-10-17', 'en'), true)
+    assert.equal(isEpisodePath('/post/2026-10-17/en', '2026-10-17', 'hacker-news'), false)
+    assert.equal(isEpisodePath('/post/2026-10-18', '2026-10-17', 'hacker-news'), false)
+  })
+
+  it('extracts tabs from path, search params, and hash formats', () => {
+    assert.equal(getTabFromPath('/post/2026-10-17/podcast'), 'podcast')
+    assert.equal(getTabFromPath('/post/2026-10-17/references'), 'references')
+    assert.equal(getTabFromPath('/post/2026-10-17/summary'), 'summary')
+    assert.equal(getTabFromPath('/post/2026-10-17'), null)
+
+    assert.equal(parseTabFromUrl({ pathname: '/post/2026-10-17/podcast' }), 'podcast')
+    assert.equal(parseTabFromUrl({ search: '?tab=references' }), 'references')
+    assert.equal(parseTabFromUrl({ hash: '#podcast' }), 'podcast')
+    assert.equal(parseTabFromUrl({ hash: '#tab=summary' }), 'summary')
+    assert.equal(parseTabFromUrl({ hash: '#podcast&t=120' }), 'podcast')
+    assert.equal(parseTabFromUrl({ hash: '#t=120' }), null)
+  })
+
+  it('builds tab-aware share URLs preserving playback timestamp', () => {
+    assert.equal(
+      buildPlaybackShareUrl('https://podcast.example', '2026-10-17', 'hacker-news', 120, 'podcast'),
+      'https://podcast.example/post/2026-10-17/podcast#t=120',
+    )
+    assert.equal(
+      buildPlaybackShareUrl('https://podcast.example', '2026-10-17', 'en', 45, 'references'),
+      'https://podcast.example/post/2026-10-17/en/references#t=45',
     )
   })
 
@@ -324,6 +372,28 @@ describe('localStorage episode playback progress persistence', () => {
     assert.match(source, /Volume2/)
     // Rendered within right control cluster in GlobalBottomPlayer
     assert.match(source, /<VolumeControl dict=\{dict\} \/>/)
+  })
+})
+
+describe('getAlternateLangPath language switcher', () => {
+  it('correctly toggles between English and Chinese across home, post, and tab routes', async () => {
+    const { getAlternateLangPath } = await import('../components/lang-toggle')
+
+    // Homepage
+    assert.deepEqual(getAlternateLangPath('/'), { isEn: false, nextPath: '/en' })
+    assert.deepEqual(getAlternateLangPath('/en'), { isEn: true, nextPath: '/' })
+
+    // Post default (summary)
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17'), { isEn: false, nextPath: '/post/2026-10-17/en' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/en'), { isEn: true, nextPath: '/post/2026-10-17' })
+
+    // Post tabs
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/podcast'), { isEn: false, nextPath: '/post/2026-10-17/en/podcast' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/en/podcast'), { isEn: true, nextPath: '/post/2026-10-17/podcast' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/references'), { isEn: false, nextPath: '/post/2026-10-17/en/references' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/en/references'), { isEn: true, nextPath: '/post/2026-10-17/references' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/summary'), { isEn: false, nextPath: '/post/2026-10-17/en' })
+    assert.deepEqual(getAlternateLangPath('/post/2026-10-17/en/summary'), { isEn: true, nextPath: '/post/2026-10-17' })
   })
 })
 
