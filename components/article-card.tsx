@@ -6,6 +6,7 @@ import MarkdownIt from 'markdown-it'
 import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAudioPlayer } from '@/components/audio-player-context'
+import { SyncTranscript } from '@/components/sync-transcript'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dictionaries } from '@/lib/i18n'
@@ -375,8 +376,8 @@ export function ArticleCard({
                     <div dangerouslySetInnerHTML={{ __html: renderedBlogHtml }} />
                   )}
                 </TabsContent>
-                <TabsContent value="podcast" className="w-full prose prose-zinc max-w-none whitespace-pre-line py-6 leading-relaxed text-zinc-800 font-normal">
-                  {article.podcastContent}
+                <TabsContent value="podcast" className="w-full py-4">
+                  <SyncTranscript article={article} audioSrc={audio} />
                 </TabsContent>
                 <TabsContent value="references" className="w-full py-6 space-y-3">
                   {article.stories?.map((story) => {

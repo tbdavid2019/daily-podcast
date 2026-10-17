@@ -150,6 +150,17 @@ export async function GET(request: Request) {
         type: audioInfo?.httpMetadata?.contentType || (post.audio.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
         size: audioInfo?.size,
       },
+      customElements: [
+        {
+          'podcast:transcript': {
+            _attr: {
+              url: `${baseUrl}/post/${post.date}/en/transcript.vtt`,
+              type: 'text/vtt',
+              language: 'en-US',
+            },
+          },
+        },
+      ],
     })
   }
 

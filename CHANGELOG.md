@@ -2,6 +2,37 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-10-17] 支援 Apple Podcasts 等全生態逐字稿與網頁版同步字幕效果 (Podcasting 2.0 Transcripts & Web Synchronized Subtitles)
+
+- **Apple Podcasts 與 Podcasting 2.0 全生態逐字稿支援 (Podcasting 2.0 & Apple Podcasts Transcripts)**：
+  - **解決問題**：先前 Podcast 節目無標準逐字稿標籤，Apple Podcasts、Pocket Casts 等播放器無法自動載入逐字稿，且 YouTube Studio 需手動轉換字幕格式。
+  - **合規 RSS Feed 注入**：
+    - 在 `app/rss.xml/route.ts` 中加入 `<podcast:transcript url="..." type="text/vtt" language="zh-TW" />` 標籤。
+    - 在 `app/rss-en.xml/route.ts` 中加入 `<podcast:transcript url="..." type="text/vtt" language="en-US" />` 標籤。
+    - 確保 Apple Podcasts、Podcast Index 等相容客戶端可在單集發布時自動取得 WebVTT 格式逐字稿並啟用原生即時字幕顯示。
+  - **原生 WebVTT 與 SubRip SRT 字幕端點 (Direct Transcript Endpoints)**：
+    - 新增 `/post/{date}/transcript.vtt` 與 `/post/{date}/transcript.srt`（中文主軌）。
+    - 新增 `/post/{date}/{variant}/transcript.vtt` 與 `/post/{date}/{variant}/transcript.srt`（多語言或變體支援）。
+    - 支援瀏覽器與播放器快取（1 小時 Edge 快取與 24 小時 SWR，支援 CORS 跨域讀取）。
+    - SRT 格式可直接下載並拖曳至 YouTube Studio 自動生成 YouTube 影片字幕。
+
+- **網頁端互動同步逐字稿元件 (Web Synchronized Subtitles Player)**：
+  - **動態對話時間軸計算**：
+    - 新增 `lib/transcript.ts`，支援結構化對話陣列或 Markdown/純文字對話解析（自動識別男女主持人或特定發言者）。
+    - 依據實際音訊時長與文字字數加權，加上說話切換間隙（Turn pause），精準產生單調遞增時間軸。
+  - **即時音訊播放跟隨與高亮 (Interactive Sync Experience)**：
+    - 在文章 Podcast 分頁導入 `components/sync-transcript.tsx` 元件。
+    - 即時訂閱播放器時間，當前發言句子自動高亮（柔和外框光暈與「正在播放」動態標籤）。
+    - 自動平滑滾動（Auto-scroll），並提供「同步跟隨中 / 手動捲動」切換開關。
+    - 點擊任一段落或時間戳即可立即 `seek` 跳轉播放，提供極致流暢的點讀聆聽體驗。
+  - **便捷外銷與分享工具列**：
+    - 提供「一鍵複製全文逐字稿」、「下載 SRT」、「下載 VTT」快速按鈕。
+
+- **品質驗證與代碼防護 (Quality Gates & Safe Execution)**：
+  - 新增 `tests/transcript.test.ts` 涵蓋時間軸單調性、時間格式轉換、VTT/SRT 格式解析驗證。
+  - 修復 ReDoS 正則回溯風險、ESLint 導入順序與 TypeScript 嚴格型別檢查。
+  - 全套品質檢測（`pnpm check`）62 項測試全數通過，`pnpm build` 建置通過，零 API 金鑰洩漏。
+
 ## [2026-10-17] 支援標準路由直達與深度分頁分享 (Canonical Routes & Deep Tab Linking)
 
 - **文章分頁標準路由直達 (Canonical Routes for Post Tabs)**：

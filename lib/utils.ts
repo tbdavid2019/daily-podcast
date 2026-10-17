@@ -86,5 +86,6 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
     stories: data.stories || [],
     audio: audioPath,
     variant,
+    dialogue: Array.isArray(data.dialogue) ? data.dialogue : undefined,
   }
 }

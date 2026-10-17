@@ -8,4 +8,5 @@ interface Article {
   audio: string
   updatedAt: number
   variant?: string
+  dialogue?: { speaker: string, text: string }[]
 }
