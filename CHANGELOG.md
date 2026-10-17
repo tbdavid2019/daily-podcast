@@ -33,6 +33,13 @@
   - 修復 ReDoS 正則回溯風險、ESLint 導入順序與 TypeScript 嚴格型別檢查。
   - 全套品質檢測（`pnpm check`）62 項測試全數通過，`pnpm build` 建置通過，零 API 金鑰洩漏。
 
+- **Codex 與 Opencode 獨立代碼審查強固 (Codex & Opencode Review Hardening)**：
+  - **英文變體講者標籤正規化 (Opencode P1 Fix)**：修復 `lib/utils.ts` 中 `article.dialogue` 未對應英文變體將「女 / 男」轉換為「Cordelia / David」的缺陷，確保英文版網頁逐字稿與下載之 SRT/VTT 標籤一致。
+  - **逐字稿互動無障礙增強 (Opencode P2 Fix)**：為逐字稿對話段落補齊 `role="button"`、`tabIndex={0}`、`aria-current`、`aria-label` 與 Enter / 空白鍵鍵盤跳轉監聽；為自動滾動開關補齊 `aria-pressed` 狀態。
+  - **資源釋放與計時器防護 (Opencode P2 Fix)**：在 `components/sync-transcript.tsx` 中加入 `copyTimeoutRef` 並在組件卸載（unmount）時清理計時器，避免內存洩漏。
+  - **字幕路由 CORS OPTIONS 與 MIME 規範化 (Opencode Review Fix)**：為全部 4 個逐字稿端點補齊 `OPTIONS` 預檢路由與 `Access-Control-Allow-Methods` 標頭，並將 SRT 回應型態對齊為標準 `application/x-subrip`。
+  - **RSS Feed 快取即時更新防護 (Codex Review Fix)**：針對 KV 快取可能滯後 7 天之問題，完成線上強制刷新（`?force=true`）將全新 `<podcast:transcript>` 標籤即時寫入 KV 邊緣持久化節點。
+
 ## [2026-10-17] 支援標準路由直達與深度分頁分享 (Canonical Routes & Deep Tab Linking)
 
 - **文章分頁標準路由直達 (Canonical Routes for Post Tabs)**：

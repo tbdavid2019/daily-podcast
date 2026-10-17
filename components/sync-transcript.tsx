@@ -30,6 +30,15 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
   const [autoScroll, setAutoScroll] = useState(true)
   const [hasCopied, setHasCopied] = useState(false)
   const cueRefs = useRef<(HTMLDivElement | null)[]>([])
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const isCurrentEpisode = currentEpisode?.date === article.date
     && (currentEpisode?.variant ?? 'hacker-news') === (article.variant ?? 'hacker-news')
@@ -105,7 +114,10 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
         document.body.removeChild(textarea)
       }
       setHasCopied(true)
-      setTimeout(() => setHasCopied(false), 2000)
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = setTimeout(() => setHasCopied(false), 2000)
     }
     catch {
       // ignore
@@ -131,6 +143,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
           <button
             type="button"
             onClick={() => setAutoScroll(!autoScroll)}
+            aria-pressed={autoScroll}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition-all select-none',
               autoScroll
@@ -209,12 +222,22 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
               ref={(el) => {
                 cueRefs.current[index] = el
               }}
+              role="button"
+              tabIndex={0}
+              aria-current={isActive ? 'true' : undefined}
+              aria-label={`跳轉播放至 ${formatPlaybackTimestamp(cue.start)}，${cue.speaker ? `${cue.speaker}：` : ''}${cue.text.slice(0, 30)}`}
               onClick={() => void handleCueClick(cue.start)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  void handleCueClick(cue.start)
+                }
+              }}
               className={cn(
                 'group relative p-3.5 sm:p-4 rounded-xl transition-all duration-200 cursor-pointer border',
                 isActive
-                  ? 'bg-pantone-blue/[0.08] dark:bg-pantone-blue/20 border-pantone-blue/50 shadow-xs ring-1 ring-pantone-blue/30 scale-[1.005]'
-                  : 'bg-white/40 hover:bg-white/80 border-zinc-200/60 hover:border-zinc-300 shadow-2xs',
+                  ? 'bg-pantone-blue/[0.08] dark:bg-pantone-blue/20 border-pantone-blue/50 shadow-sm ring-1 ring-pantone-blue/30 scale-[1.005]'
+                  : 'bg-white/40 hover:bg-white/80 border-zinc-200/60 hover:border-zinc-300 shadow-none',
               )}
             >
               <div className="flex items-center justify-between gap-2 mb-1.5 select-none">
@@ -222,7 +245,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
                   {cue.speaker && (
                     <span
                       className={cn(
-                        'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold tracking-wide uppercase shadow-2xs',
+                        'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold tracking-wide uppercase shadow-none',
                         isFemale && 'bg-rose-50 text-rose-700 border border-rose-200/80',
                         isMale && 'bg-sky-50 text-sky-700 border border-sky-200/80',
                         !isFemale && !isMale && 'bg-zinc-100 text-zinc-700 border border-zinc-200/80',

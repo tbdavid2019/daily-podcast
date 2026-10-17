@@ -37,9 +37,9 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
   // Note: The audio workflow uploads to: `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
   const audioPath = data.audio || `${data.displayDate.replace(/-/g, '/')}/${runEnv}/${variant}-${data.displayDate}.mp3`
 
-  // Format dialogue as string for the frontend
+  // Format dialogue and normalize speakers based on variant
   const isEnglish = variant === 'en'
-  const podcastContent = Array.isArray(data.dialogue)
+  const normalizedDialogue: { speaker: string, text: string }[] | undefined = Array.isArray(data.dialogue)
     ? data.dialogue.map((line: any) => {
         let speaker = line.speaker
         if (isEnglish) {
@@ -58,8 +58,15 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
             speaker = '男'
           }
         }
-        return `${speaker}: ${line.text}`
-      }).join('\n\n')
+        return {
+          speaker: speaker || '',
+          text: typeof line.text === 'string' ? line.text : '',
+        }
+      })
+    : undefined
+
+  const podcastContent = normalizedDialogue
+    ? normalizedDialogue.map(line => `${line.speaker}: ${line.text}`).join('\n\n')
     : data.dialogue
 
   // Use the generated title if available (new format), otherwise fallback to constructed title
@@ -86,6 +93,6 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
     stories: data.stories || [],
     audio: audioPath,
     variant,
-    dialogue: Array.isArray(data.dialogue) ? data.dialogue : undefined,
+    dialogue: normalizedDialogue,
   }
 }

@@ -132,6 +132,10 @@ describe('mapScriptToArticle speaker mapping', () => {
     }, 'production', 'en')
 
     assert.equal(article.podcastContent, 'Cordelia: Welcome to the show.\n\nDavid: Thanks Cordelia.')
+    assert.deepEqual(article.dialogue, [
+      { speaker: 'Cordelia', text: 'Welcome to the show.' },
+      { speaker: 'David', text: 'Thanks Cordelia.' },
+    ])
   })
 
   it('preserves or normalizes Chinese speaker labels for default variant', async () => {
@@ -146,6 +150,10 @@ describe('mapScriptToArticle speaker mapping', () => {
     }, 'production', 'hacker-news')
 
     assert.equal(article.podcastContent, '女: 歡迎收聽。\n\n男: 大家早安。')
+    assert.deepEqual(article.dialogue, [
+      { speaker: '女', text: '歡迎收聽。' },
+      { speaker: '男', text: '大家早安。' },
+    ])
   })
 })
 
