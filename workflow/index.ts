@@ -595,7 +595,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
           ? `${summarizeStoryPromptEn}\n\nPlease generate a summary for each story. **Important: You must generate a summary for all ${expectedCount} stories**. Wrap each summary with <story-summary id="STORY_ID">...</story-summary>.`
           : `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
         prompt: combinedContent,
-        maxTokens: summarizationMaxTokens,
+        maxOutputTokens: summarizationMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
       }))
 
@@ -729,7 +729,7 @@ ${fullContentString}
         model,
         system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
         prompt: enhancedPrompt,
-        maxTokens: scriptMaxTokens,
+        maxOutputTokens: scriptMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
         schema: z.object({
           title: z.string().optional(),
@@ -797,7 +797,7 @@ ${fullContentString}
         model,
         system: isEnglish ? summarizeBlogPromptEn : summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
-        maxTokens: blogMaxTokens,
+        maxOutputTokens: blogMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
       }))
       console.info(`create blog content success`, { usage, finishReason })
