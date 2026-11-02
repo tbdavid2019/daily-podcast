@@ -6,6 +6,7 @@ import MarkdownIt from 'markdown-it'
 import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAudioPlayer } from '@/components/audio-player-context'
+import { Comments } from '@/components/comments'
 import { SyncTranscript } from '@/components/sync-transcript'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -43,6 +44,7 @@ interface ArticleCardProps {
   staticHost: string
   showSummary?: boolean
   showFooter?: boolean
+  showComments?: boolean
   initialTab?: ArticleTab
 }
 
@@ -51,6 +53,7 @@ export function ArticleCard({
   staticHost = '',
   showSummary = false,
   showFooter = false,
+  showComments = true,
   initialTab,
 }: ArticleCardProps) {
   const isEn = article.variant === 'en'
@@ -368,65 +371,78 @@ export function ArticleCard({
     <Card className="mb-6 glass border-zinc-200/80 hover:shadow-xl transition-all duration-300 group rounded-2xl">
       {showFooter
         ? (
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              {stickyHeader}
-              <CardFooter className="flex-col pt-4 bg-white/40 rounded-b-2xl">
-                <TabsContent value="summary" className="w-full prose prose-zinc max-w-none py-6 prose-headings:text-zinc-900 prose-headings:font-bold prose-p:text-zinc-800 prose-p:leading-relaxed prose-a:text-pantone-blue prose-a:font-semibold hover:prose-a:underline">
-                  {renderedBlogHtml && (
-                    <div dangerouslySetInnerHTML={{ __html: renderedBlogHtml }} />
-                  )}
-                </TabsContent>
-                <TabsContent value="podcast" className="w-full py-4">
-                  <SyncTranscript article={article} audioSrc={audio} />
-                </TabsContent>
-                <TabsContent value="references" className="w-full py-6 space-y-3">
-                  {article.stories?.map((story) => {
-                    const sourceLabel = (() => {
-                      switch (story.source) {
-                        case 'hacker-news': return dict.sources.comment
-                        case 'github-trending': return dict.sources.github
-                        case 'product-hunt': return dict.sources.productHunt
-                        case 'dev-to': return dict.sources.devto
-                        case 'reddit': return story.subreddit ? `r/${story.subreddit}` : dict.sources.reddit
-                        default: return null
-                      }
-                    })()
+            <>
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                {stickyHeader}
+                <CardFooter className={cn('flex-col pt-4 bg-white/40', !showComments && 'rounded-b-2xl')}>
+                  <TabsContent value="summary" className="w-full prose prose-zinc max-w-none py-6 prose-headings:text-zinc-900 prose-headings:font-bold prose-p:text-zinc-800 prose-p:leading-relaxed prose-a:text-pantone-blue prose-a:font-semibold hover:prose-a:underline">
+                    {renderedBlogHtml && (
+                      <div dangerouslySetInnerHTML={{ __html: renderedBlogHtml }} />
+                    )}
+                  </TabsContent>
+                  <TabsContent value="podcast" className="w-full py-4">
+                    <SyncTranscript article={article} audioSrc={audio} />
+                  </TabsContent>
+                  <TabsContent value="references" className="w-full py-6 space-y-3">
+                    {article.stories?.map((story) => {
+                      const sourceLabel = (() => {
+                        switch (story.source) {
+                          case 'hacker-news': return dict.sources.comment
+                          case 'github-trending': return dict.sources.github
+                          case 'product-hunt': return dict.sources.productHunt
+                          case 'dev-to': return dict.sources.devto
+                          case 'reddit': return story.subreddit ? `r/${story.subreddit}` : dict.sources.reddit
+                          default: return null
+                        }
+                      })()
 
-                    const sourceLink = (() => {
-                      if (story.source === 'hacker-news') {
-                        return story.hackerNewsUrl ?? story.sourceUrl ?? (story.id ? `https://news.ycombinator.com/item?id=${story.id}` : undefined)
-                      }
-                      return story.sourceUrl ?? story.url
-                    })()
+                      const sourceLink = (() => {
+                        if (story.source === 'hacker-news') {
+                          return story.hackerNewsUrl ?? story.sourceUrl ?? (story.id ? `https://news.ycombinator.com/item?id=${story.id}` : undefined)
+                        }
+                        return story.sourceUrl ?? story.url
+                      })()
 
-                    return (
-                      <div key={`${story.id}-${story.source}`} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/60 transition-colors group/item border border-transparent hover:border-zinc-200/60">
-                        <Link
-                          href={story.url ?? story.sourceUrl ?? '#'}
-                          className="text-md text-zinc-800 hover:text-pantone-blue transition-colors line-clamp-1 flex-1 font-semibold"
-                          title={story.title}
-                          rel="nofollow"
-                          target="_blank"
-                        >
-                          {story.title}
-                        </Link>
-                        {sourceLabel && sourceLink && (
+                      return (
+                        <div key={`${story.id}-${story.source}`} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/60 transition-colors group/item border border-transparent hover:border-zinc-200/60">
                           <Link
-                            href={sourceLink}
-                            className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 transition-all font-bold tracking-wide uppercase"
-                            title={sourceLabel}
+                            href={story.url ?? story.sourceUrl ?? '#'}
+                            className="text-md text-zinc-800 hover:text-pantone-blue transition-colors line-clamp-1 flex-1 font-semibold"
+                            title={story.title}
                             rel="nofollow"
                             target="_blank"
                           >
-                            {sourceLabel}
+                            {story.title}
                           </Link>
-                        )}
-                      </div>
-                    )
-                  })}
-                </TabsContent>
-              </CardFooter>
-            </Tabs>
+                          {sourceLabel && sourceLink && (
+                            <Link
+                              href={sourceLink}
+                              className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 transition-all font-bold tracking-wide uppercase"
+                              title={sourceLabel}
+                              rel="nofollow"
+                              target="_blank"
+                            >
+                              {sourceLabel}
+                            </Link>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </TabsContent>
+                </CardFooter>
+              </Tabs>
+              {showComments && (
+                <div className="border-t border-zinc-200/80 bg-white/60 p-4 sm:p-6 rounded-b-2xl">
+                  <Comments
+                    date={article.date}
+                    title={article.title}
+                    variant={article.variant}
+                    published={new Date(article.date).toISOString()}
+                    showHeader
+                  />
+                </div>
+              )}
+            </>
           )
         : (
             stickyHeader
