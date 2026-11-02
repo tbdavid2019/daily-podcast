@@ -32,7 +32,7 @@ export function Comments({
   const containerRef = useRef<HTMLDivElement>(null)
   const isEn = variant === 'en'
   const lang = isEn ? 'en' : 'zh-Hant'
-  const defaultSlug = variant && variant !== 'hacker-news' ? `podcast:${date}:${variant}` : `podcast:${date}`
+  const defaultSlug = variant && variant !== 'hacker-news' ? `podcast-${date}-${variant}` : `podcast-${date}`
   const finalSlug = slug || defaultSlug
   const canonicalUrl = url || (typeof window !== 'undefined'
     ? `${window.location.origin}/post/${date}${variant && variant !== 'hacker-news' ? `/${variant}` : ''}`
