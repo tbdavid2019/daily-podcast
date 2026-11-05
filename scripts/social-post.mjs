@@ -19,6 +19,7 @@ function parseArgs() {
     target: 'both', // 'x', 'threads', 'both'
     headless: false,
     maxStories: 5,
+    copyFile: '',
   }
 
   for (let i = 0; i < args.length; i += 1) {
@@ -42,6 +43,10 @@ function parseArgs() {
     }
     else if (arg === '--max-stories' && args[i + 1]) {
       options.maxStories = Number.parseInt(args[i + 1], 10) || 5
+      i += 1
+    }
+    else if (arg === '--copy-file' && args[i + 1]) {
+      options.copyFile = args[i + 1]
       i += 1
     }
   }
@@ -183,21 +188,47 @@ function formatXTweets(data, maxStories = 5) {
   return tweets
 }
 
-// 格式化 Threads 貼文（單則 500 字元內精華整理）
-function formatThreadsPost(data, maxStories = 5) {
+// 每篇新聞各佔一則，與節目介紹組成 Threads 串文。
+export function formatThreadsPosts(data, maxStories = 5) {
   const selectedStories = data.stories.slice(0, maxStories)
-  const bullets = selectedStories.map(s => `🔹 ${s.title}`).join('\n')
+  const posts = [`🎙️ DAVID888 Daily 科技廣播【${data.date}】\n${data.cleanTitle}\n\n今日精選科技議題 🧵👇\n🎧 收聽完整節目：\n${data.episodeUrl}`]
+  for (const [index, story] of selectedStories.entries()) {
+    const prefix = `${index + 1}/${selectedStories.length} 📌 ${story.title}`
+    const link = story.link?.startsWith('http') ? `\n🔗 原文：${story.link}` : ''
+    const remaining = 500 - Array.from(`${prefix}\n\n${link}`).length
+    if (remaining < 0)
+      throw new Error('Threads 新聞標題或連結過長，無法建立貼文')
+    const description = Array.from(story.desc).slice(0, remaining).join('')
+    posts.push(`${prefix}\n\n${description}${link}`)
+  }
+  if (posts.some(post => Array.from(post).length > 500)) {
+    throw new Error('Threads 貼文超過 500 字元')
+  }
+  return posts
+}
 
-  return `🎙️ DAVID888 Daily 科技廣播【${data.date}】
-今日焦點：${data.cleanTitle}
+function loadSocialCopy(filePath, data) {
+  if (!filePath)
+    return null
 
-【本日精華速覽】
-${bullets}
+  const copy = JSON.parse(fs.readFileSync(path.resolve(filePath), 'utf8'))
+  const validatePosts = (posts, platform, maxLength) => {
+    if (!Array.isArray(posts) || posts.some(post => typeof post !== 'string' || !post.trim())) {
+      throw new Error(`${platform} 文案必須是非空字串陣列`)
+    }
+    if (posts.some(post => Array.from(post).length > maxLength)) {
+      throw new Error(`${platform} 單篇文案超過 ${maxLength} 字元`)
+    }
+  }
 
-🎧 完整語音節目與逐字稿：
-${data.episodeUrl}
+  if (copy.date !== data.date)
+    throw new Error(`文案日期 ${copy.date || '(空白)'} 與節目日期 ${data.date} 不符`)
+  validatePosts(copy.xTweets, 'X', 270)
+  validatePosts(copy.threadsPosts, 'Threads', 500)
+  if (!copy.threadsPosts.some(post => post.includes(data.episodeUrl)))
+    throw new Error('Threads 文案必須包含今日節目連結')
 
-#DAVID888Daily #科技新聞 #工程師 #Podcast #AI`
+  return copy
 }
 
 // 啟動瀏覽器
@@ -281,12 +312,12 @@ async function postToX(context, tweets) {
 }
 
 // 發布到 Meta Threads
-async function postToThreads(context, postText) {
+async function postToThreads(context, posts) {
   console.info('\n🧵 準備發布到 Threads...')
   const page = await context.newPage()
 
   try {
-    await page.goto('https://www.threads.net/', { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.goto('https://www.threads.com/', { waitUntil: 'domcontentloaded', timeout: 30000 })
     await page.waitForTimeout(2000)
 
     // 檢查登入狀態（如果頁面出現登入按鈕且沒有發文輸入區）
@@ -308,27 +339,32 @@ async function postToThreads(context, postText) {
       .or(page.locator('div[role="button"]:has-text("新串文")'))
       .or(page.locator('svg[aria-label="Create"]'))
       .or(page.locator('svg[aria-label="建立"]'))
+      .filter({ visible: true })
       .first()
 
-    if (await newThreadBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
-      await newThreadBtn.click()
-      await page.waitForTimeout(1200)
+    await newThreadBtn.waitFor({ state: 'visible', timeout: 15000 })
+    await newThreadBtn.click()
+    await page.waitForTimeout(1200)
+
+    const dialog = page.getByRole('dialog').last()
+    await dialog.waitFor({ state: 'visible', timeout: 15000 })
+    const editors = dialog.locator('div[role="textbox"][contenteditable="true"]')
+    await editors.first().fill(posts[0])
+
+    for (let i = 1; i < posts.length; i += 1) {
+      console.info(`   ➕ 新增 Threads 主題 [${i}/${posts.length - 1}]`)
+      const addButton = dialog.getByRole('button', { name: /新增到串文|Add to thread/i }).last()
+      await addButton.click({ timeout: 15000 })
+      const editor = editors.nth(i)
+      await editor.waitFor({ state: 'visible', timeout: 15000 })
+      await editor.fill(posts[i])
     }
 
-    // 定位可編輯輸入區域
-    const editor = page.locator('div[role="textbox"]').first()
-    await editor.waitFor({ state: 'visible', timeout: 15000 })
-    await editor.fill(postText)
-    await page.waitForTimeout(1000)
-
-    // 點擊發布按鈕
-    console.info('🚀 點擊「發佈 (Post)」按鈕...')
-    const submitButton = page.locator('div[role="button"]:has-text("發佈")').or(page.locator('div[role="button"]:has-text("Post")')).last()
-    await submitButton.waitFor({ state: 'visible', timeout: 10000 })
-    await submitButton.click()
-
-    await page.waitForTimeout(4000)
-    console.info('✅ Threads 貼文發布成功！🎉')
+    console.info(`🚀 發布 Threads 串文（共 ${posts.length} 則）...`)
+    const submitButton = dialog.getByRole('button', { name: /^(發佈|發布|Post)$/i }).last()
+    await submitButton.click({ timeout: 10000 })
+    await dialog.waitFor({ state: 'hidden', timeout: 30000 })
+    console.info('✅ Threads 發文視窗已關閉；請檢查個人檔案確認串文是否完整。')
   }
   catch (err) {
     console.error('❌ Threads 發布過程中發生錯誤：', err.message)
@@ -364,8 +400,9 @@ async function main() {
 
   // 1. 抓取節目資料
   const data = await fetchEpisodeData(date)
-  const xTweets = formatXTweets(data, options.maxStories)
-  const threadsPost = formatThreadsPost(data, options.maxStories)
+  const suppliedCopy = loadSocialCopy(options.copyFile, data)
+  const xTweets = suppliedCopy?.xTweets || formatXTweets(data, options.maxStories)
+  const threadsPosts = suppliedCopy?.threadsPosts || formatThreadsPosts(data, options.maxStories)
 
   // Dry-run 模式：僅在終端機預覽
   if (options.dryRun) {
@@ -379,8 +416,10 @@ async function main() {
     }
     if (options.target === 'threads' || options.target === 'both') {
       console.info('\n--- 🧵 Threads 貼文預覽 ---')
-      console.info(threadsPost)
-      console.info(`\n(總字數：${threadsPost.length} 字元)`)
+      threadsPosts.forEach((post, i) => {
+        console.info(`\n[貼文 ${i + 1}/${threadsPosts.length}] (${Array.from(post).length} 字元)`)
+        console.info(post)
+      })
     }
     console.info('\n✨ 預覽完成，未開啟瀏覽器或發送任何貼文。')
     return
@@ -394,7 +433,7 @@ async function main() {
       await postToX(context, xTweets)
     }
     if (options.target === 'threads' || options.target === 'both') {
-      await postToThreads(context, threadsPost)
+      await postToThreads(context, threadsPosts)
     }
     console.info('\n🎉 所有社群平台發布作業已順利完成！')
   }
@@ -407,7 +446,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err)
-  process.exit(1)
-})
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+  main().catch((err) => {
+    console.error('Fatal error:', err)
+    process.exit(1)
+  })
+}

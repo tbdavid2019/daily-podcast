@@ -377,7 +377,13 @@ pnpm social:post --target threads     # 只發布 Threads
 pnpm social:post --headless           # 背景無頭模式執行
 pnpm social:post --date 2026-09-30    # 指定補發特定日期集數
 pnpm social:post --max-stories 6      # 自訂串文子題數量
+# 使用已分析改寫的文案 JSON 預覽／發布
+node scripts/social-post.mjs --dry-run --copy-file /tmp/social-copy-2026-09-30.json
+node scripts/social-post.mjs --copy-file /tmp/social-copy-2026-09-30.json
 ```
+
+`--copy-file` 接受 `{ "date": "YYYY-MM-DD", "xTweets": ["..."], "threadsPosts": ["..."] }`。
+X 每則限制 270 字元，Threads 每則限制 500 字元；Threads 文案需包含當日節目連結。每日排程會先讀完整文章內容，再逐篇提煉重點與切入角度，產生這份暫存 JSON，預覽確認後才發布。文案應有具體鉤子、文章帶來的影響或讀者可帶走的觀點，避免只貼標題與截斷摘要。
 
 ### ⏰ Orca 自動化排程
 

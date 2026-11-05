@@ -2,6 +2,13 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-05] Threads 逐篇改寫、預覽與發稿修正
+
+- **社群文案改寫流程**：新增 `--copy-file`，可載入經文章分析後撰寫的 X 與 Threads 文案；發布前檢查日期、單篇字數與節目連結，dry-run 顯示實際準備發布的文字。
+- **Threads 串文發布**：每篇焦點文章獨立成則，修正 Threads 新版頁面上隱藏發文元素被誤選的問題，並改用 `threads.com` 發文頁。
+- **每日排程內容規則**：排程改為讀完整文章、挑選五篇並分別提煉文章證據、影響與讀者切角；每日貼文使用「今日」描述，整週回顧才使用「本週」。
+- **發文作業**：Threads 已重發 2026-11-02、2026-11-03、2026-11-05 三組改寫串文，各 6 則；2026-11-04 集數頁回傳 HTTP 404，依排程規則跳過。X 維持原狀。
+
 ## [2026-10-17] 支援 Apple Podcasts 等全生態逐字稿與網頁版同步字幕效果 (Podcasting 2.0 Transcripts & Web Synchronized Subtitles)
 
 - **Apple Podcasts 與 Podcasting 2.0 全生態逐字稿支援 (Podcasting 2.0 & Apple Podcasts Transcripts)**：
