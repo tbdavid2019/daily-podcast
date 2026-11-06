@@ -339,8 +339,13 @@ async function postToThreads(context, posts) {
     const scanRepliesWhileScrolling = async () => {
       for (let i = 0; i < posts.length; i += 1) {
         const body = await page.locator('body').textContent() || ''
+        const composerTexts = await page.locator('[role="textbox"][contenteditable="true"]').evaluateAll(
+          editors => editors.map(editor => editor.textContent || ''),
+        )
         posts.slice(1).forEach((post, index) => {
-          if (body.includes(post.slice(0, 48)))
+          const marker = post.slice(0, 48)
+          const isDraft = composerTexts.some(text => text.includes(marker))
+          if (body.includes(marker) && !isDraft)
             observedReplies.add(index + 1)
         })
         await page.mouse.wheel(0, 1000)
