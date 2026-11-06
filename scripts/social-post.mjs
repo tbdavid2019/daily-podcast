@@ -317,12 +317,13 @@ async function postToThreads(context, posts) {
   const page = await context.newPage()
 
   try {
-    await page.goto('https://www.threads.com/', { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForTimeout(2000)
+    const profileUrl = 'https://www.threads.com/@david888.chiang'
+    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.waitForTimeout(2500)
 
     // 檢查登入狀態（如果頁面出現登入按鈕且沒有發文輸入區）
-    const loginPrompt = page.locator('text=Log in').or(page.locator('text=登入')).first()
-    const isLoginVisible = await loginPrompt.isVisible().catch(() => false)
+    const loginPrompt = page.getByRole('button', { name: /^(log in|登入)$/i }).first()
+    const isLoginVisible = page.url().includes('/login') || await loginPrompt.isVisible().catch(() => false)
 
     if (isLoginVisible) {
       console.warn('⚠️ 尚未登入 Threads！請在開啟的 Chrome 視窗手動登入...')
@@ -333,38 +334,88 @@ async function postToThreads(context, posts) {
       await page.waitForTimeout(3000)
     }
 
-    console.info('📝 正在尋找 Threads 發文框...')
-    // 點擊「有什麼新鮮事？」或「新串文」按鈕展開輸入框
-    const newThreadBtn = page.locator('div[role="button"]:has-text("有什麼新鮮事？")')
-      .or(page.locator('div[role="button"]:has-text("新串文")'))
-      .or(page.locator('svg[aria-label="Create"]'))
-      .or(page.locator('svg[aria-label="建立"]'))
-      .filter({ visible: true })
-      .first()
+    const findPost = post => page.getByText(post.slice(0, 48), { exact: false }).first()
+    const observedReplies = new Set()
+    const scanRepliesWhileScrolling = async () => {
+      for (let i = 0; i < posts.length; i += 1) {
+        const body = await page.locator('body').textContent() || ''
+        posts.slice(1).forEach((post, index) => {
+          if (body.includes(post.slice(0, 48)))
+            observedReplies.add(index + 1)
+        })
+        await page.mouse.wheel(0, 1000)
+        await page.waitForTimeout(350)
+      }
+    }
+    const root = findPost(posts[0])
 
-    await newThreadBtn.waitFor({ state: 'visible', timeout: 15000 })
-    await newThreadBtn.click()
-    await page.waitForTimeout(1200)
-
-    const dialog = page.getByRole('dialog').last()
-    await dialog.waitFor({ state: 'visible', timeout: 15000 })
-    const editors = dialog.locator('div[role="textbox"][contenteditable="true"]')
-    await editors.first().fill(posts[0])
-
-    for (let i = 1; i < posts.length; i += 1) {
-      console.info(`   ➕ 新增 Threads 主題 [${i}/${posts.length - 1}]`)
-      const addButton = dialog.getByRole('button', { name: /新增到串文|Add to thread/i }).last()
-      await addButton.click({ timeout: 15000 })
-      const editor = editors.nth(i)
-      await editor.waitFor({ state: 'visible', timeout: 15000 })
-      await editor.fill(posts[i])
+    if (!(await root.count())) {
+      console.info('📝 發布 Threads 主貼...')
+      const newThreadBtn = page.locator('div[role="button"]:has-text("有什麼新鮮事？")')
+        .or(page.locator('div[role="button"]:has-text("新串文")'))
+        .or(page.locator('svg[aria-label="Create"]'))
+        .or(page.locator('svg[aria-label="建立"]'))
+        .filter({ visible: true })
+        .first()
+      await newThreadBtn.waitFor({ state: 'visible', timeout: 15000 })
+      await newThreadBtn.click()
+      const dialog = page.getByRole('dialog').last()
+      await dialog.waitFor({ state: 'visible', timeout: 15000 })
+      await dialog.locator('div[role="textbox"][contenteditable="true"]').first().fill(posts[0])
+      await dialog.getByRole('button', { name: /^(發佈|發布|Post)$/i }).last().click({ timeout: 10000 })
+      await dialog.waitFor({ state: 'hidden', timeout: 30000 })
+      await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      await findPost(posts[0]).waitFor({ state: 'visible', timeout: 20000 })
+    }
+    else {
+      console.info('ℹ️ 今日 Threads 主貼已存在，接續補齊尚未發布的回覆。')
     }
 
-    console.info(`🚀 發布 Threads 串文（共 ${posts.length} 則）...`)
-    const submitButton = dialog.getByRole('button', { name: /^(發佈|發布|Post)$/i }).last()
-    await submitButton.click({ timeout: 10000 })
-    await dialog.waitFor({ state: 'hidden', timeout: 30000 })
-    console.info('✅ Threads 發文視窗已關閉；請檢查個人檔案確認串文是否完整。')
+    const rootCard = findPost(posts[0]).locator('xpath=ancestor::div[6]')
+    const permalink = rootCard.locator('a[href^="/@david888.chiang/post/"]').first()
+    await permalink.waitFor({ state: 'attached', timeout: 15000 })
+    const threadUrl = new URL(await permalink.getAttribute('href'), 'https://www.threads.com').href
+    await page.goto(threadUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.locator('div[role="textbox"][contenteditable="true"]').last().waitFor({ state: 'visible', timeout: 15000 })
+    await page.waitForTimeout(2500)
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await scanRepliesWhileScrolling()
+
+    for (let i = 1; i < posts.length; i += 1) {
+      const marker = posts[i].slice(0, 48)
+      if (observedReplies.has(i)) {
+        console.info(`   ↪ Threads 回覆 [${i}/${posts.length - 1}] 已存在，略過重複發布。`)
+        continue
+      }
+
+      console.info(`   ↪ 發布 Threads 回覆 [${i}/${posts.length - 1}]...`)
+      const editor = page.locator('div[role="textbox"][contenteditable="true"]').last()
+      await editor.fill(posts[i])
+      await page.waitForTimeout(1000)
+      await page.locator('svg[aria-label="回覆"]').waitFor({ state: 'attached', timeout: 5000 })
+      const replyButton = page.locator('[role="button"]:has(svg[aria-label="回覆"])').last()
+      await replyButton.click({ force: true, timeout: 10000 })
+      await page.waitForFunction((marker) => {
+        const body = document.body.textContent || ''
+        const stillInComposer = [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')]
+          .some(editor => (editor.textContent || '').includes(marker))
+        return body.includes(marker) && !stillInComposer
+      }, marker, { timeout: 20000 })
+      observedReplies.add(i)
+      console.info(`   ✅ Threads 回覆 [${i}/${posts.length - 1}] 已在串文頁確認。`)
+    }
+
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await scanRepliesWhileScrolling()
+    const missing = []
+    for (let i = 1; i < posts.length; i += 1) {
+      if (!observedReplies.has(i))
+        missing.push(posts[i])
+    }
+    if (missing.length) {
+      throw new Error(`Threads 串文驗證失敗，仍缺少 ${missing.length} 則回覆`)
+    }
+    console.info(`✅ Threads 串文已逐篇確認：共 ${posts.length} 則。`)
   }
   catch (err) {
     console.error('❌ Threads 發布過程中發生錯誤：', err.message)
