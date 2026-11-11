@@ -2,6 +2,30 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-11] 升級 LLM 預設端點為 Magpie group/prime、重構決策評分模型 (Jev Tier 0) 與社群熱度訊號注入
+
+- **LLM 預設相容模型升級 (Default LLM Provider Migration)**：
+  - **廢除過期模型**：全面移除已廢止的 `gpt-4o-mini` 預設值。
+  - **接入 Magpie 路由**：在 `workflow/llm.ts` 與配置範本中，將預設 OpenAI Compatible 端點設定為 `https://llm.aiurl.tw/v1`，模型切換為 `group/prime`。
+  - **憑證安全防護**：移除非法明文金鑰，嚴格遵守平台安全規範，所有 API 金鑰由 Cloudflare Secrets / 本地環境變數注入。
+
+- **新聞策展評分模型架構優化 (Story Curation Decision System)**：
+  - **Jev 雲端決策升級為 Tier 0**：在 `workflow/decision.ts` 中將 TypeSafe Jev Cloud (`jev-latest`) 調整為最高優先級（Tier 0），原有 Clef Primary 與 Clef Backup 順延為 Tier 1 與 Tier 2 備援節點。
+  - **提示詞精準化與誤判消除**：
+    - 解決舊版提示詞缺乏標題對應導致評分失準之問題，在每題 instructions 中直接嵌入新聞來源標籤與文章標題（例如 `[technews] "台積電宣布2奈米..."`）。
+    - 擴充 High suitability 定義，明確將半導體/晶片硬體突破、關鍵資安事件 (CVE/零日漏洞) 納入優質題材，消弭台灣科技新聞被誤判為 PR 宣傳稿的現象。
+  - **社群熱度訊號與前言摘要注入**：
+    - 在 SystemOne `state` 與評分指令中注入社群點數（Hacker News Points、Reddit Upvotes、GitHub Stars）與留言數（Comments Count）。
+    - 擴大 RSS 前言截取長度至 200 字，讓短標題（如 Linus Torvalds 發言）能結合社群真實迴響精準判斷。
+
+- **雙審查機制與邊界強化 (Dual Code Review Hardening)**：
+  - 由 OpenCode 與 Codex 雙獨立代理人進行靜態審查與風險稽核。
+  - **評分防禦性解析**：修復 SystemOne 回傳 `NaN` 可能導致排序錯亂的缺陷，使用 `Number.isFinite` 並 clamp 於 `[0.0, 1.0]` 範圍。
+  - **超時參數透傳**：確保 `customTimeoutMs` 能正確對 `jev-cloud` Tier 0 生效。
+  - **GitHub Trending 熱度支援**：將 `story.stars` 正確映射至社群點數計算。
+  - **標題防禦性截斷**：加上 `.slice(0, 300)` 避免異常超長標題膨脹 Prompt Tokens。
+  - **測試套件擴充**：新增與更新單元測試，全套 101 個測試全數 PASS。
+
 ## [2026-11-06] Threads 串文逐篇發布與完整性核對
 
 - **Threads 逐篇發布**：改為先確認主貼，再逐篇回覆串文；已存在的內容會辨識並略過，避免重跑時重複發布。
