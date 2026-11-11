@@ -75,27 +75,7 @@ export function resolveDecisionTiers(env: DecisionEnv, customTimeoutMs?: number)
   const tiers: DecisionTier[] = []
   const clefTimeout = customTimeoutMs || parseDecisionTimeoutMs(env.CLEF_TIMEOUT_MS, DEFAULT_DECISION_TIMEOUT_MS)
 
-  // Tier 0: Clef Primary
-  const primaryUrl = normalizeSystemOneEndpoint(env.CLEF_BASE_URL || DEFAULT_CLEF_PRIMARY_URL)
-  tiers.push({
-    name: 'clef-primary',
-    url: primaryUrl,
-    model: 'clef-flash',
-    timeoutMs: clefTimeout,
-  })
-
-  // Tier 1: Clef Backup (CPU node, supports up to 50s timeout)
-  const backupUrl = normalizeSystemOneEndpoint(env.CLEF_FALLBACK_BASE_URL || DEFAULT_CLEF_BACKUP_URL)
-  if (backupUrl !== primaryUrl) {
-    tiers.push({
-      name: 'clef-backup',
-      url: backupUrl,
-      model: 'clef-flash',
-      timeoutMs: clefTimeout,
-    })
-  }
-
-  // Tier 2: TypeSafe Jev Cloud (requires JEV_API_KEY)
+  // Tier 0: TypeSafe Jev Cloud (Priority 0, requires JEV_API_KEY)
   const jevEnabled = env.JEV_ENABLED !== 'false'
   const jevKey = env.JEV_API_KEY?.trim()
   if (jevEnabled && jevKey) {
@@ -106,6 +86,26 @@ export function resolveDecisionTiers(env: DecisionEnv, customTimeoutMs?: number)
       model: env.JEV_MODEL?.trim() || 'jev-latest',
       apiKey: jevKey,
       timeoutMs: 30_000,
+    })
+  }
+
+  // Tier 1: Clef Primary
+  const primaryUrl = normalizeSystemOneEndpoint(env.CLEF_BASE_URL || DEFAULT_CLEF_PRIMARY_URL)
+  tiers.push({
+    name: 'clef-primary',
+    url: primaryUrl,
+    model: 'clef-flash',
+    timeoutMs: clefTimeout,
+  })
+
+  // Tier 2: Clef Backup (CPU node, supports up to 50s timeout)
+  const backupUrl = normalizeSystemOneEndpoint(env.CLEF_FALLBACK_BASE_URL || DEFAULT_CLEF_BACKUP_URL)
+  if (backupUrl !== primaryUrl) {
+    tiers.push({
+      name: 'clef-backup',
+      url: backupUrl,
+      model: 'clef-flash',
+      timeoutMs: clefTimeout,
     })
   }
 
@@ -293,9 +293,11 @@ export async function curateStoriesWithDecision(
       const safeId = (story.id || '').replace(/[^\w-]/g, '_').slice(0, 30)
       const qKey = `fit_${bIndex}_${idx}_${safeId}`
       questionKeys.push(qKey)
+      const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim()
+      const srcTag = story.source ? `[${story.source}] ` : ''
       questions[qKey] = {
         type: 'noul',
-        instructions: 'Rate the suitability of this topic for a premier daily hacker & tech news podcast (like Hacker News Daily). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, security research, and hacker tech culture. Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, beginner tutorials, corporate PR marketing, or general non-tech news.',
+        instructions: `Rate the suitability of story ${safeId}: ${srcTag}"${cleanTitle}" for a premier daily hacker & tech news podcast (like Hacker News Daily in Traditional Chinese). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, semiconductors & hardware architecture breakthroughs, critical cybersecurity incidents/CVEs, and hacker tech culture. Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, absolute beginner tutorials, pure marketing/commercial accessory promotions, or general non-tech news.`,
       }
     }
 

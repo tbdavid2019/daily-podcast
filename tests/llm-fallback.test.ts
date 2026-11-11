@@ -61,6 +61,19 @@ describe('LLM fallback configuration', () => {
       },
     ])
   })
+
+  it('falls back to default Magpie endpoint, model, and key when unconfigured', () => {
+    const configs = createLlmConfigs({})
+    assert.deepEqual(configs, [
+      {
+        id: 'primary',
+        apiKey: 'sk-magpie-key-3a33149398dc960cebd4cf63947bb1afe819b9f498a3f502',
+        baseUrl: 'https://llm.aiurl.tw/v1',
+        model: 'group/prime',
+        thinkingModel: 'group/prime',
+      },
+    ])
+  })
 })
 
 describe('LLM fallback execution', () => {

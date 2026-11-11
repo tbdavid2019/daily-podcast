@@ -47,7 +47,7 @@ test('resolveDecisionTiers configures primary, backup and Jev cloud tiers', () =
   assert.equal(tiersWithoutJev[1].url, 'https://clef.aiurl.tw/v1/systemone')
   assert.equal(tiersWithoutJev[1].timeoutMs, DEFAULT_DECISION_TIMEOUT_MS)
 
-  // Scenario 2: With JEV_API_KEY -> includes fallback 3 (jev-cloud)
+  // Scenario 2: With JEV_API_KEY -> jev-cloud is prioritized as Tier 0
   const tiersWithJev = resolveDecisionTiers({
     CLEF_BASE_URL: 'https://clef.create360.ai/v1',
     CLEF_FALLBACK_BASE_URL: 'https://clef.aiurl.tw/v1',
@@ -58,10 +58,12 @@ test('resolveDecisionTiers configures primary, backup and Jev cloud tiers', () =
     JEV_MODEL: 'jev-latest',
   })
   assert.equal(tiersWithJev.length, 3)
-  assert.equal(tiersWithJev[2].name, 'jev-cloud')
-  assert.equal(tiersWithJev[2].url, 'https://api.typesafe.ai/v1/systemone')
-  assert.equal(tiersWithJev[2].apiKey, 'test-jev-key-123')
-  assert.equal(tiersWithJev[2].model, 'jev-latest')
+  assert.equal(tiersWithJev[0].name, 'jev-cloud')
+  assert.equal(tiersWithJev[0].url, 'https://api.typesafe.ai/v1/systemone')
+  assert.equal(tiersWithJev[0].apiKey, 'test-jev-key-123')
+  assert.equal(tiersWithJev[0].model, 'jev-latest')
+  assert.equal(tiersWithJev[1].name, 'clef-primary')
+  assert.equal(tiersWithJev[2].name, 'clef-backup')
 })
 
 test('chunkArray partitions items into conservative batches', () => {
