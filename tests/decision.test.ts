@@ -64,6 +64,13 @@ test('resolveDecisionTiers configures primary, backup and Jev cloud tiers', () =
   assert.equal(tiersWithJev[0].model, 'jev-latest')
   assert.equal(tiersWithJev[1].name, 'clef-primary')
   assert.equal(tiersWithJev[2].name, 'clef-backup')
+
+  // Scenario 3: Custom timeout applies to Jev tier
+  const tiersWithJevCustom = resolveDecisionTiers({
+    JEV_ENABLED: 'true',
+    JEV_API_KEY: 'test-jev-key-123',
+  }, 15_000)
+  assert.equal(tiersWithJevCustom[0].timeoutMs, 15_000)
 })
 
 test('chunkArray partitions items into conservative batches', () => {
@@ -722,6 +729,42 @@ test('curateStoriesWithDecision includes points, comments, and description in st
     assert.ok(instructions.includes('520 points'))
     assert.ok(instructions.includes('230 comments'))
     assert.ok(instructions.includes('[hacker-news]'))
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('curateStoriesWithDecision maps stars for github-trending and sanitizes NaN scores', async () => {
+  const mockStories: Story[] = [
+    {
+      id: 'gh-trending',
+      title: 'Awesome Rust Tool',
+      source: 'github-trending',
+      stars: 1200,
+    },
+  ]
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(init?.body as string)
+    assert.equal(body.state[0].points, 1200)
+    assert.ok(body.questions[Object.keys(body.questions)[0]].instructions.includes('1200 points'))
+
+    return new Response(JSON.stringify({
+      model: 'clef-flash',
+      answers: {
+        // Return NaN to verify defensive fallback to 0.5
+        [Object.keys(body.questions)[0]]: { type: 'noul', noul: Number.NaN },
+      },
+      usage: { input_tokens: 100, output_tokens: 0 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  try {
+    const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' })
+    assert.equal(result.length, 1)
+    assert.equal(result[0].decisionScore, 0.5) // Sanitized from NaN
   }
   finally {
     globalThis.fetch = originalFetch

@@ -85,7 +85,7 @@ export function resolveDecisionTiers(env: DecisionEnv, customTimeoutMs?: number)
       url: jevUrl,
       model: env.JEV_MODEL?.trim() || 'jev-latest',
       apiKey: jevKey,
-      timeoutMs: 30_000,
+      timeoutMs: customTimeoutMs ? Math.min(30_000, customTimeoutMs) : 30_000,
     })
   }
 
@@ -281,30 +281,31 @@ export async function curateStoriesWithDecision(
     }
 
     const state = batch.map((story, idx) => {
-      const points = story.score ?? story.upvotes ?? story.votes
+      const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
       return {
         id: story.id || `idx-${idx}`,
         title: story.title || '',
         source: story.source || 'unknown',
-        ...(typeof points === 'number' && points > 0 ? { points } : {}),
-        ...(typeof story.comments === 'number' && story.comments >= 0 ? { comments: story.comments } : {}),
-        ...(story.description ? { description: story.description.slice(0, 200) } : {}),
+        ...(typeof points === 'number' && Number.isFinite(points) && points > 0 ? { points } : {}),
+        ...(typeof story.comments === 'number' && Number.isFinite(story.comments) && story.comments >= 0 ? { comments: story.comments } : {}),
+        ...(typeof story.description === 'string' && story.description ? { description: story.description.slice(0, 200) } : {}),
       }
     })
 
     const questionKeys: string[] = []
     const questions: Record<string, SystemOneNoulQuestion> = {}
     for (const [idx, story] of batch.entries()) {
-      const safeId = (story.id || '').replace(/[^\w-]/g, '_').slice(0, 30)
+      const rawId = story.id || `idx-${idx}`
+      const safeId = rawId.replace(/[^\w-]/g, '_').slice(0, 30)
       const qKey = `fit_${bIndex}_${idx}_${safeId}`
       questionKeys.push(qKey)
-      const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim()
+      const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim().slice(0, 300)
       const srcTag = story.source ? `[${story.source}] ` : ''
-      const points = story.score ?? story.upvotes ?? story.votes
+      const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
       const comments = story.comments
       const communitySignals = [
-        typeof points === 'number' && points > 0 ? `${points} points` : '',
-        typeof comments === 'number' && comments > 0 ? `${comments} comments` : '',
+        typeof points === 'number' && Number.isFinite(points) && points > 0 ? `${points} points` : '',
+        typeof comments === 'number' && Number.isFinite(comments) && comments > 0 ? `${comments} comments` : '',
       ].filter(Boolean).join(', ')
       const metaTag = communitySignals ? ` (${communitySignals})` : ''
 
@@ -324,7 +325,9 @@ export async function curateStoriesWithDecision(
       for (const [idx, story] of batch.entries()) {
         const qKey = questionKeys[idx]
         const answer = response.answers[qKey]
-        const score = typeof answer?.noul === 'number' ? answer.noul : 0.5
+        const score = (typeof answer?.noul === 'number' && Number.isFinite(answer.noul))
+          ? Math.max(0, Math.min(1, answer.noul))
+          : 0.5
         scoredStories.push({
           ...story,
           decisionScore: score,

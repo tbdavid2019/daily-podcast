@@ -3,7 +3,6 @@ import { createOpenAI } from '@ai-sdk/openai'
 
 export const DEFAULT_LLM_BASE_URL = 'https://llm.aiurl.tw/v1'
 export const DEFAULT_LLM_MODEL = 'group/prime'
-export const DEFAULT_LLM_API_KEY = 'sk-magpie-key-3a33149398dc960cebd4cf63947bb1afe819b9f498a3f502'
 export const MAX_LLM_FALLBACKS = 10
 
 export interface LlmConfig {
@@ -53,7 +52,7 @@ export function createLlmConfigs(env: object): LlmConfig[] {
     'LLM_PRIMARY_API_KEY',
     'OPENAI_API_SECRET',
     'OPENAI_API_KEY',
-  ]) || DEFAULT_LLM_API_KEY
+  ])
 
   if (primaryApiKey) {
     configs.push({
