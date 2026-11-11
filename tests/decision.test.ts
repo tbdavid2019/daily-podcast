@@ -683,5 +683,50 @@ test('curateStoriesWithDecision strictly bounds secondary stories to maxSecondar
   }
 })
 
+test('curateStoriesWithDecision includes points, comments, and description in state and instructions', async () => {
+  const mockStories: Story[] = [
+    {
+      id: 'hn-top',
+      title: 'Exciting AI Breakthrough',
+      source: 'hacker-news',
+      score: 520,
+      comments: 230,
+      description: 'Researchers release a new open-source weights model.',
+    },
+  ]
+
+  let capturedBody: any = null
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string)
+    return new Response(JSON.stringify({
+      model: 'clef-flash',
+      answers: {
+        [Object.keys(capturedBody.questions)[0]]: { type: 'noul', noul: 0.95 },
+      },
+      usage: { input_tokens: 100, output_tokens: 0 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  try {
+    const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' })
+    assert.equal(result.length, 1)
+    assert.ok(capturedBody)
+    const stateItem = capturedBody.state[0]
+    assert.equal(stateItem.points, 520)
+    assert.equal(stateItem.comments, 230)
+    assert.equal(stateItem.description, 'Researchers release a new open-source weights model.')
+
+    const qKey = Object.keys(capturedBody.questions)[0]
+    const instructions = capturedBody.questions[qKey].instructions
+    assert.ok(instructions.includes('520 points'))
+    assert.ok(instructions.includes('230 comments'))
+    assert.ok(instructions.includes('[hacker-news]'))
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 
 

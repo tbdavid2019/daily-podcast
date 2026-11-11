@@ -280,12 +280,17 @@ export async function curateStoriesWithDecision(
       await new Promise(resolve => setTimeout(resolve, options.delayBetweenBatchesMs))
     }
 
-    const state = batch.map((story, idx) => ({
-      id: story.id || `idx-${idx}`,
-      title: story.title || '',
-      source: story.source || 'unknown',
-      ...(story.description ? { description: story.description.slice(0, 150) } : {}),
-    }))
+    const state = batch.map((story, idx) => {
+      const points = story.score ?? story.upvotes ?? story.votes
+      return {
+        id: story.id || `idx-${idx}`,
+        title: story.title || '',
+        source: story.source || 'unknown',
+        ...(typeof points === 'number' && points > 0 ? { points } : {}),
+        ...(typeof story.comments === 'number' && story.comments >= 0 ? { comments: story.comments } : {}),
+        ...(story.description ? { description: story.description.slice(0, 200) } : {}),
+      }
+    })
 
     const questionKeys: string[] = []
     const questions: Record<string, SystemOneNoulQuestion> = {}
@@ -295,9 +300,17 @@ export async function curateStoriesWithDecision(
       questionKeys.push(qKey)
       const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim()
       const srcTag = story.source ? `[${story.source}] ` : ''
+      const points = story.score ?? story.upvotes ?? story.votes
+      const comments = story.comments
+      const communitySignals = [
+        typeof points === 'number' && points > 0 ? `${points} points` : '',
+        typeof comments === 'number' && comments > 0 ? `${comments} comments` : '',
+      ].filter(Boolean).join(', ')
+      const metaTag = communitySignals ? ` (${communitySignals})` : ''
+
       questions[qKey] = {
         type: 'noul',
-        instructions: `Rate the suitability of story ${safeId}: ${srcTag}"${cleanTitle}" for a premier daily hacker & tech news podcast (like Hacker News Daily in Traditional Chinese). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, semiconductors & hardware architecture breakthroughs, critical cybersecurity incidents/CVEs, and hacker tech culture. Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, absolute beginner tutorials, pure marketing/commercial accessory promotions, or general non-tech news.`,
+        instructions: `Rate the suitability of story ${safeId}: ${srcTag}"${cleanTitle}"${metaTag} for a premier daily hacker & tech news podcast (like Hacker News Daily in Traditional Chinese). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, semiconductors & hardware architecture breakthroughs, critical cybersecurity incidents/CVEs, and hacker tech culture (strong community discussion/points reinforce relevance). Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, absolute beginner tutorials, pure marketing/commercial accessory promotions, or general non-tech news regardless of points.`,
       }
     }
 
