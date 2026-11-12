@@ -42,11 +42,15 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
+function cleanModel(model: string): string {
+  return model.startsWith('models/') ? model.slice(7) : model
+}
+
 export function createLlmConfigs(env: object): LlmConfig[] {
   const primaryBaseUrl = normalizeBaseUrl(
     firstString(env, ['LLM_PRIMARY_BASE_URL', 'OPENAI_BASE_URL']) || DEFAULT_LLM_BASE_URL,
   )
-  const primaryModel = firstString(env, ['LLM_PRIMARY_MODEL', 'OPENAI_MODEL']) || DEFAULT_LLM_MODEL
+  const primaryModel = cleanModel(firstString(env, ['LLM_PRIMARY_MODEL', 'OPENAI_MODEL']) || DEFAULT_LLM_MODEL)
   const configs: LlmConfig[] = []
   const primaryApiKey = firstString(env, [
     'LLM_PRIMARY_API_KEY',
@@ -60,7 +64,7 @@ export function createLlmConfigs(env: object): LlmConfig[] {
       apiKey: primaryApiKey,
       baseUrl: primaryBaseUrl,
       model: primaryModel,
-      thinkingModel: firstString(env, ['LLM_PRIMARY_THINKING_MODEL', 'OPENAI_THINKING_MODEL']) || primaryModel,
+      thinkingModel: cleanModel(firstString(env, ['LLM_PRIMARY_THINKING_MODEL', 'OPENAI_THINKING_MODEL']) || primaryModel),
     })
   }
 
@@ -70,18 +74,18 @@ export function createLlmConfigs(env: object): LlmConfig[] {
       `${prefix}_API_KEY`,
       `${prefix}_API_SECRET`,
       `${prefix}_KEY`,
-    ])
+    ]) || (readString(env, `${prefix}_MODEL`) || readString(env, `${prefix}_BASE_URL`) ? primaryApiKey : '')
     if (!apiKey) {
       continue
     }
 
-    const model = readString(env, `${prefix}_MODEL`) || primaryModel
+    const model = cleanModel(readString(env, `${prefix}_MODEL`) || primaryModel)
     configs.push({
       id: `fallback-${index}`,
       apiKey,
       baseUrl: normalizeBaseUrl(readString(env, `${prefix}_BASE_URL`) || primaryBaseUrl),
       model,
-      thinkingModel: readString(env, `${prefix}_THINKING_MODEL`) || model,
+      thinkingModel: cleanModel(readString(env, `${prefix}_THINKING_MODEL`) || model),
     })
   }
 
@@ -103,7 +107,7 @@ export function createLlmClients(env: object): LlmClient[] {
 }
 
 export function getLlmModel(client: LlmClient, kind: 'standard' | 'thinking'): LanguageModel {
-  return client.provider(kind === 'thinking' ? client.thinkingModel : client.model)
+  return client.provider.chat(kind === 'thinking' ? client.thinkingModel : client.model)
 }
 
 function describeError(error: unknown): LlmAttemptError {

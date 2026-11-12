@@ -2,6 +2,17 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-12] 修復 LLM 相容端點 404 (AI_APICallError: Not Found) 與完善 Magpie group/prime 部署設定
+
+- **修復 LLM 請求端點路徑缺陷 (OpenAI Compatible Endpoint Fix)**：
+  - **根本原因排查**：在 Cloudflare Workflow 的 `summarize all stories` 步驟中，`@ai-sdk/openai` 預設將非 OpenAI 原生模型請求導向了實驗性的 `/responses` 端點，而在 Google、Magpie、Groq 等第三方相容服務上因不支援該路徑而回傳 HTTP 404 `Not Found`。
+  - **鎖定 Chat Completions 規範**：在 `workflow/llm.ts` 中將 `getLlmModel` 改用 `client.provider.chat(...)`，強制所有 LLM 調用皆走標準穩定的 `/chat/completions` 端點。
+  - **自動清理模型名稱**：新增 `cleanModel` 工具函數，自動濾除模型字串中多餘的 `models/` 前綴，相容各類代理網關。
+  - **Fallback 金鑰自動繼承**：在配置 fallback 降級通道時，若未單獨設定金鑰，自動繼承 `LLM_PRIMARY_API_KEY`，確保服務不中斷。
+- **完善 Magpie 生產環境配置 (Production Deployment Alignment)**：
+  - 同步更新生產環境配置與 Cloudflare Secrets，正式啟用 `https://llm.aiurl.tw/v1` 作為 Primary 端點（模型：`group/prime`），並配置 `group/lite` 與 `group/talk` 作為第一與第二備援。
+  - 通過全套測試驗證（`pnpm check` & `pnpm build` 全數 PASS）。
+
 ## [2026-11-11] 升級 LLM 預設端點為 Magpie group/prime、重構決策評分模型 (Jev Tier 0) 與社群熱度訊號注入
 
 - **LLM 預設相容模型升級 (Default LLM Provider Migration)**：
