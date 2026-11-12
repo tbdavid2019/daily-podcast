@@ -70,11 +70,17 @@ export function createLlmConfigs(env: object): LlmConfig[] {
 
   for (let index = 1; index <= MAX_LLM_FALLBACKS; index += 1) {
     const prefix = `LLM_FALLBACK_${index}`
+    const rawBaseUrl = readString(env, `${prefix}_BASE_URL`)
+    const baseUrl = normalizeBaseUrl(rawBaseUrl || primaryBaseUrl)
+    const isGoogleEndpoint = baseUrl.includes('generativelanguage.googleapis.com')
+    const fallbackGeminiKey = isGoogleEndpoint
+      ? firstString(env, ['GEMINI_API_KEY', 'GEMINI_DECISION_API_KEY', 'GEMINI_TTS_API_SECRET'])
+      : ''
     const apiKey = firstString(env, [
       `${prefix}_API_KEY`,
       `${prefix}_API_SECRET`,
       `${prefix}_KEY`,
-    ]) || (readString(env, `${prefix}_MODEL`) || readString(env, `${prefix}_BASE_URL`) ? primaryApiKey : '')
+    ]) || fallbackGeminiKey || (readString(env, `${prefix}_MODEL`) || rawBaseUrl ? primaryApiKey : '')
     if (!apiKey) {
       continue
     }
@@ -83,7 +89,7 @@ export function createLlmConfigs(env: object): LlmConfig[] {
     configs.push({
       id: `fallback-${index}`,
       apiKey,
-      baseUrl: normalizeBaseUrl(readString(env, `${prefix}_BASE_URL`) || primaryBaseUrl),
+      baseUrl,
       model,
       thinkingModel: cleanModel(readString(env, `${prefix}_THINKING_MODEL`) || model),
     })

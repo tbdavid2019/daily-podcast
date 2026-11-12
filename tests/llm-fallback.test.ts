@@ -74,6 +74,31 @@ describe('LLM fallback configuration', () => {
       },
     ])
   })
+
+  it('inherits Gemini key for Google endpoints when explicit fallback key is omitted', () => {
+    const configs = createLlmConfigs({
+      LLM_PRIMARY_API_KEY: 'primary-key',
+      LLM_FALLBACK_1_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      LLM_FALLBACK_1_MODEL: 'gemini-2.5-flash',
+      GEMINI_DECISION_API_KEY: 'inherited-gemini-key',
+    })
+    assert.deepEqual(configs, [
+      {
+        id: 'primary',
+        apiKey: 'primary-key',
+        baseUrl: 'https://llm.aiurl.tw/v1',
+        model: 'group/do',
+        thinkingModel: 'group/do',
+      },
+      {
+        id: 'fallback-1',
+        apiKey: 'inherited-gemini-key',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        model: 'gemini-2.5-flash',
+        thinkingModel: 'gemini-2.5-flash',
+      },
+    ])
+  })
 })
 
 describe('LLM fallback execution', () => {
