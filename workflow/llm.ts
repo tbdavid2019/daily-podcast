@@ -92,7 +92,11 @@ export function createLlmConfigs(env: object): LlmConfig[] {
   return configs
 }
 
+export const DEFAULT_LLM_TIMEOUT_MS = 240_000
+
 export function createLlmClients(env: object): LlmClient[] {
+  const timeoutMs = Number.parseInt(firstString(env, ['LLM_TIMEOUT_MS']) || '', 10) || DEFAULT_LLM_TIMEOUT_MS
+
   return createLlmConfigs(env).map(config => ({
     ...config,
     provider: createOpenAI({
@@ -101,6 +105,20 @@ export function createLlmClients(env: object): LlmClient[] {
       apiKey: config.apiKey,
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
+      },
+      fetch: async (url, init) => {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(new Error(`LLM call timed out after ${timeoutMs}ms`)), timeoutMs)
+        const signal = init?.signal
+          ? (typeof AbortSignal.any === 'function' ? AbortSignal.any([init.signal, controller.signal]) : controller.signal)
+          : controller.signal
+
+        try {
+          return await fetch(url, { ...init, signal })
+        }
+        finally {
+          clearTimeout(timeoutId)
+        }
       },
     }),
   }))

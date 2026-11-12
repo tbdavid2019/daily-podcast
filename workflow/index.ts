@@ -113,6 +113,52 @@ function createKvRequestLogger() {
   return { checkpoint, logKv }
 }
 
+async function repairDialogueJson({ text }: { text: string }): Promise<string> {
+  const codeBlockStart = text.indexOf('```')
+  if (codeBlockStart !== -1) {
+    const codeBlockEnd = text.indexOf('```', codeBlockStart + 3)
+    if (codeBlockEnd !== -1) {
+      let inner = text.slice(codeBlockStart + 3, codeBlockEnd).trim()
+      if (inner.startsWith('json')) {
+        inner = inner.slice(4).trim()
+      }
+      return inner
+    }
+  }
+
+  const lines = text.split('\n')
+  const dialogue: { speaker: string, text: string }[] = []
+  let title: string | undefined
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      continue
+    }
+
+    const colonIndex = line.search(/[：:]/)
+    if (colonIndex > 0) {
+      const prefix = line.slice(0, colonIndex).replace(/[*#]/g, '').trim()
+      const content = line.slice(colonIndex + 1).replace(/[*#]/g, '').trim()
+
+      if (/^(?:標題|title)$/i.test(prefix)) {
+        title = content
+      }
+      else if (prefix && content) {
+        dialogue.push({
+          speaker: prefix,
+          text: content,
+        })
+      }
+    }
+  }
+
+  if (dialogue.length > 0) {
+    return JSON.stringify({ title, dialogue })
+  }
+  return text
+}
+
 export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     console.info('trigged event: PodcastScriptWorkflow', event)
@@ -640,7 +686,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     kvRequestLogger.checkpoint('after summarize all stories')
 
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
-      const scriptMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
+      const scriptMaxTokens = Math.min(Math.min(maxTokens * 2, completionTokenLimit), 24576)
       const dialoguePlan = getDialoguePlan(allStoryContents.length)
       const targetMinChars = Math.min(6500, Math.max(4800, allStoryContents.length * 450))
       const targetMaxChars = Math.min(7800, Math.max(5800, allStoryContents.length * 520))
@@ -727,6 +773,7 @@ ${fullContentString}
         finishReason: unknown
       }>('generate podcast script', 'thinking', model => generateObject({
         model,
+        repairText: repairDialogueJson,
         system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
         prompt: enhancedPrompt,
         maxOutputTokens: scriptMaxTokens,
