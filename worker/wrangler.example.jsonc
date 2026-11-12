@@ -47,12 +47,12 @@
     // pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_1_API_KEY
     // Slots 1-10 are supported. Endpoint/model values inherit from primary when omitted.
     "LLM_FALLBACK_1_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
-    "LLM_FALLBACK_1_MODEL": "gemini-2.5-flash",
-    "LLM_FALLBACK_1_THINKING_MODEL": "gemini-2.5-flash",
+    "LLM_FALLBACK_1_MODEL": "gemini-3.8-flash",
+    "LLM_FALLBACK_1_THINKING_MODEL": "gemini-3.8-flash",
 
-    "LLM_FALLBACK_2_BASE_URL": "https://llm.aiurl.tw/v1",
-    "LLM_FALLBACK_2_MODEL": "group/lite",
-    "LLM_FALLBACK_2_THINKING_MODEL": "group/lite",
+    "LLM_FALLBACK_2_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "LLM_FALLBACK_2_MODEL": "gemini-2.5-flash",
+    "LLM_FALLBACK_2_THINKING_MODEL": "gemini-2.5-flash",
 
     // OpenAI TTS Settings
     // Store OPENAI_TTS_API_SECRET with `wrangler secret put --cwd worker OPENAI_TTS_API_SECRET`.

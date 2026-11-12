@@ -2,16 +2,17 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
-## [2026-11-12] 重構 LLM 多級備援架構：第一層 aiurl (group/do) + 第二層 Google Gemini 官方端點
+## [2026-11-12] 重構 LLM 多級備援架構：第一層 aiurl (group/do) + 第二層 Google Gemini 官方 (gemini-3.8-flash) 消除單點故障
 
 - **LLM 多層級容災架構重構 (Multi-Tier LLM Architecture)**：
+  - **徹底消除單點故障 (SPOF Elimination)**：全面移除備援層級中的 `aiurl` 網關，備援通道切換為完全獨立的 Google Gemini 官方直連端點。
   - **第一層 (Primary)**：`https://llm.aiurl.tw/v1`，模型 `group/do`（Magpie 映射為 `antigravity/gemini-3.8-flash`）。
-  - **第二層 (Fallback 1)**：Google Gemini 官方 OpenAI 相容端點 `https://generativelanguage.googleapis.com/v1beta/openai/`，模型 `gemini-2.5-flash`，具備秒級響應與極致穩定性。
-  - **第三層 (Fallback 2)**：`https://llm.aiurl.tw/v1`，模型 `group/lite`。
+  - **第二層 (Fallback 1)**：Google Gemini 官方 OpenAI 相容端點 `https://generativelanguage.googleapis.com/v1beta/openai/`，模型 `gemini-3.8-flash`。
+  - **第三層 (Fallback 2)**：Google Gemini 官方 OpenAI 相容端點 `https://generativelanguage.googleapis.com/v1beta/openai/`，模型 `gemini-2.5-flash`（做為 3.8 flash 遇到 Google 尖峰負載時的無縫降級）。
 - **Gemini 憑證自動感知與無縫繼承**：
   - 在 `workflow/llm.ts` 中新增 Google 端點感知機制，當 Fallback 端點為 Google Generative Language 時，若未單獨配置 `LLM_FALLBACK_X_API_KEY`，自動繼承環境中的 `GEMINI_API_KEY` / `GEMINI_DECISION_API_KEY` / `GEMINI_TTS_API_SECRET`。
   - Cloudflare Secrets 同步更新 `LLM_FALLBACK_1_API_KEY` 為 Google 官方 Gemini 金鑰。
-- **單元測試補齊**：新增 Google 端點金鑰自動繼承測試，全套測試全數 PASS。
+- **單元測試補齊**：新增跨 Provider 多層級容災與金鑰自動繼承測試，全套測試全數 PASS。
 
 ## [2026-11-12] 切換 LLM 主模型為 group/do (Gemini 3.8 Flash)
 
