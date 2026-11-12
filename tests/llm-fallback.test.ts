@@ -69,8 +69,8 @@ describe('LLM fallback configuration', () => {
         id: 'primary',
         apiKey: 'test-key',
         baseUrl: 'https://llm.aiurl.tw/v1',
-        model: 'group/prime',
-        thinkingModel: 'group/prime',
+        model: 'group/do',
+        thinkingModel: 'group/do',
       },
     ])
   })

@@ -40,8 +40,8 @@
     "LLM_PRIMARY_BASE_URL": "https://llm.aiurl.tw/v1",
     "OPENAI_MAX_COMPLETION_TOKENS": "1000000",
     "OPENAI_MAX_TOKENS": "1000000",
-    "LLM_PRIMARY_MODEL": "group/prime",
-    "LLM_PRIMARY_THINKING_MODEL": "group/prime",
+    "LLM_PRIMARY_MODEL": "group/do",
+    "LLM_PRIMARY_THINKING_MODEL": "group/do",
 
     // Optional LLM fallbacks. Store each API secret with Wrangler, for example:
     // pnpm exec wrangler secret put --cwd worker LLM_FALLBACK_1_API_KEY

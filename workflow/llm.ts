@@ -2,7 +2,7 @@ import type { LanguageModel } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 
 export const DEFAULT_LLM_BASE_URL = 'https://llm.aiurl.tw/v1'
-export const DEFAULT_LLM_MODEL = 'group/prime'
+export const DEFAULT_LLM_MODEL = 'group/do'
 export const MAX_LLM_FALLBACKS = 10
 
 export interface LlmConfig {

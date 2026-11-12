@@ -2,6 +2,12 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-12] 切換 LLM 主模型為 group/do (Gemini 3.8 Flash)
+
+- **LLM 主模型切換 (Primary LLM Switch)**：
+  - 將 Primary LLM 預設模型由 `group/prime` 切換為 `group/do`（在 Magpie 網關對應 `antigravity/gemini-3.8-flash`），具備高效推理與更靈敏的生成表現。
+  - 同步更新 `workflow/llm.ts`、`worker/wrangler.jsonc` 及生產環境範本配置。
+
 ## [2026-11-12] 接入 Google Gemini Decisions API 作為 Tier 0 決策評分模型
 
 - **整合 Google Gemini Decisions API (Tier 0 Decision Scoring)**：
