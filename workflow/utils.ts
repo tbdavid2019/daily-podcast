@@ -461,9 +461,12 @@ export async function getHackerNewsStory(
 
     console.info(`[Hacker News] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
 
+    const resolvedArticle = articleLength ? article : (story.description?.trim() || '')
+    const finalArticleLength = resolvedArticle.length
+
     return [
       story.title ? `<title>${story.title}</title>` : '',
-      articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxTokens * 4)}</article>` : '',
       commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
@@ -525,9 +528,12 @@ export async function getHackerNewsStory(
 
     console.info(`[Reddit] ✅ Successfully fetched content - Article: ${articleLength} chars, Comments: ${commentsLength} chars`)
 
+    const resolvedArticle = articleLength ? article : (story.description?.trim() || '')
+    const finalArticleLength = resolvedArticle.length
+
     return [
       story.title ? `<title>${story.title}</title>` : '',
-      articleLength ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxTokens * 4)}</article>` : '',
       commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }

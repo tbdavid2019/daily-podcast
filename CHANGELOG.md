@@ -2,6 +2,20 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-12] 全面清除弱智模型與防禦腔調：全面鎖定 Gemini 3.8 Flash，根除 GPT 式「不能、不代表、素材未提供」官僚說教腔
+
+- **徹底清理模型池 (Purge Subpar & Weak Models)**：
+  - **嚴格禁用弱智模型**：全面移除 `gemini-2.5`、`group/lite` (`gpt-6-luna`)、`group/talk` 等產生膚淺、說教與官僚套話的模型。
+  - **精準雙軌 Gemini 3.8 Flash**：
+    - **Primary**：`https://llm.aiurl.tw/v1`，模型 `group/do`（Magpie 映射為 `antigravity/gemini-3.8-flash`）。
+    - **Fallback 1**：Google 官方直連 `https://generativelanguage.googleapis.com/v1beta/openai/`，模型 `gemini-3.8-flash`。
+    - **移除 Fallback 2**：徹底消除二三流模型降級可能造成的品質坍塌與單點故障。
+- **播客提示詞全面排毒 (Anti-Slop & Prompt Hardening)**：
+  - **嚴禁幕後元語言 (Zero Meta-talk Leakage)**：新增鐵律，絕對禁止在對話中出現「素材」、「這則素材」、「這篇報導沒有說」、「原文沒有提供」、「作者未提及」等幕後工作詞，消滅把缺漏當口播台詞的現象。
+  - **根絕官僚防禦性說教腔 (No Bureaucratic Hedging)**：嚴禁連續使用「能...不代表能...」、「不能...」、「不行這樣」、「這不代表...」、「我們不能把...擴寫成那樣」等消極防禦的 GPT 式說教套話，恢復 11/11 般熱情、犀利、深入技術架構與工程權衡的播客水準。
+  - **重構主持人生動開場與互動**：Cordelia 與 David 明確開場引導，深入探討底層架構、運作原理與實務痛點，重塑有深度、有火花的專業對話。
+- **文章缺漏自動回填保護**：在 `workflow/utils.ts` 中，若原文刮取為空但有 RSS 描述，自動回填為 `<article>` 內容，避免模型因空文章而抱怨「素材未提供內容」。
+
 ## [2026-11-12] 重構 LLM 多級備援架構：第一層 aiurl (group/do) + 第二層 Google Gemini 官方 (gemini-3.8-flash) 消除單點故障
 
 - **LLM 多層級容災架構重構 (Multi-Tier LLM Architecture)**：

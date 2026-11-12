@@ -80,8 +80,6 @@ describe('LLM fallback configuration', () => {
       LLM_PRIMARY_API_KEY: 'primary-key',
       LLM_FALLBACK_1_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
       LLM_FALLBACK_1_MODEL: 'gemini-3.8-flash',
-      LLM_FALLBACK_2_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      LLM_FALLBACK_2_MODEL: 'gemini-2.5-flash',
       GEMINI_DECISION_API_KEY: 'inherited-gemini-key',
     })
     assert.deepEqual(configs, [
@@ -98,13 +96,6 @@ describe('LLM fallback configuration', () => {
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
         model: 'gemini-3.8-flash',
         thinkingModel: 'gemini-3.8-flash',
-      },
-      {
-        id: 'fallback-2',
-        apiKey: 'inherited-gemini-key',
-        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-        model: 'gemini-2.5-flash',
-        thinkingModel: 'gemini-2.5-flash',
       },
     ])
   })
