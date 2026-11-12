@@ -2,6 +2,18 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-12] 接入 Google Gemini Decisions API 作為 Tier 0 決策評分模型
+
+- **整合 Google Gemini Decisions API (Tier 0 Decision Scoring)**：
+  - **端點與模型適配**：新增原生 Google Gemini Decisions API 支援（`https://generativelanguage.googleapis.com/v1beta/decisions`，模型：`gemini-decision-1`），採用 `x-goog-api-key` 標頭認證與專用 `decisions-api` 酬載格式。
+  - **層級排序調整**：
+    - **Tier 0**：`gemini-decisions`（Google Decisions API，毫秒級極速回應、輸出 Tokens 為 0，校準信心度高）。
+    - **Tier 1**：`jev-cloud`（TypeSafe Jev Cloud）。
+    - **Tier 2**：`clef-primary`（Clef 主節點）。
+    - **Tier 3**：`clef-backup`（Clef 備援節點）。
+  - **相容與回傳標準化**：支援自動繼承現有 Gemini 金鑰（`GEMINI_DECISION_API_KEY`、`GEMINI_TTS_API_SECRET`、`GEMINI_API_KEY`），並將 Decisions API 回傳的 Token 使用量平滑標準化為 `input_tokens` / `output_tokens` 結構。
+  - **自動化測試與健全驗證**：新增 Google Gemini Decisions API 調用格式、認證標頭、序列化酬載與 fallback 順序之單元測試，全套測試全數 PASS。
+
 ## [2026-11-12] 修復 LLM 相容端點 404 (AI_APICallError: Not Found) 與完善 Magpie group/prime 部署設定
 
 - **修復 LLM 請求端點路徑缺陷 (OpenAI Compatible Endpoint Fix)**：

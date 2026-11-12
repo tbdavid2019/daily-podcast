@@ -87,7 +87,13 @@ interface Env extends CloudflareEnv {
   MIN_STORY_BUDGET?: string
   MAX_STORY_BUDGET?: string
   HN_MIN_POINTS?: string
-  // 決策模型設定 (Clef / Jev)
+  // 決策模型設定 (Google Decisions API / Clef / Jev)
+  GEMINI_DECISION_ENABLED?: string
+  GEMINI_DECISION_BASE_URL?: string
+  GEMINI_DECISION_API_KEY?: string
+  GEMINI_DECISION_MODEL?: string
+  GEMINI_TTS_API_SECRET?: string
+  GEMINI_API_KEY?: string
   CLEF_ENABLED?: string
   CLEF_BASE_URL?: string
   CLEF_FALLBACK_BASE_URL?: string

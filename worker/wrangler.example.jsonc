@@ -59,7 +59,11 @@
     "WORKER_ENV": "production",
     "HN_MIN_POINTS": "100", // Minimum points threshold for hnrss.org feed
 
-    // --- Decision Model (Clef / Jev) for Story Curation ---
+    // --- Decision Model (Google Decisions API / Jev / Clef) for Story Curation ---
+    "GEMINI_DECISION_ENABLED": "true",
+    "GEMINI_DECISION_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/decisions",
+    "GEMINI_DECISION_MODEL": "gemini-decision-1",
+    // Store GEMINI_DECISION_API_KEY with `pnpm exec wrangler secret put --cwd worker GEMINI_DECISION_API_KEY` (or reuses GEMINI_TTS_API_SECRET / GEMINI_API_KEY).
     "CLEF_ENABLED": "true",
     "CLEF_BASE_URL": "https://clef.create360.ai/v1",
     "CLEF_FALLBACK_BASE_URL": "https://clef.aiurl.tw/v1",

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  callSingleTier,
   chunkArray,
   curateStoriesWithDecision,
   DEFAULT_DECISION_TIMEOUT_MS,
+  DEFAULT_GEMINI_DECISION_MODEL,
+  DEFAULT_GEMINI_DECISION_URL,
   isObituaryOrMemorial,
   normalizeSystemOneEndpoint,
   parseDecisionTimeoutMs,
@@ -33,22 +36,23 @@ test('parseDecisionTimeoutMs honors 50-second default and custom values', () => 
   assert.equal(parseDecisionTimeoutMs('invalid'), 50_000)
 })
 
-test('resolveDecisionTiers configures primary, backup and Jev cloud tiers', () => {
-  // Scenario 1: No JEV_API_KEY -> only Clef primary and backup
-  const tiersWithoutJev = resolveDecisionTiers({
+test('resolveDecisionTiers configures Gemini Decisions, Jev cloud, and Clef tiers in order', () => {
+  // Scenario 1: No Gemini key, No JEV_API_KEY -> only Clef primary and backup
+  const tiersWithoutKeys = resolveDecisionTiers({
     CLEF_BASE_URL: 'https://clef.create360.ai/v1',
     CLEF_FALLBACK_BASE_URL: 'https://clef.aiurl.tw/v1',
   })
-  assert.equal(tiersWithoutJev.length, 2)
-  assert.equal(tiersWithoutJev[0].name, 'clef-primary')
-  assert.equal(tiersWithoutJev[0].url, 'https://clef.create360.ai/v1/systemone')
-  assert.equal(tiersWithoutJev[0].timeoutMs, DEFAULT_DECISION_TIMEOUT_MS)
-  assert.equal(tiersWithoutJev[1].name, 'clef-backup')
-  assert.equal(tiersWithoutJev[1].url, 'https://clef.aiurl.tw/v1/systemone')
-  assert.equal(tiersWithoutJev[1].timeoutMs, DEFAULT_DECISION_TIMEOUT_MS)
+  assert.equal(tiersWithoutKeys.length, 2)
+  assert.equal(tiersWithoutKeys[0].name, 'clef-primary')
+  assert.equal(tiersWithoutKeys[0].url, 'https://clef.create360.ai/v1/systemone')
+  assert.equal(tiersWithoutKeys[0].timeoutMs, DEFAULT_DECISION_TIMEOUT_MS)
+  assert.equal(tiersWithoutKeys[1].name, 'clef-backup')
+  assert.equal(tiersWithoutKeys[1].url, 'https://clef.aiurl.tw/v1/systemone')
+  assert.equal(tiersWithoutKeys[1].timeoutMs, DEFAULT_DECISION_TIMEOUT_MS)
 
-  // Scenario 2: With JEV_API_KEY -> jev-cloud is prioritized as Tier 0
-  const tiersWithJev = resolveDecisionTiers({
+  // Scenario 2: With Gemini key and JEV_API_KEY -> Gemini Decisions is Tier 0, Jev is Tier 1, then Clef
+  const tiersWithGeminiAndJev = resolveDecisionTiers({
+    GEMINI_DECISION_API_KEY: 'test-gemini-key',
     CLEF_BASE_URL: 'https://clef.create360.ai/v1',
     CLEF_FALLBACK_BASE_URL: 'https://clef.aiurl.tw/v1',
     CLEF_TIMEOUT_MS: '50000',
@@ -57,20 +61,92 @@ test('resolveDecisionTiers configures primary, backup and Jev cloud tiers', () =
     JEV_API_KEY: 'test-jev-key-123',
     JEV_MODEL: 'jev-latest',
   })
-  assert.equal(tiersWithJev.length, 3)
-  assert.equal(tiersWithJev[0].name, 'jev-cloud')
-  assert.equal(tiersWithJev[0].url, 'https://api.typesafe.ai/v1/systemone')
-  assert.equal(tiersWithJev[0].apiKey, 'test-jev-key-123')
-  assert.equal(tiersWithJev[0].model, 'jev-latest')
-  assert.equal(tiersWithJev[1].name, 'clef-primary')
-  assert.equal(tiersWithJev[2].name, 'clef-backup')
+  assert.equal(tiersWithGeminiAndJev.length, 4)
+  assert.equal(tiersWithGeminiAndJev[0].name, 'gemini-decisions')
+  assert.equal(tiersWithGeminiAndJev[0].url, DEFAULT_GEMINI_DECISION_URL)
+  assert.equal(tiersWithGeminiAndJev[0].model, DEFAULT_GEMINI_DECISION_MODEL)
+  assert.equal(tiersWithGeminiAndJev[0].apiKey, 'test-gemini-key')
+  assert.equal(tiersWithGeminiAndJev[0].authHeaderType, 'goog-api-key')
+  assert.equal(tiersWithGeminiAndJev[0].payloadFormat, 'decisions-api')
+  assert.equal(tiersWithGeminiAndJev[1].name, 'jev-cloud')
+  assert.equal(tiersWithGeminiAndJev[1].url, 'https://api.typesafe.ai/v1/systemone')
+  assert.equal(tiersWithGeminiAndJev[1].apiKey, 'test-jev-key-123')
+  assert.equal(tiersWithGeminiAndJev[1].model, 'jev-latest')
+  assert.equal(tiersWithGeminiAndJev[2].name, 'clef-primary')
+  assert.equal(tiersWithGeminiAndJev[3].name, 'clef-backup')
 
-  // Scenario 3: Custom timeout applies to Jev tier
-  const tiersWithJevCustom = resolveDecisionTiers({
-    JEV_ENABLED: 'true',
-    JEV_API_KEY: 'test-jev-key-123',
-  }, 15_000)
-  assert.equal(tiersWithJevCustom[0].timeoutMs, 15_000)
+  // Scenario 3: Inherits from GEMINI_TTS_API_SECRET when GEMINI_DECISION_API_KEY is not set
+  const tiersFromTtsKey = resolveDecisionTiers({
+    GEMINI_TTS_API_SECRET: 'test-tts-secret',
+    JEV_API_KEY: 'test-jev-key',
+  })
+  assert.equal(tiersFromTtsKey[0].name, 'gemini-decisions')
+  assert.equal(tiersFromTtsKey[0].apiKey, 'test-tts-secret')
+  assert.equal(tiersFromTtsKey[1].name, 'jev-cloud')
+
+  // Scenario 4: GEMINI_DECISION_ENABLED=false disables Gemini Decisions tier
+  const tiersWithGeminiDisabled = resolveDecisionTiers({
+    GEMINI_DECISION_ENABLED: 'false',
+    GEMINI_DECISION_API_KEY: 'test-gemini-key',
+    JEV_API_KEY: 'test-jev-key',
+  })
+  assert.equal(tiersWithGeminiDisabled[0].name, 'jev-cloud')
+  assert.equal(tiersWithGeminiDisabled.some(t => t.name === 'gemini-decisions'), false)
+})
+
+test('callSingleTier formats decisions-api payload with input and x-goog-api-key', async () => {
+  const originalFetch = globalThis.fetch
+  let capturedUrl = ''
+  let capturedHeaders: HeadersInit | undefined
+  let capturedBody: any
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input)
+    capturedHeaders = init?.headers
+    capturedBody = JSON.parse(init?.body as string)
+
+    return new Response(JSON.stringify({
+      answers: {
+        q1: { type: 'noul', noul: 0.95, confidence: 0.95 },
+      },
+      usage: {
+        total_input_tokens: 150,
+        total_output_tokens: 0,
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  try {
+    const tier = {
+      name: 'gemini-decisions',
+      url: DEFAULT_GEMINI_DECISION_URL,
+      model: DEFAULT_GEMINI_DECISION_MODEL,
+      apiKey: 'test-gemini-key',
+      authHeaderType: 'goog-api-key' as const,
+      payloadFormat: 'decisions-api' as const,
+      timeoutMs: 5000,
+    }
+
+    const response = await callSingleTier(tier, {
+      model: 'unused',
+      state: [{ id: '1', title: 'Story 1' }],
+      questions: {
+        q1: { type: 'noul', instructions: 'Is this tech news?' },
+      },
+    })
+
+    assert.equal(capturedUrl, DEFAULT_GEMINI_DECISION_URL)
+    assert.equal((capturedHeaders as Record<string, string>)['x-goog-api-key'], 'test-gemini-key')
+    assert.equal(capturedBody.model, 'gemini-decision-1')
+    assert.equal(typeof capturedBody.input, 'string')
+    assert.equal(capturedBody.state, undefined)
+    assert.equal(response.answers.q1.noul, 0.95)
+    assert.equal(response.usage?.input_tokens, 150)
+    assert.equal(response.usage?.output_tokens, 0)
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('chunkArray partitions items into conservative batches', () => {

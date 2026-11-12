@@ -27,6 +27,12 @@ export interface SystemOneResponse {
 }
 
 export interface DecisionEnv {
+  GEMINI_DECISION_ENABLED?: string
+  GEMINI_DECISION_BASE_URL?: string
+  GEMINI_DECISION_API_KEY?: string
+  GEMINI_DECISION_MODEL?: string
+  GEMINI_TTS_API_SECRET?: string
+  GEMINI_API_KEY?: string
   CLEF_ENABLED?: string
   CLEF_BASE_URL?: string
   CLEF_FALLBACK_BASE_URL?: string
@@ -37,6 +43,8 @@ export interface DecisionEnv {
   JEV_MODEL?: string
 }
 
+export const DEFAULT_GEMINI_DECISION_URL = 'https://generativelanguage.googleapis.com/v1beta/decisions'
+export const DEFAULT_GEMINI_DECISION_MODEL = 'gemini-decision-1'
 export const DEFAULT_CLEF_PRIMARY_URL = 'https://clef.create360.ai/v1/systemone'
 export const DEFAULT_CLEF_BACKUP_URL = 'https://clef.aiurl.tw/v1/systemone'
 export const DEFAULT_JEV_URL = 'https://api.typesafe.ai/v1/systemone'
@@ -68,6 +76,8 @@ export interface DecisionTier {
   url: string
   model: string
   apiKey?: string
+  authHeaderType?: 'bearer' | 'goog-api-key'
+  payloadFormat?: 'systemone' | 'decisions-api'
   timeoutMs: number
 }
 
@@ -75,7 +85,22 @@ export function resolveDecisionTiers(env: DecisionEnv, customTimeoutMs?: number)
   const tiers: DecisionTier[] = []
   const clefTimeout = customTimeoutMs || parseDecisionTimeoutMs(env.CLEF_TIMEOUT_MS, DEFAULT_DECISION_TIMEOUT_MS)
 
-  // Tier 0: TypeSafe Jev Cloud (Priority 0, requires JEV_API_KEY)
+  // Tier 0: Google Gemini Decisions API (Priority 0, requires Gemini key)
+  const geminiDecisionEnabled = env.GEMINI_DECISION_ENABLED !== 'false'
+  const geminiKey = env.GEMINI_DECISION_API_KEY?.trim() || env.GEMINI_TTS_API_SECRET?.trim() || env.GEMINI_API_KEY?.trim()
+  if (geminiDecisionEnabled && geminiKey) {
+    tiers.push({
+      name: 'gemini-decisions',
+      url: env.GEMINI_DECISION_BASE_URL?.trim() || DEFAULT_GEMINI_DECISION_URL,
+      model: env.GEMINI_DECISION_MODEL?.trim() || DEFAULT_GEMINI_DECISION_MODEL,
+      apiKey: geminiKey,
+      authHeaderType: 'goog-api-key',
+      payloadFormat: 'decisions-api',
+      timeoutMs: customTimeoutMs ? Math.min(25_000, customTimeoutMs) : 25_000,
+    })
+  }
+
+  // Tier 1: TypeSafe Jev Cloud (Priority 1, requires JEV_API_KEY)
   const jevEnabled = env.JEV_ENABLED !== 'false'
   const jevKey = env.JEV_API_KEY?.trim()
   if (jevEnabled && jevKey) {
@@ -85,26 +110,30 @@ export function resolveDecisionTiers(env: DecisionEnv, customTimeoutMs?: number)
       url: jevUrl,
       model: env.JEV_MODEL?.trim() || 'jev-latest',
       apiKey: jevKey,
+      authHeaderType: 'bearer',
+      payloadFormat: 'systemone',
       timeoutMs: customTimeoutMs ? Math.min(30_000, customTimeoutMs) : 30_000,
     })
   }
 
-  // Tier 1: Clef Primary
+  // Tier 2: Clef Primary
   const primaryUrl = normalizeSystemOneEndpoint(env.CLEF_BASE_URL || DEFAULT_CLEF_PRIMARY_URL)
   tiers.push({
     name: 'clef-primary',
     url: primaryUrl,
     model: 'clef-flash',
+    payloadFormat: 'systemone',
     timeoutMs: clefTimeout,
   })
 
-  // Tier 2: Clef Backup (CPU node, supports up to 50s timeout)
+  // Tier 3: Clef Backup (CPU node, supports up to 50s timeout)
   const backupUrl = normalizeSystemOneEndpoint(env.CLEF_FALLBACK_BASE_URL || DEFAULT_CLEF_BACKUP_URL)
   if (backupUrl !== primaryUrl) {
     tiers.push({
       name: 'clef-backup',
       url: backupUrl,
       model: 'clef-flash',
+      payloadFormat: 'systemone',
       timeoutMs: clefTimeout,
     })
   }
@@ -124,13 +153,24 @@ export async function callSingleTier(
     'Content-Type': 'application/json',
   }
   if (tier.apiKey) {
-    headers.Authorization = `Bearer ${tier.apiKey}`
+    if (tier.authHeaderType === 'goog-api-key') {
+      headers['x-goog-api-key'] = tier.apiKey
+    }
+    else {
+      headers.Authorization = `Bearer ${tier.apiKey}`
+    }
   }
 
-  const payload = {
-    ...request,
-    model: tier.model,
-  }
+  const payload = tier.payloadFormat === 'decisions-api'
+    ? {
+        model: tier.model,
+        input: typeof request.state === 'string' ? request.state : JSON.stringify(request.state),
+        questions: request.questions,
+      }
+    : {
+        ...request,
+        model: tier.model,
+      }
 
   try {
     const response = await fetch(tier.url, {
@@ -145,12 +185,23 @@ export async function callSingleTier(
       throw new Error(`HTTP ${response.status} ${response.statusText}: ${errText.slice(0, 300)}`)
     }
 
-    const data = await response.json() as SystemOneResponse
+    const data = await response.json() as Record<string, any>
     if (!data || typeof data !== 'object' || !data.answers) {
-      throw new Error('Invalid System One response format')
+      throw new Error('Invalid System One / Decisions API response format')
     }
 
-    return data
+    const normalizedUsage = data.usage
+      ? {
+          input_tokens: data.usage.total_input_tokens ?? data.usage.input_tokens ?? 0,
+          output_tokens: data.usage.total_output_tokens ?? data.usage.output_tokens ?? 0,
+        }
+      : undefined
+
+    return {
+      model: data.model || tier.model,
+      answers: data.answers,
+      usage: normalizedUsage,
+    }
   }
   finally {
     clearTimeout(timeoutId)
