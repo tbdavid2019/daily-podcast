@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -225,8 +226,12 @@ function loadSocialCopy(filePath, data) {
     throw new Error(`文案日期 ${copy.date || '(空白)'} 與節目日期 ${data.date} 不符`)
   validatePosts(copy.xTweets, 'X', 270)
   validatePosts(copy.threadsPosts, 'Threads', 500)
-  if (!copy.threadsPosts.some(post => post.includes(data.episodeUrl)))
-    throw new Error('Threads 文案必須包含今日節目連結')
+  for (const [platform, posts] of [['X', copy.xTweets], ['Threads', copy.threadsPosts]]) {
+    if (posts.length === 0 || posts.some(post => !post.includes(data.episodeUrl)))
+      throw new Error(`${platform} 每篇文案都必須包含今日節目連結`)
+    if (new Set(posts).size !== posts.length)
+      throw new Error(`${platform} 文案包含重複貼文`)
+  }
 
   return copy
 }
@@ -248,282 +253,171 @@ async function initBrowser(headless = false) {
   return context
 }
 
-// 發布到 X (Twitter)
-async function postToX(context, tweets, episodeUrl) {
-  console.info('\n🐦 準備發布到 X (Twitter)...')
-  const page = await context.newPage()
+// A durable intent is written before clicking Post. An interrupted submission must
+// be reconciled by a person; blindly retrying an ambiguous click can duplicate it.
+export async function publishIndependentPosts({ posts, journal, publish, verify }) {
+  if (journal.hasPending?.())
+    throw new Error('此平台有送出狀態待確認的貼文，請先核對現存貼文與紀錄')
+  for (let i = 0; i < posts.length; i += 1) {
+    const key = createHash('sha256').update(posts[i]).digest('hex')
+    const entry = journal.get(key)
+    if (entry?.status === 'pending')
+      throw new Error(`第 ${i + 1} 篇送出狀態待確認，請檢查平台後處理紀錄，避免重複發布`)
+    if (entry?.status === 'verified') {
+      await verify(posts[i], entry.url)
+      console.info(`↪ 已確認第 ${i + 1} 篇：${entry.url}`)
+      continue
+    }
+    journal.set(key, { status: 'pending' })
+    const url = await publish(posts[i], i)
+    journal.set(key, { status: 'pending', url })
+    await verify(posts[i], url)
+    journal.set(key, { status: 'verified', url })
+    console.info(`✅ 第 ${i + 1}/${posts.length} 篇已確認：${url}`)
+  }
+}
 
+function openJournal(date, platform) {
+  const file = path.join(SESSION_DIR, `social-publication-${date}-${platform}.json`)
+  const entries = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {}
+  return {
+    get: key => entries[key],
+    hasPending: () => Object.values(entries).some(entry => entry.status === 'pending'),
+    set(key, entry) {
+      entries[key] = entry
+      const temp = `${file}.tmp`
+      fs.writeFileSync(temp, JSON.stringify(entries, null, 2), { mode: 0o600 })
+      fs.renameSync(temp, file)
+    },
+  }
+}
+
+function markerFor(post) {
+  return Array.from(post).slice(0, 40).join('')
+}
+
+async function findProfilePost(page, profileUrl, post, platform) {
+  // The profile can lag behind the submission. Refresh, then stop safely if it
+  // remains unavailable; the pending journal prevents an automatic duplicate.
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.waitForTimeout(3000)
+    if (platform === 'x') {
+      const article = page.locator('article').filter({ hasText: markerFor(post) })
+      if (await article.count() > 1)
+        throw new Error('X 個人頁找到重複貼文，請人工核對')
+      if (await article.count() === 1) {
+        const href = await article.locator('a[href*="/status/"]').first().getAttribute('href')
+        if (href)
+          return new URL(href, profileUrl).href
+      }
+    }
+    else {
+      const match = page.getByText(markerFor(post), { exact: false }).first()
+      if (await match.count()) {
+        const card = match.locator('xpath=ancestor::div[6]')
+        const href = await card.locator('a[href*="/post/"]').first().getAttribute('href').catch(() => null)
+        if (href)
+          return new URL(href, profileUrl).href
+      }
+    }
+  }
+  throw new Error(`${platform} 個人頁尚未找到貼文；送出狀態待確認`)
+}
+
+export async function verifyPost(page, post, url, platform, episodeUrl) {
+  if (!url)
+    throw new Error(`${platform} 缺少貼文 permalink`)
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+  await page.getByText(markerFor(post), { exact: false }).first().waitFor({ state: 'visible', timeout: 30000 })
+  const textWithoutLink = post.replace(episodeUrl, '').replace(/\s+/g, ' ').trim()
+  // Rendered line breaks separate the post's paragraphs on Threads.
+  // eslint-disable-next-line unicorn/prefer-dom-node-text-content
+  const body = (await page.locator('body').evaluate(element => element.innerText)).replace(/\s+/g, ' ')
+  if (!body.includes(textWithoutLink))
+    throw new Error(`${platform} 貼文內容核對失敗：${url}`)
+  // Profile discovery establishes that this is a top-level post. Confirm that
+  // the post links to the requested episode, including X's t.co redirects.
+  const links = await page.locator('a[href]').evaluateAll(anchors => anchors.map(a => a.href))
+  let linkMatches = links.some((link) => {
+    const target = new URL(link)
+    return link === episodeUrl || (target.hostname === 'l.threads.com' && target.searchParams.get('u') === episodeUrl)
+  })
+  for (const link of links.filter(link => /^https:\/\/t\.co\//.test(link))) {
+    if (linkMatches)
+      break
+    try {
+      const response = await fetch(link, { signal: AbortSignal.timeout(10000) })
+      linkMatches = response.url.split(/[?#]/)[0] === episodeUrl
+    }
+    catch {
+      // A failed redirect is not evidence that the episode link is correct.
+    }
+  }
+  if (!linkMatches)
+    throw new Error(`${platform} 節目連結核對失敗：${url}`)
+}
+
+async function postToX(context, posts, episodeUrl, date) {
+  const page = await context.newPage()
   try {
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 30000 })
-
-    // 檢查登入狀態
-    const loginPrompt = page.getByRole('button', { name: /^(log in|登入)$/i }).first()
-    const isLoginVisible = page.url().includes('/login') || page.url().includes('/i/flow/login') || await loginPrompt.isVisible().catch(() => false)
-
-    if (isLoginVisible) {
-      console.warn('⚠️ 尚未登入 X (Twitter)！請在開啟的 Chrome 視窗手動登入...')
-      console.info('👉 登入成功後，腳本會自動繼續執行。')
-      await page.waitForURL(url => !url.href.includes('/login') && !url.href.includes('/i/flow/login'), { timeout: 180000 })
-      await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 30000 })
-    }
-
     const profileLink = page.locator('a[aria-label="Profile"][href], a[data-testid="AppTabBar_Profile_Link"][href]').first()
     await profileLink.waitFor({ state: 'visible', timeout: 30000 })
-    const profileHref = await profileLink.getAttribute('href')
-    if (!profileHref)
-      throw new Error('無法從 X 導覽列取得個人頁連結')
-    const profileUrl = new URL(profileHref, 'https://x.com').href
-
-    // X 的直接 compose URL 可能回傳 403；從首頁開啟可使用目前登入工作階段。
-    const composeLink = page.locator('a[aria-label="Post"][href="/compose/post"], a[data-testid="SideNav_NewTweet_Button"]').first()
-    await composeLink.waitFor({ state: 'visible', timeout: 30000 })
-    await composeLink.click()
-    const dialog = page.locator('[role="dialog"]').last()
-    await dialog.waitFor({ state: 'visible', timeout: 15000 })
-
-    console.info(`📝 正在填寫 X 串文（共 ${tweets.length} 則）...`)
-
-    // X 目前使用 textarea；舊版編輯器仍保留 contenteditable 相容路徑。
-    const editorSelector = await dialog.locator('textarea').count() > 0
-      ? 'textarea'
-      : 'div[role="textbox"][contenteditable="true"]'
-    const textareas = dialog.locator(editorSelector)
-
-    // 填寫第一則
-    const firstBox = textareas.nth(0)
-    await firstBox.waitFor({ state: 'visible', timeout: 15000 })
-    await firstBox.fill(tweets[0])
-    await page.waitForTimeout(500)
-
-    // 連續加入後續推文
-    for (let i = 1; i < tweets.length; i += 1) {
-      console.info(`   ➕ 新增串文 [${i + 1}/${tweets.length}]`)
-      const addButton = dialog.locator('button[data-testid="addButton"], button[aria-label="Add another post"]').last()
-      await addButton.waitFor({ state: 'visible', timeout: 10000 })
-      await addButton.click()
-
-      const nextBox = textareas.nth(i)
-      await nextBox.waitFor({ state: 'attached', timeout: 15000 })
-      await nextBox.fill(tweets[i])
-      await page.waitForTimeout(400)
-    }
-
-    const draftMatches = await textareas.evaluateAll((editors, expected) => editors.map((editor, index) => {
-      const value = 'value' in editor ? editor.value : editor.textContent
-      return value === expected[index]
-    }), tweets)
-    if (draftMatches.length !== tweets.length || draftMatches.some(matches => !matches))
-      throw new Error(`X 串文草稿核對失敗（${draftMatches.filter(Boolean).length}/${tweets.length} 則符合）`)
-
-    // 點擊全部發送按鈕
-    console.info('🚀 點擊「全部發送 (Post all)」按鈕...')
-    const postAllByTestId = dialog.locator('button[data-testid="tweetButton"]')
-    const postAllButton = await postAllByTestId.count()
-      ? postAllByTestId.last()
-      : dialog.getByRole('button', { name: 'Post all', exact: true }).last()
-    await postAllButton.waitFor({ state: 'visible', timeout: 10000 })
-    if (await postAllButton.isDisabled())
-      throw new Error('X 的「Post all」按鈕停用，串文尚未送出')
-    await postAllButton.click()
-
-    await dialog.waitFor({ state: 'hidden', timeout: 30000 })
-
-    // 以公開 Conversation 頁逐篇確認主文、文章貼文與收尾。
-    const rootMarker = Array.from(tweets[0]).slice(0, 48).join('')
-    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForFunction((marker) => {
-      return [...document.querySelectorAll('article')].some(article => article.textContent.includes(marker))
-    }, rootMarker, { timeout: 30000 })
-
-    const permalink = await page.evaluate((marker) => {
-      const article = [...document.querySelectorAll('article')].find(item => item.textContent.includes(marker))
-      const link = [...(article?.querySelectorAll('a[href*="/status/"]') || [])]
-        .find(anchor => new URL(anchor.href).pathname.includes('/status/'))
-      return link ? new URL(link.getAttribute('href'), location.origin).href : null
-    }, rootMarker)
-    if (!permalink)
-      throw new Error('X 主文已出現在個人頁，但找不到 Conversation permalink')
-
-    await page.goto(permalink, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForFunction(marker => document.body.textContent.includes(marker), rootMarker, { timeout: 20000 })
-    await page.waitForTimeout(1000)
-    await page.evaluate(() => window.scrollTo(0, 0))
-
-    const observedPosts = new Map()
-    const visibleIndexes = new Set()
-    for (let step = 0; step < 20; step += 1) {
-      const rows = await page.evaluate(({ posts, episodeUrl }) => {
-        const articles = [...document.querySelectorAll('article')]
-        return posts.map((post, index) => {
-          const marker = Array.from(post).slice(0, 48).join('')
-          const matches = articles.filter(article => article.textContent.includes(marker))
-          const article = matches[0]
-          if (!article)
-            return { index, visible: false, unique: matches.length === 1, textMatches: false, episodeLink: false }
-
-          const rect = article.getBoundingClientRect()
-          const visible = rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth
-          const postText = [...article.querySelectorAll('[lang]')].find(element => element.textContent.includes(marker))
-          const actualText = (postText?.textContent || '').replaceAll('\n', ' ').replaceAll('  ', ' ').trim()
-          const expectedText = post.replace(episodeUrl, '').replaceAll('\n', ' ').replaceAll('  ', ' ').trim()
-          const episodeLink = [...article.querySelectorAll('a[href]')].some((anchor) => {
-            return anchor.href.startsWith('https://t.co/') && anchor.textContent.includes('podcast.david888.com/post/')
-          })
-
-          return {
-            index,
-            visible,
-            unique: matches.length === 1,
-            textMatches: actualText.includes(expectedText),
-            episodeLink,
-          }
-        })
-      }, { posts: tweets, episodeUrl })
-
-      for (const row of rows) {
-        if (row.visible) {
-          visibleIndexes.add(row.index)
-          observedPosts.set(row.index, row)
-        }
-      }
-      if (visibleIndexes.size === tweets.length)
-        break
-
-      await page.mouse.wheel(0, 850)
-      await page.waitForTimeout(500)
-    }
-
-    const verified = [...observedPosts.values()].filter(row => row.unique && row.textMatches && row.episodeLink)
-    if (verified.length !== tweets.length) {
-      throw new Error(`X Conversation 逐篇驗證失敗：${verified.length}/${tweets.length} 則內容或節目連結符合，permalink=${permalink}`)
-    }
-
-    console.info(`✅ X Conversation 已逐篇確認：共 ${verified.length} 則。`)
-    console.info(`🔗 X 串文：https://x.com${new URL(permalink).pathname}`)
-  }
-  catch (err) {
-    console.error('❌ X 發布過程中發生錯誤：', err.message)
-    throw err
+    const href = await profileLink.getAttribute('href')
+    if (!href)
+      throw new Error('無法取得 X 個人頁，請檢查登入狀態')
+    const profileUrl = new URL(href, 'https://x.com').href
+    await publishIndependentPosts({
+      posts,
+      journal: openJournal(date, 'x'),
+      publish: async (post) => {
+        await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 30000 })
+        await page.locator('a[aria-label="Post"][href="/compose/post"], a[data-testid="SideNav_NewTweet_Button"]').first().click()
+        const dialog = page.locator('[role="dialog"]').last()
+        await dialog.waitFor({ state: 'visible', timeout: 15000 })
+        const editor = dialog.locator('textarea, div[role="textbox"][contenteditable="true"]').first()
+        await editor.fill(post)
+        const value = await editor.evaluate(element => 'value' in element ? element.value : element.textContent)
+        if (value !== post)
+          throw new Error('X 草稿內容核對失敗')
+        const button = dialog.locator('button[data-testid="tweetButton"]').last()
+        await button.waitFor({ state: 'visible', timeout: 15000 })
+        await button.click({ timeout: 10000 })
+        await dialog.waitFor({ state: 'hidden', timeout: 30000 })
+        return findProfilePost(page, profileUrl, post, 'x')
+      },
+      verify: (post, url) => verifyPost(page, post, url, 'X', episodeUrl),
+    })
   }
   finally {
     await page.close().catch(() => {})
   }
 }
 
-// 發布到 Meta Threads
-async function postToThreads(context, posts) {
-  console.info('\n🧵 準備發布到 Threads...')
+async function postToThreads(context, posts, episodeUrl, date) {
   const page = await context.newPage()
-
+  const profileUrl = 'https://www.threads.com/@david888.chiang'
   try {
-    const profileUrl = 'https://www.threads.com/@david888.chiang'
-    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForTimeout(2500)
-
-    // 檢查登入狀態（如果頁面出現登入按鈕且沒有發文輸入區）
-    const loginPrompt = page.getByRole('button', { name: /^(log in|登入)$/i }).first()
-    const isLoginVisible = page.url().includes('/login') || await loginPrompt.isVisible().catch(() => false)
-
-    if (isLoginVisible) {
-      console.warn('⚠️ 尚未登入 Threads！請在開啟的 Chrome 視窗手動登入...')
-      console.info('👉 登入成功後，腳本會自動繼續執行。')
-      await page.waitForTimeout(5000)
-      // 等待進入首頁動態
-      await page.waitForURL(url => !url.href.includes('/login'), { timeout: 180000 })
-      await page.waitForTimeout(3000)
-    }
-
-    const findPost = post => page.getByText(post.slice(0, 48), { exact: false }).first()
-    const observedReplies = new Set()
-    const scanRepliesWhileScrolling = async () => {
-      for (let i = 0; i < posts.length; i += 1) {
-        const body = await page.locator('body').textContent() || ''
-        const composerTexts = await page.locator('[role="textbox"][contenteditable="true"]').evaluateAll(
-          editors => editors.map(editor => editor.textContent || ''),
-        )
-        posts.slice(1).forEach((post, index) => {
-          const marker = post.slice(0, 48)
-          const isDraft = composerTexts.some(text => text.includes(marker))
-          if (body.includes(marker) && !isDraft)
-            observedReplies.add(index + 1)
-        })
-        await page.mouse.wheel(0, 1000)
-        await page.waitForTimeout(350)
-      }
-    }
-    const root = findPost(posts[0])
-
-    if (!(await root.count())) {
-      console.info('📝 發布 Threads 主貼...')
-      const newThreadBtn = page.locator('div[role="button"]:has-text("有什麼新鮮事？")')
-        .or(page.locator('div[role="button"]:has-text("新串文")'))
-        .or(page.locator('svg[aria-label="Create"]'))
-        .or(page.locator('svg[aria-label="建立"]'))
-        .filter({ visible: true })
-        .first()
-      await newThreadBtn.waitFor({ state: 'visible', timeout: 15000 })
-      await newThreadBtn.click()
-      const dialog = page.getByRole('dialog').last()
-      await dialog.waitFor({ state: 'visible', timeout: 15000 })
-      await dialog.locator('div[role="textbox"][contenteditable="true"]').first().fill(posts[0])
-      await dialog.getByRole('button', { name: /^(發佈|發布|Post)$/i }).last().click({ timeout: 10000 })
-      await dialog.waitFor({ state: 'hidden', timeout: 30000 })
-      await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-      await findPost(posts[0]).waitFor({ state: 'visible', timeout: 20000 })
-    }
-    else {
-      console.info('ℹ️ 今日 Threads 主貼已存在，接續補齊尚未發布的回覆。')
-    }
-
-    const rootCard = findPost(posts[0]).locator('xpath=ancestor::div[6]')
-    const permalink = rootCard.locator('a[href^="/@david888.chiang/post/"]').first()
-    await permalink.waitFor({ state: 'attached', timeout: 15000 })
-    const threadUrl = new URL(await permalink.getAttribute('href'), 'https://www.threads.com').href
-    await page.goto(threadUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.locator('div[role="textbox"][contenteditable="true"]').last().waitFor({ state: 'visible', timeout: 15000 })
-    await page.waitForTimeout(2500)
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await scanRepliesWhileScrolling()
-
-    for (let i = 1; i < posts.length; i += 1) {
-      const marker = posts[i].slice(0, 48)
-      if (observedReplies.has(i)) {
-        console.info(`   ↪ Threads 回覆 [${i}/${posts.length - 1}] 已存在，略過重複發布。`)
-        continue
-      }
-
-      console.info(`   ↪ 發布 Threads 回覆 [${i}/${posts.length - 1}]...`)
-      const editor = page.locator('div[role="textbox"][contenteditable="true"]').last()
-      await editor.fill(posts[i])
-      await page.waitForTimeout(1000)
-      await page.locator('svg[aria-label="回覆"]').waitFor({ state: 'attached', timeout: 5000 })
-      const replyButton = page.locator('[role="button"]:has(svg[aria-label="回覆"])').last()
-      await replyButton.click({ force: true, timeout: 10000 })
-      await page.waitForFunction((marker) => {
-        const body = document.body.textContent || ''
-        const stillInComposer = [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')]
-          .some(editor => (editor.textContent || '').includes(marker))
-        return body.includes(marker) && !stillInComposer
-      }, marker, { timeout: 20000 })
-      observedReplies.add(i)
-      console.info(`   ✅ Threads 回覆 [${i}/${posts.length - 1}] 已在串文頁確認。`)
-    }
-
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await scanRepliesWhileScrolling()
-    const missing = []
-    for (let i = 1; i < posts.length; i += 1) {
-      if (!observedReplies.has(i))
-        missing.push(posts[i])
-    }
-    if (missing.length) {
-      throw new Error(`Threads 串文驗證失敗，仍缺少 ${missing.length} 則回覆`)
-    }
-    console.info(`✅ Threads 串文已逐篇確認：共 ${posts.length} 則。`)
-  }
-  catch (err) {
-    console.error('❌ Threads 發布過程中發生錯誤：', err.message)
-    throw err
+    await publishIndependentPosts({
+      posts,
+      journal: openJournal(date, 'threads'),
+      publish: async (post) => {
+        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        const create = page.locator('div[role="button"]:has-text("有什麼新鮮事？"), div[role="button"]:has-text("新串文"), svg[aria-label="Create"], svg[aria-label="建立"]').filter({ visible: true }).first()
+        await create.click({ timeout: 15000 })
+        const dialog = page.getByRole('dialog').last()
+        await dialog.waitFor({ state: 'visible', timeout: 15000 })
+        const editor = dialog.locator('div[role="textbox"][contenteditable="true"]').first()
+        await editor.fill(post)
+        if (await editor.textContent() !== post)
+          throw new Error('Threads 草稿內容核對失敗')
+        await dialog.getByRole('button', { name: /^(發佈|發布|Post)$/i }).last().click({ timeout: 10000 })
+        await dialog.waitFor({ state: 'hidden', timeout: 30000 })
+        return findProfilePost(page, profileUrl, post, 'threads')
+      },
+      verify: (post, url) => verifyPost(page, post, url, 'Threads', episodeUrl),
+    })
   }
   finally {
     await page.close().catch(() => {})
@@ -563,9 +457,9 @@ async function main() {
   if (options.dryRun) {
     console.info('🔍 [Dry-Run 模式] 預覽即將發布的內容：\n')
     if (options.target === 'x' || options.target === 'both') {
-      console.info('--- 🐦 X (Twitter) 串文預覽 ---')
+      console.info('--- 🐦 X (Twitter) 獨立貼文預覽 ---')
       xTweets.forEach((t, i) => {
-        console.info(`\n[推文 ${i + 1}/${xTweets.length}] (${t.length} 字元)`)
+        console.info(`\n[推文 ${i + 1}/${xTweets.length}] (${Array.from(t).length} 字元)`)
         console.info(t)
       })
     }
@@ -580,15 +474,18 @@ async function main() {
     return
   }
 
+  if (!suppliedCopy)
+    throw new Error('正式發布必須使用 --copy-file 提供已審核文案')
+
   // 2. 啟動瀏覽器並發布
   const context = await initBrowser(options.headless)
 
   try {
     if (options.target === 'x' || options.target === 'both') {
-      await postToX(context, xTweets, data.episodeUrl)
+      await postToX(context, xTweets, data.episodeUrl, date)
     }
     if (options.target === 'threads' || options.target === 'both') {
-      await postToThreads(context, threadsPosts)
+      await postToThreads(context, threadsPosts, data.episodeUrl, date)
     }
     console.info('\n🎉 所有社群平台發布作業已順利完成！')
   }

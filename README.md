@@ -368,22 +368,24 @@ pnpm social:login
 # 2. 終端機預覽今日文案（不開啟瀏覽器、不發布）
 pnpm social:dry-run
 
-# 3. 正式發布（自動抓取當日節目發布到 X 與 Threads）
-pnpm social:post
+# 3. 先撰寫並審核 copy-file，再逐篇發布為獨立貼文
+node scripts/social-post.mjs --copy-file /tmp/social-copy-2026-09-30.json
 
 # 指定發布平台或參數
-pnpm social:post --target x           # 只發布 X 串文
+pnpm social:post --target x           # 只發布 X 獨立貼文
 pnpm social:post --target threads     # 只發布 Threads
 pnpm social:post --headless           # 背景無頭模式執行
 pnpm social:post --date 2026-09-30    # 指定補發特定日期集數
-pnpm social:post --max-stories 6      # 自訂串文子題數量
+pnpm social:post --max-stories 6      # 自訂預覽子題數量
 # 使用已分析改寫的文案 JSON 預覽／發布
 node scripts/social-post.mjs --dry-run --copy-file /tmp/social-copy-2026-09-30.json
 node scripts/social-post.mjs --copy-file /tmp/social-copy-2026-09-30.json
 ```
 
 `--copy-file` 接受 `{ "date": "YYYY-MM-DD", "xTweets": ["..."], "threadsPosts": ["..."] }`。
-X 每則限制 270 字元，Threads 每則限制 500 字元；Threads 文案需包含當日節目連結。每日排程會先讀完整文章內容，再逐篇提煉重點與切入角度，產生這份暫存 JSON，預覽確認後才發布。文案應有具體鉤子、文章帶來的影響或讀者可帶走的觀點，避免只貼標題與截斷摘要。
+X 每則限制 270 字元，Threads 每則限制 500 字元；所有貼文均需包含當日節目連結。正式發布必須提供 copy-file。X 與 Threads 每篇均以獨立主貼發布，並逐篇開啟 permalink 核對。每日排程會先讀完整文章內容，再逐篇提煉重點與切入角度，產生這份暫存 JSON，預覽確認後才發布。文案應有具體鉤子、文章帶來的影響或讀者可帶走的觀點，避免只貼標題與截斷摘要。
+
+腳本在 `.social-session/social-publication-日期-平台.json` 保存每篇發布狀態。若送出或驗證逾時，狀態會保留為 `pending`，重跑會停止以避免重複發文。先到平台核對貼文：確認已發布且內容、連結及獨立主貼狀態正確時，將該筆狀態改成 `verified` 並填入 permalink；確認未發布時才移除該筆紀錄，再重跑該平台。保留其餘紀錄。
 
 ### ⏰ Orca 自動化排程
 

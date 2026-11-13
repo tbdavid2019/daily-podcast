@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm lint && pnpm typecheck && pnpm test:workflow && pnpm test:web-cache && pnpm test:webmcp && pnpm test:pwa && pnpm test:build-gate",
+    "check": "pnpm lint && pnpm typecheck && pnpm test:workflow && pnpm test:web-cache && pnpm test:webmcp && pnpm test:pwa && pnpm test:build-gate && node --test tests/social-post.test.mjs",
     "postinstall": "npm run -s cf-typegen",
     "dev:worker": "wrangler dev --cwd worker --persist-to ../.wrangler/state",
     "deploy:worker": "wrangler deploy --cwd worker",
