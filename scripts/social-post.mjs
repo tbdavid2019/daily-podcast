@@ -381,7 +381,7 @@ async function postToX(context, posts, episodeUrl, date) {
         const value = await editor.evaluate(element => 'value' in element ? element.value : element.textContent)
         if (value !== post)
           throw new Error('X 草稿內容核對失敗')
-        const button = dialog.locator('button[data-testid="tweetButton"]').last()
+        const button = dialog.getByRole('button', { name: /^(Post|發佈|發布)$/i }).last()
         await button.waitFor({ state: 'visible', timeout: 15000 })
         await button.click({ timeout: 10000 })
         await dialog.waitFor({ state: 'hidden', timeout: 30000 })
