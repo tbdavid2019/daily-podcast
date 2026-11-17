@@ -117,7 +117,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
       }
-      copyTimeoutRef.current = setTimeout(() => setHasCopied(false), 2000)
+      copyTimeoutRef.current = setTimeout(setHasCopied, 2000, false)
     }
     catch {
       // ignore

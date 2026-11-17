@@ -4,6 +4,7 @@ export default antfu({
   formatters: true,
   react: true,
   nextjs: true,
+  pnpm: false,
   ignores: [
     'components/ui/**/*',
     'components/magicui/**/*',
@@ -17,5 +18,6 @@ export default antfu({
   ],
   rules: {
     'no-console': ['error', { allow: ['info', 'table', 'warn', 'error'] }],
+    'antfu/reasonable-newline': 'off',
   },
 })

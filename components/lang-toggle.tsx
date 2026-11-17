@@ -3,6 +3,7 @@
 import { Globe } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getAlternateLangPath(pathname: string): { isEn: boolean, nextPath: string } {
   if (pathname === '/en' || pathname === '/en/') {
     return { isEn: true, nextPath: '/' }

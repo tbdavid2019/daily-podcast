@@ -17,6 +17,7 @@ import {
 
 export type { AudioEpisode }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const PLAYBACK_RATES = [0.5, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0] as const
 export type PlaybackRate = typeof PLAYBACK_RATES[number]
 
@@ -529,6 +530,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAudioPlayer() {
   const context = use(AudioPlayerContext)
   if (!context) {
@@ -537,6 +539,7 @@ export function useAudioPlayer() {
   return context
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAudioTime() {
   return use(AudioTimeContext)
 }

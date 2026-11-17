@@ -230,7 +230,7 @@ export function GlobalBottomPlayer() {
     }
     catch {
       setShareFeedback(dict.shareError)
-      setTimeout(() => setShareFeedback(''), 2500)
+      setTimeout(setShareFeedback, 2500, '')
     }
   }
 

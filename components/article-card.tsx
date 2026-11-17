@@ -248,7 +248,7 @@ export function ArticleCard({
     }
     catch {
       setShareMessage(dict.shareError)
-      setTimeout(() => setShareMessage(''), 2500)
+      setTimeout(setShareMessage, 2500, '')
     }
   }
 
