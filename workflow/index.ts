@@ -2,7 +2,7 @@ import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { StoryContentCheckpoint, TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
 import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
-import { generateText } from 'ai'
+import { generateText, streamText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle, podcastTitleEn } from '@/config'
 import {
@@ -725,18 +725,33 @@ ${fullContentString}
 `
 
       const { script, usage, finishReason } = await runLlm('generate podcast script', 'thinking', async (model) => {
-        const result = await generateText({
+        let streamError: unknown
+        const result = streamText({
           model,
           system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
           prompt: enhancedPrompt,
           maxOutputTokens: scriptMaxTokens,
           maxRetries: AI_SDK_MAX_RETRIES,
+          onError: ({ error }) => {
+            streamError = error
+          },
         })
-        const parsedScript = await parsePodcastScriptResponse(result.text, isEnglish)
+        let text: string
+        try {
+          text = await result.text
+        }
+        catch (error) {
+          throw streamError ?? error
+        }
+        if (streamError) {
+          throw streamError
+        }
+        const [usageData, reason] = await Promise.all([result.usage, result.finishReason])
+        const parsedScript = await parsePodcastScriptResponse(text, isEnglish)
         return {
           script: parsedScript,
-          usage: result.usage,
-          finishReason: result.finishReason,
+          usage: usageData,
+          finishReason: reason,
         }
       })
 

@@ -173,25 +173,24 @@ function describeError(error: unknown): LlmAttemptError {
   return description
 }
 
-function enrichEmptyErrorMessage(error: unknown, config: LlmConfig, description: LlmAttemptError): void {
-  if (!(error instanceof Error) || error.message.trim()) {
-    return
-  }
-
+function formatAttemptSummary(config: LlmConfig, description: LlmAttemptError): string {
   const parts = [`[${config.id}:${config.model}]`]
   if (description.statusCode !== undefined) {
     parts.push(`HTTP ${description.statusCode}`)
   }
-  if (description.causeMessage) {
+  if (description.message) {
+    parts.push(description.message)
+  }
+  else if (description.causeMessage) {
     parts.push(description.causeMessage)
   }
   else if (description.responseBodyPreview) {
     parts.push(description.responseBodyPreview)
   }
   else {
-    parts.push('empty error message from provider')
+    parts.push(description.name || 'unknown error')
   }
-  error.message = parts.join(' ')
+  return parts.join(' ')
 }
 
 export async function runWithLlmFallback<T, C extends LlmConfig>(
@@ -204,6 +203,7 @@ export async function runWithLlmFallback<T, C extends LlmConfig>(
   }
 
   let lastError: unknown
+  const attemptSummaries: string[] = []
   for (const config of configs) {
     try {
       const result = await run(config)
@@ -218,7 +218,7 @@ export async function runWithLlmFallback<T, C extends LlmConfig>(
     }
     catch (error) {
       const description = describeError(error)
-      enrichEmptyErrorMessage(error, config, description)
+      attemptSummaries.push(formatAttemptSummary(config, description))
       lastError = error
       console.warn('LLM provider attempt failed', {
         operation,
@@ -227,6 +227,15 @@ export async function runWithLlmFallback<T, C extends LlmConfig>(
         error: description,
       })
     }
+  }
+
+  // Construct a fresh Error when the provider error has an empty message so
+  // Cloudflare Workflows (which serializes initial error state) never shows <none>.
+  if (!(lastError instanceof Error) || !lastError.message.trim()) {
+    const errorName = lastError instanceof Error && lastError.name ? lastError.name : 'LLMError'
+    const summaryError = new Error(`${errorName}: ${attemptSummaries.join(' | ')}`, { cause: lastError })
+    summaryError.name = errorName
+    throw summaryError
   }
 
   throw lastError

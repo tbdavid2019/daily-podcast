@@ -143,26 +143,33 @@ describe('LLM fallback execution', () => {
     )
   })
 
-  it('enriches empty error messages with provider, statusCode, and body preview while preserving identity', async () => {
+  it('wraps empty error messages in a fresh Error with all provider attempt summaries', async () => {
     const configs = createLlmConfigs({
       LLM_PRIMARY_API_KEY: 'primary-key',
       LLM_PRIMARY_MODEL: 'group/do',
+      LLM_FALLBACK_1_API_KEY: 'fallback-key',
+      LLM_FALLBACK_1_MODEL: 'gemini-3.8-flash',
     })
-    const emptyMessageError = Object.assign(new Error(''), {
+    const primaryError = Object.assign(new Error(''), {
       name: 'AI_APICallError',
       statusCode: 524,
       responseBody: '<html>524 A Timeout Occurred</html>',
     })
+    const fallbackError = Object.assign(new Error(''), {
+      name: 'AI_APICallError',
+      statusCode: 503,
+      responseBody: '<html>503 Service Unavailable</html>',
+    })
 
     await assert.rejects(
-      runWithLlmFallback(configs, 'generate podcast script', async () => {
-        throw emptyMessageError
+      runWithLlmFallback(configs, 'generate podcast script', async (config) => {
+        throw config.id === 'primary' ? primaryError : fallbackError
       }),
       (error: Error) => {
-        assert.equal(error, emptyMessageError)
-        assert.match(error.message, /\[primary:group\/do\]/)
-        assert.match(error.message, /HTTP 524/)
-        assert.match(error.message, /524 A Timeout Occurred/)
+        assert.equal(error.name, 'AI_APICallError')
+        assert.equal(error.cause, fallbackError)
+        assert.match(error.message, /\[primary:group\/do\] HTTP 524/)
+        assert.match(error.message, /\[fallback-1:gemini-3\.8-flash\] HTTP 503/)
         return true
       },
     )
