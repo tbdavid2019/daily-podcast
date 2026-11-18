@@ -85,7 +85,7 @@ export const podcastScriptPrompt = `
 
 【收尾與輸出】
 - 最後由 Cordelia 簡短收束並說「明天同一時間再見」，不要加入訂閱平台或其他固定宣傳詞。
-- 只輸出符合 schema 的 JSON，不使用 Markdown。
+- 只輸出合法的 JSON 物件，不使用 Markdown 程式碼區塊包裹，格式為：{"title": "[日期] [亮點1]、[亮點2]", "dialogue": [{"speaker": "女", "text": "..."}, {"speaker": "男", "text": "..."}]}
 - title 格式為「[日期] [亮點1]、[亮點2]」。標題要有衝突感與新聞張力，但每個判斷都必須能由素材支持。
 - dialogue 每項只有 speaker 與 text；speaker 僅限「男」或「女」。
 `.trim()
@@ -189,7 +189,7 @@ You are the Executive Editor of ${podcastTitleEn}. Read <story-metadata> and <ra
 
 [Sign-off & Output]
 - Conclude with Cordelia wrapping up smoothly and saying "See you tomorrow at the same time!", with no repetitive subscription pitches.
-- Output ONLY valid JSON matching the schema, no Markdown wrappers.
+- Output ONLY a valid JSON object with no Markdown wrappers, using this exact shape: {"title": "[YYYY-MM-DD] [Highlight 1], [Highlight 2]", "dialogue": [{"speaker": "女", "text": "..."}, {"speaker": "男", "text": "..."}]}
 - Title format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]".
 - Dialogue array: each item has "speaker" ("男" for David, "女" for Cordelia) and "text" (in English).
 `.trim()

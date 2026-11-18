@@ -1,10 +1,9 @@
 import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { StoryContentCheckpoint, TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
-import type { GeneratedScriptData, PodcastDialogueLine, PodcastScriptResponse, Story, WorkflowParams } from './types'
-import { generateObject, generateText } from 'ai'
+import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
+import { generateText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
-import { z } from 'zod'
 import { podcastTitle, podcastTitleEn } from '@/config'
 import {
   buildChildWorkflowInstanceId,
@@ -47,7 +46,6 @@ import {
   parseStoryContentCheckpoint,
   parseStoryDedupeIndex,
   parseTopicArchiveIndex,
-  splitDialogueText,
   STORY_CONTENT_CHECKPOINT_ROOT,
   updateEpisodeIndexDates,
   updateRedditDedupeIndex,
@@ -66,6 +64,7 @@ import {
   summarizeStoryPromptEn,
 } from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
+import { parsePodcastScriptResponse } from './script-parser'
 import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
@@ -117,52 +116,6 @@ function createKvRequestLogger() {
     console.info('KV request', { count, action, ...detail })
   }
   return { checkpoint, logKv }
-}
-
-async function repairDialogueJson({ text }: { text: string }): Promise<string> {
-  const codeBlockStart = text.indexOf('```')
-  if (codeBlockStart !== -1) {
-    const codeBlockEnd = text.indexOf('```', codeBlockStart + 3)
-    if (codeBlockEnd !== -1) {
-      let inner = text.slice(codeBlockStart + 3, codeBlockEnd).trim()
-      if (inner.startsWith('json')) {
-        inner = inner.slice(4).trim()
-      }
-      return inner
-    }
-  }
-
-  const lines = text.split('\n')
-  const dialogue: { speaker: string, text: string }[] = []
-  let title: string | undefined
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) {
-      continue
-    }
-
-    const colonIndex = line.search(/[：:]/)
-    if (colonIndex > 0) {
-      const prefix = line.slice(0, colonIndex).replace(/[*#]/g, '').trim()
-      const content = line.slice(colonIndex + 1).replace(/[*#]/g, '').trim()
-
-      if (/^(?:標題|title)$/i.test(prefix)) {
-        title = content
-      }
-      else if (prefix && content) {
-        dialogue.push({
-          speaker: prefix,
-          text: content,
-        })
-      }
-    }
-  }
-
-  if (dialogue.length > 0) {
-    return JSON.stringify({ title, dialogue })
-  }
-  return text
 }
 
 export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
@@ -768,57 +721,30 @@ ${fullContentString}
 </raw-story-content>
 `
 
-      interface RawGeneratedScript {
-        title?: string
-        dialogue: { speaker: string, text: string }[]
-      }
-
-      const { object, usage, finishReason } = await runLlm<{
-        object: RawGeneratedScript
-        usage: unknown
-        finishReason: unknown
-      }>('generate podcast script', 'thinking', model => generateObject({
-        model,
-        repairText: repairDialogueJson,
-        system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
-        prompt: enhancedPrompt,
-        maxOutputTokens: scriptMaxTokens,
-        maxRetries: AI_SDK_MAX_RETRIES,
-        schema: z.object({
-          title: z.string().optional(),
-          dialogue: z.array(z.object({
-            speaker: z.string().min(1),
-            text: z.string().min(1),
-          })).min(1),
-        }),
-      }))
+      const { script, usage, finishReason } = await runLlm('generate podcast script', 'thinking', async (model) => {
+        const result = await generateText({
+          model,
+          system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
+          prompt: enhancedPrompt,
+          maxOutputTokens: scriptMaxTokens,
+          maxRetries: AI_SDK_MAX_RETRIES,
+        })
+        const parsedScript = await parsePodcastScriptResponse(result.text, isEnglish)
+        return {
+          script: parsedScript,
+          usage: result.usage,
+          finishReason: result.finishReason,
+        }
+      })
 
       console.info('generate podcast script success', {
         usage,
         finishReason,
-        title: object.title,
-        dialogueLength: object.dialogue.length,
+        title: script.title,
+        dialogueLength: script.dialogue.length,
       })
 
-      const sanitizedDialogue = object.dialogue.flatMap((line, index) => {
-        const rawSpeaker = typeof line?.speaker === 'string' ? line.speaker.trim() : ''
-        const text = typeof line?.text === 'string' ? line.text.trim() : ''
-        const speaker = rawSpeaker === '女' || rawSpeaker.toLowerCase() === 'cordelia'
-          ? '女'
-          : rawSpeaker === '男' || rawSpeaker.toLowerCase() === 'david'
-            ? '男'
-            : null
-        if (!speaker || !text) {
-          throw new Error(`invalid dialogue line at index ${index}`)
-        }
-        const maxChars = isEnglish ? 1000 : MAX_DIALOGUE_LINE_CHARS
-        return splitDialogueText(text, maxChars).map(chunk => ({
-          speaker: speaker as PodcastDialogueLine['speaker'],
-          text: chunk,
-        }))
-      })
-
-      return { title: object.title, dialogue: sanitizedDialogue } as PodcastScriptResponse
+      return script as PodcastScriptResponse
     })
 
     kvRequestLogger.checkpoint('after generate podcast script')

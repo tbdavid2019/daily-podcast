@@ -143,6 +143,31 @@ describe('LLM fallback execution', () => {
     )
   })
 
+  it('enriches empty error messages with provider, statusCode, and body preview while preserving identity', async () => {
+    const configs = createLlmConfigs({
+      LLM_PRIMARY_API_KEY: 'primary-key',
+      LLM_PRIMARY_MODEL: 'group/do',
+    })
+    const emptyMessageError = Object.assign(new Error(''), {
+      name: 'AI_APICallError',
+      statusCode: 524,
+      responseBody: '<html>524 A Timeout Occurred</html>',
+    })
+
+    await assert.rejects(
+      runWithLlmFallback(configs, 'generate podcast script', async () => {
+        throw emptyMessageError
+      }),
+      (error: Error) => {
+        assert.equal(error, emptyMessageError)
+        assert.match(error.message, /\[primary:group\/do\]/)
+        assert.match(error.message, /HTTP 524/)
+        assert.match(error.message, /524 A Timeout Occurred/)
+        return true
+      },
+    )
+  })
+
   it('continues to read the legacy primary names during migration', () => {
     const configs = createLlmConfigs({
       OPENAI_API_SECRET: 'legacy-secret',

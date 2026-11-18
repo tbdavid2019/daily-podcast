@@ -21,6 +21,9 @@ interface LlmAttemptError {
   name?: string
   code?: string
   statusCode?: number | string
+  message?: string
+  responseBodyPreview?: string
+  causeMessage?: string
 }
 
 function readString(env: object, key: string): string {
@@ -134,6 +137,14 @@ export function getLlmModel(client: LlmClient, kind: 'standard' | 'thinking'): L
   return client.provider.chat(kind === 'thinking' ? client.thinkingModel : client.model)
 }
 
+function truncateLogText(value: string, maxLength: number): string {
+  const compact = value.replace(/\s+/g, ' ').trim()
+  if (compact.length <= maxLength) {
+    return compact
+  }
+  return `${compact.slice(0, maxLength)}...`
+}
+
 function describeError(error: unknown): LlmAttemptError {
   if (!error || typeof error !== 'object') {
     return { name: typeof error === 'string' ? 'Error' : 'UnknownError' }
@@ -150,7 +161,37 @@ function describeError(error: unknown): LlmAttemptError {
   if (typeof candidate.statusCode === 'number' || typeof candidate.statusCode === 'string') {
     description.statusCode = candidate.statusCode
   }
+  if (typeof candidate.message === 'string' && candidate.message.trim()) {
+    description.message = truncateLogText(candidate.message, 300)
+  }
+  if (typeof candidate.responseBody === 'string' && candidate.responseBody.trim()) {
+    description.responseBodyPreview = truncateLogText(candidate.responseBody, 200)
+  }
+  if (candidate.cause instanceof Error && candidate.cause.message.trim()) {
+    description.causeMessage = truncateLogText(candidate.cause.message, 200)
+  }
   return description
+}
+
+function enrichEmptyErrorMessage(error: unknown, config: LlmConfig, description: LlmAttemptError): void {
+  if (!(error instanceof Error) || error.message.trim()) {
+    return
+  }
+
+  const parts = [`[${config.id}:${config.model}]`]
+  if (description.statusCode !== undefined) {
+    parts.push(`HTTP ${description.statusCode}`)
+  }
+  if (description.causeMessage) {
+    parts.push(description.causeMessage)
+  }
+  else if (description.responseBodyPreview) {
+    parts.push(description.responseBodyPreview)
+  }
+  else {
+    parts.push('empty error message from provider')
+  }
+  error.message = parts.join(' ')
 }
 
 export async function runWithLlmFallback<T, C extends LlmConfig>(
@@ -176,12 +217,14 @@ export async function runWithLlmFallback<T, C extends LlmConfig>(
       return result
     }
     catch (error) {
+      const description = describeError(error)
+      enrichEmptyErrorMessage(error, config, description)
       lastError = error
       console.warn('LLM provider attempt failed', {
         operation,
         provider: config.id,
         model: config.model,
-        error: describeError(error),
+        error: description,
       })
     }
   }
