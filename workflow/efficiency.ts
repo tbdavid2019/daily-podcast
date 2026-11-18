@@ -157,7 +157,7 @@ export const DECISION_STEP_CONFIG = {
 export const AI_STEP_CONFIG = {
   retries: {
     limit: 1,
-    delay: '20 seconds',
+    delay: '65 seconds',
     backoff: 'exponential',
   },
   timeout: '12 minutes',

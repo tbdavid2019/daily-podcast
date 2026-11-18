@@ -644,6 +644,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     kvRequestLogger.checkpoint('after summarize all stories')
 
+    // Allow a full 60s+ rate-limit window reset between the two full-content LLM calls.
+    await step.sleep('pause before podcast script', isDev ? '2 seconds' : '65 seconds')
+
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(Math.min(maxTokens * 2, completionTokenLimit), 24576)
       const dialoguePlan = getDialoguePlan(allStoryContents.length)
