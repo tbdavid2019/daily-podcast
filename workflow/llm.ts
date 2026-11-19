@@ -145,6 +145,38 @@ function truncateLogText(value: string, maxLength: number): string {
   return `${compact.slice(0, maxLength)}...`
 }
 
+function isPlaceholderErrorMessage(message: unknown): boolean {
+  if (typeof message !== 'string') {
+    return true
+  }
+  const normalized = message.trim().toLowerCase()
+  return !normalized || normalized === '<none>'
+}
+
+function extractBodyErrorMessage(body: string): string | undefined {
+  const trimmed = body.trim()
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+    return undefined
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    const entry = Array.isArray(parsed) ? parsed[0] : parsed
+    if (entry && typeof entry === 'object') {
+      const errObj = (entry as Record<string, unknown>).error
+      if (errObj && typeof errObj === 'object') {
+        const msg = (errObj as Record<string, unknown>).message
+        if (typeof msg === 'string' && msg.trim()) {
+          return truncateLogText(msg, 240)
+        }
+      }
+    }
+  }
+  catch {
+    return undefined
+  }
+  return undefined
+}
+
 function describeError(error: unknown): LlmAttemptError {
   if (!error || typeof error !== 'object') {
     return { name: typeof error === 'string' ? 'Error' : 'UnknownError' }
@@ -161,13 +193,17 @@ function describeError(error: unknown): LlmAttemptError {
   if (typeof candidate.statusCode === 'number' || typeof candidate.statusCode === 'string') {
     description.statusCode = candidate.statusCode
   }
-  if (typeof candidate.message === 'string' && candidate.message.trim()) {
+  if (typeof candidate.message === 'string' && !isPlaceholderErrorMessage(candidate.message)) {
     description.message = truncateLogText(candidate.message, 300)
   }
   if (typeof candidate.responseBody === 'string' && candidate.responseBody.trim()) {
+    const extracted = extractBodyErrorMessage(candidate.responseBody)
+    if (extracted && !description.message) {
+      description.message = extracted
+    }
     description.responseBodyPreview = truncateLogText(candidate.responseBody, 200)
   }
-  if (candidate.cause instanceof Error && candidate.cause.message.trim()) {
+  if (candidate.cause instanceof Error && !isPlaceholderErrorMessage(candidate.cause.message)) {
     description.causeMessage = truncateLogText(candidate.cause.message, 200)
   }
   return description
@@ -229,9 +265,9 @@ export async function runWithLlmFallback<T, C extends LlmConfig>(
     }
   }
 
-  // Construct a fresh Error when the provider error has an empty message so
-  // Cloudflare Workflows (which serializes initial error state) never shows <none>.
-  if (!(lastError instanceof Error) || !lastError.message.trim()) {
+  // Construct a fresh Error when the provider error has an empty or workerd "<none>" message so
+  // Cloudflare Workflows always shows every provider's real failure reason.
+  if (!(lastError instanceof Error) || isPlaceholderErrorMessage(lastError.message)) {
     const errorName = lastError instanceof Error && lastError.name ? lastError.name : 'LLMError'
     const summaryError = new Error(`${errorName}: ${attemptSummaries.join(' | ')}`, { cause: lastError })
     summaryError.name = errorName

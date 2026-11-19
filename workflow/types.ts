@@ -15,6 +15,8 @@ export interface PodcastDialogueLine {
 export interface PodcastScriptResponse {
   title?: string
   dialogue: PodcastDialogueLine[]
+  llmProvider?: string
+  llmModel?: string
 }
 
 export interface Story {

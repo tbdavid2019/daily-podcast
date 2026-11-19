@@ -1,6 +1,7 @@
 import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { StoryContentCheckpoint, TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
+import type { LlmClient } from './llm'
 import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { generateText, streamText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
@@ -259,8 +260,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const runLlm = <T>(
       operation: string,
       kind: 'standard' | 'thinking',
-      run: (model: LanguageModel) => Promise<T>,
-    ) => runWithLlmFallback(llmClients, operation, client => run(getLlmModel(client, kind)))
+      run: (model: LanguageModel, client: LlmClient) => Promise<T>,
+    ) => runWithLlmFallback(llmClients, operation, client => run(getLlmModel(client, kind), client))
 
     const modelName = (llmClients[0]?.model || '').toLowerCase()
     const isGeminiModel = modelName.includes('gemini')
@@ -724,7 +725,7 @@ ${fullContentString}
 </raw-story-content>
 `
 
-      const { script, usage, finishReason } = await runLlm('generate podcast script', 'thinking', async (model) => {
+      const { script, usage, finishReason, llmProvider, llmModel } = await runLlm('generate podcast script', 'thinking', async (model, client) => {
         let streamError: unknown
         const result = streamText({
           model,
@@ -752,17 +753,25 @@ ${fullContentString}
           script: parsedScript,
           usage: usageData,
           finishReason: reason,
+          llmProvider: client.id,
+          llmModel: client.thinkingModel,
         }
       })
 
       console.info('generate podcast script success', {
+        llmProvider,
+        llmModel,
         usage,
         finishReason,
         title: script.title,
         dialogueLength: script.dialogue.length,
       })
 
-      return script as PodcastScriptResponse
+      return {
+        ...script,
+        llmProvider,
+        llmModel,
+      } as PodcastScriptResponse
     })
 
     kvRequestLogger.checkpoint('after generate podcast script')
@@ -985,6 +994,8 @@ ${fullContentString}
       enScriptInstanceId,
       storyCount: stories.length,
       dialogueLines: scriptData.dialogue.length,
+      llmProvider: podcastScript.llmProvider,
+      llmModel: podcastScript.llmModel,
     }
   }
 }

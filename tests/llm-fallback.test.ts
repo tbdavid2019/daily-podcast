@@ -143,22 +143,18 @@ describe('LLM fallback execution', () => {
     )
   })
 
-  it('wraps empty error messages in a fresh Error with all provider attempt summaries', async () => {
+  it('wraps empty or workerd <none> error messages in a fresh Error with all provider attempt summaries', async () => {
     const configs = createLlmConfigs({
       LLM_PRIMARY_API_KEY: 'primary-key',
       LLM_PRIMARY_MODEL: 'group/do',
       LLM_FALLBACK_1_API_KEY: 'fallback-key',
-      LLM_FALLBACK_1_MODEL: 'gemini-3.8-flash',
+      LLM_FALLBACK_1_MODEL: 'gemini-4-hydrogen',
     })
-    const primaryError = Object.assign(new Error(''), {
+    const primaryError = new Error('invalid dialogue line at index 0')
+    const fallbackError = Object.assign(new Error('<none>'), {
       name: 'AI_APICallError',
       statusCode: 524,
-      responseBody: '<html>524 A Timeout Occurred</html>',
-    })
-    const fallbackError = Object.assign(new Error(''), {
-      name: 'AI_APICallError',
-      statusCode: 503,
-      responseBody: '<html>503 Service Unavailable</html>',
+      responseBody: 'error code: 524',
     })
 
     await assert.rejects(
@@ -168,8 +164,8 @@ describe('LLM fallback execution', () => {
       (error: Error) => {
         assert.equal(error.name, 'AI_APICallError')
         assert.equal(error.cause, fallbackError)
-        assert.match(error.message, /\[primary:group\/do\] HTTP 524/)
-        assert.match(error.message, /\[fallback-1:gemini-3\.8-flash\] HTTP 503/)
+        assert.match(error.message, /\[primary:group\/do\] invalid dialogue line at index 0/)
+        assert.match(error.message, /\[fallback-1:gemini-4-hydrogen\] HTTP 524 error code: 524/)
         return true
       },
     )
