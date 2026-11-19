@@ -2,6 +2,28 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-19] 重構腳本生成 Harness 為可擴充多人 XML 標記協議，並修復 LLM 錯誤觀測盲區
+
+- **可擴充多人主持／來賓 XML 腳本協議 (`workflow/script-parser.ts`、`workflow/prompt.ts`)**：
+  - **淘汰長對話 JSON 序列化炸彈**：將 `generate podcast script` 輸出格式由 JSON 改為 `<title>...</title>` 搭配 `<turn speaker="...">...</turn>` 標記協議，台詞內自由出現雙引號、冒號、程式碼與換行皆不再造成解析失敗，並保留對 JSON（含未跳脫換行、尾隨逗號、截斷搶救）與純文字主持人格式的向下相容。
+  - **角色註冊表與多人擴充架構**：引入 `PodcastSpeakerProfile` 與 `DEFAULT_PODCAST_CAST` 註冊表（支援 `id`、`name`、`aliases`、`voiceRole`、`voiceId`），未來若加入第三位以上主持人或特別來賓，只需擴充 `cast` 清單或啟用 `allowDynamicSpeakers` 即可無縫解析，無須改寫協議與解析器。
+  - **品質防呆門檻 (Harness Gate)**：解析階段強制驗證最低段數（`minTurns`）與多主持人發言檢查（`requireMultipleSpeakers`），確保異常單人獨白或過短輸出能自動觸發 Fallback。
+- **修復 Cloudflare `workerd` `<none>` 錯誤盲區與 LLM 歸屬追蹤 (`workflow/llm.ts`、`workflow/index.ts`)**：
+  - 修正 Cloudflare Workers HTTP/2 回應將 `statusText` 設為字面字串 `"<none>"` 導致錯誤細節被遮蔽的問題，並支援解析 Google 陣列錯誤回應 `[{ error: { message } }]`；當所有通道皆失敗時，改拋出包含每個節點 HTTP 狀態碼與回應預覽的完整摘要錯誤。
+  - 於 `generate podcast script` 步驟與 Workflow 最終回傳結果直接記錄實際產出的 `llmProvider`、`llmModel`、`parseFormat` 與 `speakers`。
+- **測試與線上驗證**：
+  - 新增與擴充 [tests/script-parser.test.ts](tests/script-parser.test.ts) 與 [tests/llm-fallback.test.ts](tests/llm-fallback.test.ts)，涵蓋 XML 協議、三人主持／動態來賓、破損 JSON 修復與 `<none>` 錯誤展開。
+  - `2026-11-19` 中、英文雙語節目（腳本、音訊、網頁與 `/rss.xml`、`/rss-en.xml`）皆已透過新版 XML Harness 一次跑通上線。
+
+## [2026-11-18] 修復腳本生成串流逾時、補齊 TPM 冷卻窗口並切換 Fallback 1 為 `gemini-4-hydrogen`
+
+- **腳本生成串流化與速率冷卻 (`workflow/index.ts`、`workflow/efficiency.ts`)**：
+  - 移除已棄用且在第三方相容端點易踩 `strict: true` 雷區的 `generateObject`，改以 `streamText` 搭配 `onError` 串流讀取，降低長腳本生成期間連線靜默逾時風險。
+  - 在 `summarize all stories` 與 `generate podcast script` 之間新增 65 秒 `step.sleep` 冷卻窗口，並將 `AI_STEP_CONFIG.retries.delay` 調整為 `'65 seconds'`，避免連續兩次全文輸入撞破 60 秒 TPM 配額。
+- **LLM 備援鏈清理與模型切換 (`worker/wrangler.example.jsonc`)**：
+  - 移除 Cloudflare Worker 殘留的幽靈 Secret `LLM_FALLBACK_2_API_KEY`（避免未設端點時重複打回 Primary 網關）。
+  - 將 Google 官方端點 Fallback 1 模型由 `gemini-3.8-flash` 切換為 `gemini-4-hydrogen`，順利完成 `2026-11-18` 中、英文版節目補產與發布。
+
 ## [2026-11-12] 全面清除弱智模型與防禦腔調：全面鎖定 Gemini 3.8 Flash，根除 GPT 式「不能、不代表、素材未提供」官僚說教腔
 
 - **徹底清理模型池 (Purge Subpar & Weak Models)**：
