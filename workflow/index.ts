@@ -690,7 +690,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 ${storyList}
 ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 [DYNAMIC DIALOGUE REQUIREMENTS]
-- Target ${dialoguePlan.targetLines} dialogue turns, allowable range ${dialoguePlan.minLines}-${dialoguePlan.maxLines} turns. Each JSON dialogue item is one turn.
+- Target ${dialoguePlan.targetLines} dialogue turns, allowable range ${dialoguePlan.minLines}-${dialoguePlan.maxLines} turns. Each <turn speaker="...">...</turn> block is one turn.
 - Each story must have at least one complete exchange between Cordelia and David.
 - David must explain the core technical mechanisms and principles for each story.
 - 2-3 most important or controversial stories should have extended exchanges.
@@ -709,7 +709,7 @@ ${fullContentString}
 ${storyList}
 ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 【動態對話展開要求】
-- 目標 ${dialoguePlan.targetLines} 段發言，允許範圍 ${dialoguePlan.minLines}-${dialoguePlan.maxLines} 段；JSON dialogue 中的一個項目就是一段發言
+- 目標 ${dialoguePlan.targetLines} 段發言，允許範圍 ${dialoguePlan.minLines}-${dialoguePlan.maxLines} 段；一組 <turn speaker="...">...</turn> 就是一段發言
 - 每個故事至少要有一個完整來回：Cordelia 與 David 都必須針對該故事各發言至少一次
 - David 在每個故事都要補充技術背景或核心原理；最重要的故事至少安排一段完整機制解說，不能只做質疑與評論
 - 最重要或最有爭議的 2-3 個故事可以增加來回；資訊較少的故事仍須解釋其價值或不足，不得略過
@@ -748,7 +748,11 @@ ${fullContentString}
           throw streamError
         }
         const [usageData, reason] = await Promise.all([result.usage, result.finishReason])
-        const parsedScript = await parsePodcastScriptResponse(text, isEnglish)
+        const parsedScript = await parsePodcastScriptResponse(text, {
+          isEnglish,
+          minTurns: Math.min(6, dialoguePlan.minLines),
+          requireMultipleSpeakers: true,
+        })
         return {
           script: parsedScript,
           usage: usageData,
@@ -761,6 +765,8 @@ ${fullContentString}
       console.info('generate podcast script success', {
         llmProvider,
         llmModel,
+        parseFormat: script.format,
+        speakers: script.speakers,
         usage,
         finishReason,
         title: script.title,
@@ -768,7 +774,8 @@ ${fullContentString}
       })
 
       return {
-        ...script,
+        title: script.title,
+        dialogue: script.dialogue,
         llmProvider,
         llmModel,
       } as PodcastScriptResponse

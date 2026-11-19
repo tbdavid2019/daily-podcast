@@ -85,9 +85,12 @@ export const podcastScriptPrompt = `
 
 【收尾與輸出】
 - 最後由 Cordelia 簡短收束並說「明天同一時間再見」，不要加入訂閱平台或其他固定宣傳詞。
-- 只輸出合法的 JSON 物件，不使用 Markdown 程式碼區塊包裹，格式為：{"title": "[日期] [亮點1]、[亮點2]", "dialogue": [{"speaker": "女", "text": "..."}, {"speaker": "男", "text": "..."}]}
+- 嚴格使用以下 XML 標記格式輸出，不要使用 JSON、不要加前言、結語或 Markdown 程式碼區塊：
+<title>[日期] [亮點1]、[亮點2]</title>
+<turn speaker="女">第一段台詞...</turn>
+<turn speaker="男">第二段台詞...</turn>
 - title 格式為「[日期] [亮點1]、[亮點2]」。標題要有衝突感與新聞張力，但每個判斷都必須能由素材支持。
-- dialogue 每項只有 speaker 與 text；speaker 僅限「男」或「女」。
+- 每段發言使用一組 <turn speaker="...">...</turn>；speaker 屬性僅限「女」（Cordelia）或「男」（David）；台詞中可直接自然使用中文標點、冒號與雙引號，不需跳脫。
 `.trim()
 
 export const summarizeBlogPrompt = `
@@ -189,9 +192,12 @@ You are the Executive Editor of ${podcastTitleEn}. Read <story-metadata> and <ra
 
 [Sign-off & Output]
 - Conclude with Cordelia wrapping up smoothly and saying "See you tomorrow at the same time!", with no repetitive subscription pitches.
-- Output ONLY a valid JSON object with no Markdown wrappers, using this exact shape: {"title": "[YYYY-MM-DD] [Highlight 1], [Highlight 2]", "dialogue": [{"speaker": "女", "text": "..."}, {"speaker": "男", "text": "..."}]}
+- Output STRICTLY in the following XML tag format with NO JSON, NO Markdown code fences, and NO preamble/epilogue:
+<title>[YYYY-MM-DD] [Highlight 1], [Highlight 2]</title>
+<turn speaker="女">Cordelia's opening turn...</turn>
+<turn speaker="男">David's response...</turn>
 - Title format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]".
-- Dialogue array: each item has "speaker" ("男" for David, "女" for Cordelia) and "text" (in English).
+- Wrap each turn in <turn speaker="...">...</turn> where speaker is "女" (Cordelia) or "男" (David) and the body is spoken English. Quotes and colons can be used naturally inside <turn> without escaping.
 `.trim()
 
 export const summarizeBlogPromptEn = `

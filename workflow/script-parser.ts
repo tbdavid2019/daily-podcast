@@ -2,6 +2,51 @@ import type { PodcastDialogueLine, PodcastScriptResponse } from './types'
 import { z } from 'zod'
 import { MAX_DIALOGUE_LINE_CHARS, splitDialogueText } from './efficiency'
 
+export type ScriptParseFormat = 'xml' | 'json' | 'lines'
+
+/**
+ * Extensible speaker definition for N-host / guest podcast casts.
+ * Future multi-host or guest episodes can extend DEFAULT_PODCAST_CAST with
+ * additional profiles (e.g. { id: '來賓', name: 'Alex', aliases: ['來賓', 'guest', 'alex'], voiceRole: 'custom' }).
+ */
+export interface PodcastSpeakerProfile<TSpeaker extends string = string> {
+  id: TSpeaker
+  name: string
+  aliases: readonly string[]
+  voiceRole?: 'female' | 'male' | 'custom'
+  voiceId?: string
+}
+
+export const DEFAULT_PODCAST_CAST: readonly PodcastSpeakerProfile<PodcastDialogueLine['speaker']>[] = [
+  {
+    id: '女',
+    name: 'Cordelia',
+    aliases: ['女', 'cordelia', '女聲', '女性', '女主持人', 'female', 'woman'],
+    voiceRole: 'female',
+  },
+  {
+    id: '男',
+    name: 'David',
+    aliases: ['男', 'david', '男聲', '男性', '男主持人', 'male', 'man'],
+    voiceRole: 'male',
+  },
+]
+
+export interface ParsePodcastScriptOptions<TSpeaker extends string = PodcastDialogueLine['speaker']> {
+  isEnglish?: boolean
+  cast?: readonly PodcastSpeakerProfile<TSpeaker>[]
+  allowDynamicSpeakers?: boolean
+  minTurns?: number
+  requireMultipleSpeakers?: boolean
+}
+
+export interface ParsedPodcastScript<TSpeaker extends string = PodcastDialogueLine['speaker']> {
+  title?: string
+  dialogue: { speaker: TSpeaker, text: string }[]
+  format: ScriptParseFormat
+  speakers: TSpeaker[]
+}
+
 const rawDialogueItemSchema = z.object({
   speaker: z.string().min(1),
   text: z.string().min(1),
@@ -17,37 +62,132 @@ function truncatePreview(value: string, maxLength = 120): string {
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength)}...`
 }
 
-/**
- * Normalizes flexible host labels (e.g. "女", "Cordelia", "Cordelia（女）",
- * "男主持人", "David / 男") into the canonical '女' | '男' speaker tokens.
- */
-export function normalizePodcastSpeaker(rawSpeaker: string): PodcastDialogueLine['speaker'] | null {
-  const cleaned = rawSpeaker
+function cleanSpeakerLabel(rawSpeaker: string): string {
+  return rawSpeaker
     .replace(/^[\s"'`「『【[(*#]+|[\s"'`」』】\])*#]+$/g, '')
     .trim()
+}
+
+/**
+ * Resolves a raw speaker label against a configured speaker cast.
+ * Supports exact aliases, parenthetical combinations like "Cordelia（女）" or "David／男",
+ * and optional dynamic guest speakers when allowDynamicSpeakers is enabled.
+ */
+export function resolvePodcastSpeaker<TSpeaker extends string = PodcastDialogueLine['speaker']>(
+  rawSpeaker: string,
+  cast: readonly PodcastSpeakerProfile<TSpeaker>[] = DEFAULT_PODCAST_CAST as readonly PodcastSpeakerProfile<TSpeaker>[],
+  allowDynamicSpeakers = false,
+): TSpeaker | null {
+  const cleaned = cleanSpeakerLabel(rawSpeaker)
   if (!cleaned) {
     return null
   }
 
   const lower = cleaned.toLowerCase()
-  const hasFemaleToken = cleaned === '女'
-    || lower === 'female'
-    || lower === 'woman'
-    || lower.includes('cordelia')
-    || (cleaned.includes('女') && !cleaned.includes('男'))
-  const hasMaleToken = cleaned === '男'
-    || lower === 'male'
-    || lower === 'man'
-    || lower.includes('david')
-    || (cleaned.includes('男') && !cleaned.includes('女'))
 
-  if (hasFemaleToken && !hasMaleToken) {
-    return '女'
+  // 1. Exact ID / name / alias match (highest priority, unambiguous for N speakers).
+  for (const profile of cast) {
+    if (
+      cleaned === profile.id
+      || lower === profile.id.toLowerCase()
+      || lower === profile.name.toLowerCase()
+      || profile.aliases.some(alias => lower === alias.toLowerCase())
+    ) {
+      return profile.id
+    }
   }
-  if (hasMaleToken && !hasFemaleToken) {
-    return '男'
+
+  // 2. Substring/composite token match (e.g. "Cordelia（女）", "來賓 Alex", "David／男")
+  // only when it uniquely matches exactly one cast member.
+  const matchedProfiles = cast.filter((profile) => {
+    const tokens = [profile.id, profile.name, ...profile.aliases]
+      .map(token => token.trim().toLowerCase())
+      .filter(Boolean)
+    return tokens.some(token => lower.includes(token))
+  })
+  if (matchedProfiles.length === 1) {
+    return matchedProfiles[0].id
   }
+
+  if (allowDynamicSpeakers) {
+    return cleaned as TSpeaker
+  }
+
   return null
+}
+
+/**
+ * Convenience wrapper for the canonical 2-host ('女' | '男') cast.
+ */
+export function normalizePodcastSpeaker(rawSpeaker: string): PodcastDialogueLine['speaker'] | null {
+  return resolvePodcastSpeaker(rawSpeaker, DEFAULT_PODCAST_CAST, false)
+}
+
+function decodeBasicXmlEntities(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, '\'')
+    .replace(/&amp;/g, '&')
+}
+
+function stripOuterMarkdownFence(input: string): string {
+  const trimmed = input.replace(/^\uFEFF/, '').trim()
+  if (!trimmed.startsWith('```')) {
+    return trimmed
+  }
+  const firstNewline = trimmed.indexOf('\n')
+  if (firstNewline === -1) {
+    return trimmed
+  }
+  const afterHeader = trimmed.slice(firstNewline + 1)
+  const closingFence = afterHeader.lastIndexOf('```')
+  return (closingFence !== -1 ? afterHeader.slice(0, closingFence) : afterHeader).trim()
+}
+
+/**
+ * Parses the XML-tag podcast script protocol:
+ *   <title>...</title>
+ *   <turn speaker="女">...</turn>
+ *   <turn speaker="男">...</turn>
+ *   <turn speaker="來賓">...</turn>
+ *
+ * Quotes, colons, code snippets, and newlines inside <turn> bodies do not break parsing.
+ */
+export function parseXmlPodcastScript(rawText: string): { title?: string, dialogue: { speaker: string, text: string }[] } | null {
+  const cleaned = stripOuterMarkdownFence(rawText)
+  if (!/<turn\b/i.test(cleaned)) {
+    return null
+  }
+
+  let title: string | undefined
+  const titleMatch = cleaned.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)
+  if (titleMatch) {
+    const candidate = decodeBasicXmlEntities(titleMatch[1]).replace(/\s+/g, ' ').trim()
+    if (candidate) {
+      title = candidate
+    }
+  }
+
+  const dialogue: { speaker: string, text: string }[] = []
+  const turnRegex = /<turn\b([^>]*)>([\s\S]*?)(?:<\/turn>|(?=<turn\b)|$)/gi
+
+  for (const match of cleaned.matchAll(turnRegex)) {
+    const attrs = match[1] || ''
+    const bodyRaw = match[2] || ''
+    const speakerAttr = attrs.match(/\bspeaker\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))/i)
+    const speaker = (speakerAttr?.[1] || speakerAttr?.[2] || speakerAttr?.[3] || '').trim()
+    const body = decodeBasicXmlEntities(bodyRaw)
+      .replace(/<\/podcast-script>\s*$/i, '')
+      .trim()
+
+    if (speaker && body) {
+      dialogue.push({ speaker, text: body })
+    }
+  }
+
+  return dialogue.length > 0 ? { title, dialogue } : null
 }
 
 /**
@@ -147,15 +287,63 @@ function extractDialogueObjectsFromBrokenJson(text: string): { title?: string, d
   return dialogue.length > 0 ? { title, dialogue } : null
 }
 
+function extractPlainDialogueLines<TSpeaker extends string>(
+  text: string,
+  cast: readonly PodcastSpeakerProfile<TSpeaker>[],
+  allowDynamicSpeakers: boolean,
+): { title?: string, dialogue: { speaker: string, text: string }[] } | null {
+  const lines = text.split('\n')
+  const dialogue: { speaker: string, text: string }[] = []
+  let title: string | undefined
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      continue
+    }
+
+    const colonIndex = line.search(/[：:]/)
+    if (colonIndex > 0) {
+      const prefix = cleanSpeakerLabel(line.slice(0, colonIndex))
+      const content = line.slice(colonIndex + 1).replace(/[*#]/g, '').trim()
+
+      if (/^(?:標題|title)$/i.test(prefix) && content) {
+        title = content.replace(/^["']|["'],?$/g, '').trim()
+        continue
+      }
+
+      const resolved = resolvePodcastSpeaker(prefix, cast, allowDynamicSpeakers)
+      if (resolved && content) {
+        dialogue.push({
+          speaker: resolved,
+          text: content,
+        })
+      }
+    }
+  }
+
+  return dialogue.length > 0 ? { title, dialogue } : null
+}
+
 /**
- * Extracts JSON or converts speaker-prefixed dialogue text into JSON when an LLM
- * wraps its response in Markdown fences, adds prose, emits minor JSON glitches,
- * or outputs plain speaker-prefixed dialogue lines.
+ * Converts XML, fenced JSON, broken JSON, or speaker-prefixed plain text into normalized JSON.
  */
-export async function repairDialogueJson({ text }: { text: string }): Promise<string> {
+export async function repairDialogueJson({
+  text,
+  cast = DEFAULT_PODCAST_CAST,
+  allowDynamicSpeakers = false,
+}: {
+  text: string
+  cast?: readonly PodcastSpeakerProfile[]
+  allowDynamicSpeakers?: boolean
+}): Promise<string> {
   const trimmed = text.replace(/^\uFEFF/, '').trim()
 
-  // 1. Check Markdown fenced blocks (including unclosed trailing fences).
+  const xmlParsed = parseXmlPodcastScript(trimmed)
+  if (xmlParsed) {
+    return JSON.stringify(xmlParsed)
+  }
+
   const fenceStart = trimmed.indexOf('```')
   if (fenceStart !== -1) {
     const afterStart = trimmed.slice(fenceStart + 3)
@@ -170,7 +358,6 @@ export async function repairDialogueJson({ text }: { text: string }): Promise<st
     }
   }
 
-  // 2. Check object or array slice within surrounding prose.
   const firstBrace = trimmed.indexOf('{')
   const lastBrace = trimmed.lastIndexOf('}')
   if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -191,7 +378,6 @@ export async function repairDialogueJson({ text }: { text: string }): Promise<st
     }
   }
 
-  // 3. Salvage speaker/text pairs from broken or truncated JSON before falling back to line splitting.
   if (trimmed.includes('"speaker"') && trimmed.includes('"text"')) {
     const salvaged = extractDialogueObjectsFromBrokenJson(sanitizeLenientJson(trimmed))
     if (salvaged) {
@@ -199,83 +385,111 @@ export async function repairDialogueJson({ text }: { text: string }): Promise<st
     }
   }
 
-  // 4. Plain speaker-prefixed dialogue lines fallback (skip unrecognized metadata/header lines).
-  const lines = trimmed.split('\n')
-  const dialogue: { speaker: string, text: string }[] = []
-  let title: string | undefined
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) {
-      continue
-    }
-
-    const colonIndex = line.search(/[：:]/)
-    if (colonIndex > 0) {
-      const prefix = line.slice(0, colonIndex).replace(/^[\s"'`「『【[(*#]+|[\s"'`」』】\])*#]+$/g, '').trim()
-      const content = line.slice(colonIndex + 1).replace(/[*#]/g, '').trim()
-
-      if (/^(?:標題|title)$/i.test(prefix) && content) {
-        title = content.replace(/^["']|["'],?$/g, '').trim()
-        continue
-      }
-
-      const normalizedSpeaker = normalizePodcastSpeaker(prefix)
-      if (normalizedSpeaker && content) {
-        dialogue.push({
-          speaker: normalizedSpeaker,
-          text: content,
-        })
-      }
-    }
+  const plainParsed = extractPlainDialogueLines(trimmed, cast, allowDynamicSpeakers)
+  if (plainParsed) {
+    return JSON.stringify(plainParsed)
   }
 
-  if (dialogue.length > 0) {
-    return JSON.stringify({ title, dialogue })
-  }
   return text
 }
 
 /**
- * Parses and validates LLM-generated script text into normalized Cordelia/David
- * dialogue chunks suitable for TTS synthesis.
+ * Parses and validates LLM-generated script text (XML <turn> protocol preferred,
+ * with automatic JSON and speaker-line compatibility) into normalized dialogue chunks.
  */
-export async function parsePodcastScriptResponse(
+export async function parsePodcastScriptResponse<TSpeaker extends string = PodcastDialogueLine['speaker']>(
   rawText: string,
-  isEnglish = false,
-): Promise<PodcastScriptResponse> {
+  optionsOrIsEnglish: boolean | ParsePodcastScriptOptions<TSpeaker> = false,
+): Promise<ParsedPodcastScript<TSpeaker>> {
+  const options: ParsePodcastScriptOptions<TSpeaker> = typeof optionsOrIsEnglish === 'boolean'
+    ? { isEnglish: optionsOrIsEnglish }
+    : optionsOrIsEnglish
+
+  const isEnglish = Boolean(options.isEnglish)
+  const cast = (options.cast ?? DEFAULT_PODCAST_CAST) as readonly PodcastSpeakerProfile<TSpeaker>[]
+  const allowDynamicSpeakers = Boolean(options.allowDynamicSpeakers)
+  const minTurns = options.minTurns ?? 1
+  const requireMultipleSpeakers = Boolean(options.requireMultipleSpeakers)
+
   const trimmed = rawText.replace(/^\uFEFF/, '').trim()
   if (!trimmed) {
     throw new Error('LLM returned an empty podcast script response')
   }
 
-  let parsedJson: unknown = tryParseStructuredJson(trimmed)
-  if (!parsedJson) {
-    const repaired = await repairDialogueJson({ text: trimmed })
-    parsedJson = tryParseStructuredJson(repaired)
-    if (!parsedJson) {
-      throw new Error(`Unable to parse podcast script JSON (len=${trimmed.length}, preview="${truncatePreview(trimmed)}")`)
+  let format: ScriptParseFormat = 'xml'
+  let parsedRaw: unknown = parseXmlPodcastScript(trimmed)
+
+  if (!parsedRaw) {
+    format = 'json'
+    parsedRaw = tryParseStructuredJson(trimmed)
+  }
+
+  if (!parsedRaw) {
+    const fenceStart = trimmed.indexOf('```')
+    if (fenceStart !== -1) {
+      const afterStart = trimmed.slice(fenceStart + 3)
+      const fenceEnd = afterStart.indexOf('```')
+      let inner = (fenceEnd !== -1 ? afterStart.slice(0, fenceEnd) : afterStart).trim()
+      if (/^json\b/i.test(inner)) {
+        inner = inner.slice(4).trim()
+      }
+      parsedRaw = tryParseStructuredJson(inner)
     }
   }
 
-  const validated = rawPodcastScriptSchema.parse(parsedJson)
+  if (!parsedRaw) {
+    const firstBrace = trimmed.indexOf('{')
+    const lastBrace = trimmed.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      parsedRaw = tryParseStructuredJson(trimmed.slice(firstBrace, lastBrace + 1).trim())
+    }
+  }
+
+  if (!parsedRaw) {
+    const firstBracket = trimmed.indexOf('[')
+    const lastBracket = trimmed.lastIndexOf(']')
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      parsedRaw = tryParseStructuredJson(trimmed.slice(firstBracket, lastBracket + 1).trim())
+    }
+  }
+
+  if (!parsedRaw && trimmed.includes('"speaker"') && trimmed.includes('"text"')) {
+    parsedRaw = extractDialogueObjectsFromBrokenJson(sanitizeLenientJson(trimmed))
+  }
+
+  if (!parsedRaw) {
+    format = 'lines'
+    parsedRaw = extractPlainDialogueLines(trimmed, cast, allowDynamicSpeakers)
+  }
+
+  if (!parsedRaw) {
+    throw new Error(`Unable to parse podcast script (len=${trimmed.length}, preview="${truncatePreview(trimmed)}")`)
+  }
+
+  const validated = rawPodcastScriptSchema.parse(parsedRaw)
   const maxChars = isEnglish ? 1000 : MAX_DIALOGUE_LINE_CHARS
 
+  const distinctSpeakers = new Set<TSpeaker>()
   const sanitizedDialogue = validated.dialogue.flatMap((line, index) => {
     const rawSpeaker = line.speaker.trim()
     const text = line.text.trim()
-    const speaker = normalizePodcastSpeaker(rawSpeaker)
+    const speaker = resolvePodcastSpeaker(rawSpeaker, cast, allowDynamicSpeakers)
     if (!speaker || !text) {
       throw new Error(`invalid dialogue line at index ${index} (speaker="${truncatePreview(rawSpeaker, 40)}", textLen=${text.length})`)
     }
+    distinctSpeakers.add(speaker)
     return splitDialogueText(text, maxChars).map(chunk => ({
       speaker,
       text: chunk,
     }))
   })
 
-  if (sanitizedDialogue.length === 0) {
-    throw new Error('parsed podcast script contains no valid dialogue lines')
+  if (sanitizedDialogue.length < minTurns) {
+    throw new Error(`parsed podcast script too short (${sanitizedDialogue.length} turns, minimum ${minTurns})`)
+  }
+
+  if (requireMultipleSpeakers && cast.length >= 2 && distinctSpeakers.size < 2) {
+    throw new Error(`parsed podcast script contains only ${distinctSpeakers.size} distinct speaker(s); expected at least 2`)
   }
 
   const normalizedTitle = typeof validated.title === 'string' && validated.title.trim()
@@ -285,5 +499,9 @@ export async function parsePodcastScriptResponse(
   return {
     title: normalizedTitle,
     dialogue: sanitizedDialogue,
+    format,
+    speakers: [...distinctSpeakers],
   }
 }
+
+export type CanonicalPodcastScript = PodcastScriptResponse
