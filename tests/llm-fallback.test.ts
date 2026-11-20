@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
-import { collectStreamedText, createLlmConfigs, runWithLlmFallback } from '../workflow/llm'
+import { createLlmConfigs, runWithLlmFallback, streamOpenAiChatCompletion } from '../workflow/llm'
 
 describe('LLM fallback configuration', () => {
   it('keeps the primary provider first and reads independent fallback settings', () => {
@@ -184,57 +183,84 @@ describe('LLM fallback execution', () => {
     assert.equal(configs[0]?.model, 'legacy-model')
   })
 
-  it('collects streamed text, usage, and finishReason via collectStreamedText', async () => {
-    const model = new MockLanguageModelV3({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
-            { type: 'text-delta', id: 'text-1', delta: 'Streaming!' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: { unified: 'stop', raw: 'stop' },
-              usage: {
-                inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-                outputTokens: { total: 5, text: 5, reasoning: 0 },
-              },
-            },
-          ],
-        }),
-      }),
+  it('parses split SSE chunks, ignores reasoning-only deltas, and captures usage + finishReason', async () => {
+    const encoder = new TextEncoder()
+    const sseBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(': keepalive\n\ndata: {"choices":[{"delta":{"reasoning_content":"secret thinking"},"finish_reason":null}]}\n\n'))
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"conte'))
+        controller.enqueue(encoder.encode('nt":"Hello "},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{"content":"World!"},"finish_reason":"stop"}],"usage":{"total_tokens":42}}\n\ndata: [DONE]\n\n'))
+        controller.close()
+      },
     })
 
-    const result = await collectStreamedText({
-      model,
+    const result = await streamOpenAiChatCompletion({
+      config: {
+        id: 'primary',
+        apiKey: 'secret',
+        baseUrl: 'https://llm.example/v1/',
+        model: 'group/do',
+        thinkingModel: 'group/do',
+      },
+      model: 'group/do',
       system: 'sys',
       prompt: 'hi',
+      fetchImpl: async () => new Response(sseBody, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+      }),
     })
 
-    assert.equal(result.text, 'Hello Streaming!')
+    assert.equal(result.text, 'Hello World!')
     assert.equal(result.finishReason, 'stop')
-    assert.equal(result.usage.outputTokens, 5)
+    assert.deepEqual(result.usage, { total_tokens: 42 })
   })
 
-  it('rethrows stream errors from collectStreamedText', async () => {
-    const model = new MockLanguageModelV3({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [
-            { type: 'error', error: new Error('upstream stream aborted') },
-          ],
-        }),
-      }),
+  it('throws descriptive AI_APICallError on SSE error payloads and non-200 responses', async () => {
+    const encoder = new TextEncoder()
+    const errStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"error":{"message":"upstream stream aborted"}}\n\n'))
+        controller.close()
+      },
     })
 
+    const baseConfig = {
+      id: 'primary',
+      apiKey: 'secret',
+      baseUrl: 'https://llm.example/v1',
+      model: 'group/do',
+      thinkingModel: 'group/do',
+    }
+
     await assert.rejects(
-      collectStreamedText({
-        model,
+      streamOpenAiChatCompletion({
+        config: baseConfig,
+        model: 'group/do',
         system: 'sys',
         prompt: 'hi',
+        fetchImpl: async () => new Response(errStream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
       }),
       /upstream stream aborted/,
+    )
+
+    await assert.rejects(
+      streamOpenAiChatCompletion({
+        config: baseConfig,
+        model: 'group/do',
+        system: 'sys',
+        prompt: 'hi',
+        fetchImpl: async () => new Response('error code: 524', { status: 524 }),
+      }),
+      (error: Error & { statusCode?: number, responseBody?: string }) => {
+        assert.equal(error.name, 'AI_APICallError')
+        assert.equal(error.statusCode, 524)
+        assert.equal(error.responseBody, 'error code: 524')
+        return true
+      },
     )
   })
 })

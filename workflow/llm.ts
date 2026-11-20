@@ -1,7 +1,3 @@
-import type { LanguageModel } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { streamText } from 'ai'
-
 export const DEFAULT_LLM_BASE_URL = 'https://llm.aiurl.tw/v1'
 export const DEFAULT_LLM_MODEL = 'group/do'
 export const MAX_LLM_FALLBACKS = 10
@@ -14,8 +10,10 @@ export interface LlmConfig {
   thinkingModel: string
 }
 
-export interface LlmClient extends LlmConfig {
-  provider: ReturnType<typeof createOpenAI>
+export interface StreamedCompletionResult {
+  text: string
+  usage: unknown
+  finishReason?: string
 }
 
 interface LlmAttemptError {
@@ -104,111 +102,243 @@ export function createLlmConfigs(env: object): LlmConfig[] {
 
 export const DEFAULT_LLM_TIMEOUT_MS = 240_000
 
-export function createLlmClients(env: object): LlmClient[] {
-  const timeoutMs = Number.parseInt(firstString(env, ['LLM_TIMEOUT_MS']) || '', 10) || DEFAULT_LLM_TIMEOUT_MS
-
-  return createLlmConfigs(env).map(config => ({
-    ...config,
-    provider: createOpenAI({
-      name: config.id,
-      baseURL: config.baseUrl,
-      apiKey: config.apiKey,
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      fetch: async (url, init) => {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(new Error(`LLM call timed out after ${timeoutMs}ms`)), timeoutMs)
-        const signal = init?.signal
-          ? (typeof AbortSignal.any === 'function' ? AbortSignal.any([init.signal, controller.signal]) : controller.signal)
-          : controller.signal
-
-        try {
-          const response = await fetch(url, { ...init, signal })
-          if (!response.body) {
-            clearTimeout(timeoutId)
-            return response
-          }
-
-          let settled = false
-          const clearTimer = () => {
-            if (!settled) {
-              settled = true
-              clearTimeout(timeoutId)
-            }
-          }
-
-          const reader = response.body.getReader()
-          const timedBody = new ReadableStream({
-            async pull(streamController) {
-              try {
-                const { done, value } = await reader.read()
-                if (done) {
-                  clearTimer()
-                  streamController.close()
-                  return
-                }
-                streamController.enqueue(value)
-              }
-              catch (error) {
-                clearTimer()
-                streamController.error(error)
-              }
-            },
-            cancel(reason) {
-              clearTimer()
-              return reader.cancel(reason)
-            },
-          })
-
-          return new Response(timedBody, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-          })
-        }
-        catch (error) {
-          clearTimeout(timeoutId)
-          throw error
-        }
-      },
-    }),
-  }))
+export function resolveLlmTimeoutMs(env: object): number {
+  return Number.parseInt(firstString(env, ['LLM_TIMEOUT_MS']) || '', 10) || DEFAULT_LLM_TIMEOUT_MS
 }
 
-export function getLlmModel(client: LlmClient, kind: 'standard' | 'thinking'): LanguageModel {
-  return client.provider.chat(kind === 'thinking' ? client.thinkingModel : client.model)
+export function resolveLlmModel(config: LlmConfig, kind: 'standard' | 'thinking'): string {
+  return kind === 'thinking' ? config.thinkingModel : config.model
+}
+
+function createApiCallError(message: string, details?: { statusCode?: number, responseBody?: string }): Error {
+  return Object.assign(new Error(message), {
+    name: 'AI_APICallError',
+    ...(details?.statusCode !== undefined ? { statusCode: details.statusCode } : {}),
+    ...(details?.responseBody !== undefined ? { responseBody: details.responseBody } : {}),
+  })
+}
+
+function extractChatErrorMessage(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined
+  }
+  const errObj = (payload as Record<string, unknown>).error
+  if (!errObj || typeof errObj !== 'object') {
+    return undefined
+  }
+  const msg = (errObj as Record<string, unknown>).message
+  if (typeof msg === 'string' && msg.trim()) {
+    return truncateLogText(msg, 240)
+  }
+  return truncateLogText(JSON.stringify(errObj), 240)
 }
 
 /**
- * Stream an LLM completion and collect text, usage, and finishReason.
- * Streaming keeps SSE chunks flowing so reverse proxies (such as Cloudflare's 100s origin timeout)
- * do not sever long-running thinking or multi-story generations with HTTP 524 while waiting for the first byte.
+ * Stream an OpenAI-compatible chat completion directly over fetch + native SSE parsing.
+ * Avoids AI SDK / Zod per-chunk stream overhead (~5ms vs ~5s CPU on 4k chunks) while keeping
+ * SSE chunks flowing so reverse proxies do not trigger Cloudflare 100s HTTP 524 timeouts.
  */
-export async function collectStreamedText(
-  options: Omit<Parameters<typeof streamText>[0], 'onError'>,
-) {
-  let streamError: unknown
-  const result = streamText({
-    ...options,
-    onError: ({ error }) => {
-      streamError = error
-    },
-  } as Parameters<typeof streamText>[0])
+export async function streamOpenAiChatCompletion(options: {
+  config: LlmConfig
+  model: string
+  system: string
+  prompt: string
+  maxOutputTokens?: number
+  timeoutMs?: number
+  fetchImpl?: typeof fetch
+}): Promise<StreamedCompletionResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS
+  const fetchFn = options.fetchImpl ?? fetch
+  const endpoint = `${options.config.baseUrl.replace(/\/+$/, '')}/chat/completions`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(
+    () => controller.abort(new Error(`LLM call timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  )
 
-  let text: string
   try {
-    text = await result.text
-  }
-  catch (error) {
-    throw streamError ?? error
-  }
-  if (streamError) {
-    throw streamError
-  }
+    const response = await fetchFn(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${options.config.apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream, application/json',
+      },
+      body: JSON.stringify({
+        model: options.model,
+        messages: [
+          { role: 'system', content: options.system },
+          { role: 'user', content: options.prompt },
+        ],
+        stream: true,
+        ...(options.maxOutputTokens !== undefined ? { max_tokens: options.maxOutputTokens } : {}),
+      }),
+      signal: controller.signal,
+    })
 
-  const [usage, finishReason] = await Promise.all([result.usage, result.finishReason])
-  return { text, usage, finishReason }
+    if (!response.ok) {
+      const responseBody = await response.text().catch(() => '')
+      throw createApiCallError(
+        `HTTP ${response.status}${responseBody ? `: ${truncateLogText(responseBody, 240)}` : ''}`,
+        { statusCode: response.status, responseBody },
+      )
+    }
+
+    const contentType = (response.headers.get('content-type') || '').toLowerCase()
+    if (!response.body || contentType.includes('application/json')) {
+      const bodyText = await response.text()
+      const parsed: unknown = JSON.parse(bodyText)
+      const apiErr = extractChatErrorMessage(parsed)
+      if (apiErr) {
+        throw createApiCallError(apiErr, { responseBody: bodyText })
+      }
+      const record = parsed as Record<string, unknown>
+      const choices = record.choices as Array<Record<string, unknown>> | undefined
+      const first = choices?.[0]
+      const msg = first?.message as Record<string, unknown> | undefined
+      const text = typeof msg?.content === 'string' ? msg.content : ''
+      if (!text) {
+        throw createApiCallError('Empty JSON completion response', { responseBody: bodyText })
+      }
+      const finishReason = typeof first?.finish_reason === 'string' ? first.finish_reason : undefined
+      return { text, usage: record.usage, finishReason }
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+    let sawDataLine = false
+    let rawPreview = ''
+    let doneSeen = false
+    const parts: string[] = []
+    let usage: unknown
+    let finishReason: string | undefined
+
+    const processLine = (rawLine: string): boolean => {
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+      if (!line || line.startsWith(':')) {
+        return false
+      }
+      if (!line.startsWith('data:')) {
+        return false
+      }
+      sawDataLine = true
+      const payload = line.slice(5).trim()
+      if (!payload) {
+        return false
+      }
+      if (payload === '[DONE]') {
+        return true
+      }
+
+      // Skip reasoning-only deltas without JSON.parse to stay well inside Workers 10ms CPU budget.
+      if (
+        !payload.includes('"content"')
+        && !payload.includes('"error"')
+        && !payload.includes('"usage"')
+        && !payload.includes('"message"')
+        && (!payload.includes('"finish_reason"') || payload.includes('"finish_reason":null'))
+      ) {
+        return false
+      }
+
+      let chunk: Record<string, unknown>
+      try {
+        chunk = JSON.parse(payload) as Record<string, unknown>
+      }
+      catch {
+        return false
+      }
+
+      const streamErr = extractChatErrorMessage(chunk)
+      if (streamErr) {
+        throw createApiCallError(streamErr, { responseBody: payload })
+      }
+      if (chunk.usage !== undefined) {
+        usage = chunk.usage
+      }
+
+      const choices = chunk.choices as Array<Record<string, unknown>> | undefined
+      const first = choices?.[0]
+      if (first) {
+        if (typeof first.finish_reason === 'string') {
+          finishReason = first.finish_reason
+        }
+        const delta = first.delta as Record<string, unknown> | undefined
+        const deltaContent = delta?.content
+        if (typeof deltaContent === 'string' && deltaContent.length > 0) {
+          parts.push(deltaContent)
+        }
+        else {
+          const messageContent = (first.message as Record<string, unknown> | undefined)?.content
+          if (typeof messageContent === 'string' && messageContent.length > 0) {
+            parts.push(messageContent)
+          }
+        }
+      }
+      return false
+    }
+
+    while (!doneSeen) {
+      const { done, value } = await reader.read()
+      if (done) {
+        buffer += decoder.decode()
+        break
+      }
+      const chunkText = decoder.decode(value, { stream: true })
+      if (!sawDataLine && rawPreview.length < 512) {
+        rawPreview += chunkText.slice(0, 512 - rawPreview.length)
+      }
+      buffer += chunkText
+
+      let newlineIndex = buffer.indexOf('\n')
+      while (newlineIndex !== -1) {
+        const line = buffer.slice(0, newlineIndex)
+        buffer = buffer.slice(newlineIndex + 1)
+        if (processLine(line)) {
+          doneSeen = true
+          break
+        }
+        newlineIndex = buffer.indexOf('\n')
+      }
+    }
+
+    if (!doneSeen && buffer.length > 0) {
+      for (const line of buffer.split('\n')) {
+        if (processLine(line)) {
+          break
+        }
+      }
+    }
+
+    if (doneSeen) {
+      void reader.cancel().catch(() => undefined)
+    }
+
+    const text = parts.join('')
+    if (!text) {
+      if (!sawDataLine && rawPreview.trim().startsWith('{')) {
+        try {
+          const parsedErr: unknown = JSON.parse(rawPreview)
+          const apiErr = extractChatErrorMessage(parsedErr)
+          if (apiErr) {
+            throw createApiCallError(apiErr, { responseBody: rawPreview })
+          }
+        }
+        catch (err) {
+          if (err instanceof Error && err.name === 'AI_APICallError') {
+            throw err
+          }
+        }
+      }
+      throw createApiCallError('Empty SSE completion stream', { responseBody: rawPreview || undefined })
+    }
+
+    return { text, usage, finishReason }
+  }
+  finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 function truncateLogText(value: string, maxLength: number): string {

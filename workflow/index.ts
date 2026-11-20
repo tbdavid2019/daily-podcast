@@ -1,7 +1,6 @@
-import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
-import type { LlmClient } from './llm'
+import type { LlmConfig } from './llm'
 import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle, podcastTitleEn } from '@/config'
@@ -17,7 +16,6 @@ import {
 } from '@/worker/workflow-security'
 import { curateStoriesWithDecision } from './decision'
 import {
-  AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
   buildEpisodeCatalogKey,
   buildEpisodeIndexKey,
@@ -59,7 +57,13 @@ import {
   updateTopicArchiveIndex,
   upsertEpisodeCatalogEntry,
 } from './efficiency'
-import { collectStreamedText, createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
+import {
+  createLlmConfigs,
+  resolveLlmModel,
+  resolveLlmTimeoutMs,
+  runWithLlmFallback,
+  streamOpenAiChatCompletion,
+} from './llm'
 import {
   extractStoryDossierPrompt,
   introPrompt,
@@ -263,14 +267,15 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       return { scriptKey, skipped: true }
     }
 
-    const llmClients = createLlmClients(this.env)
+    const llmConfigs = createLlmConfigs(this.env)
+    const llmTimeoutMs = resolveLlmTimeoutMs(this.env)
     const runLlm = <T>(
       operation: string,
       kind: 'standard' | 'thinking',
-      run: (model: LanguageModel, client: LlmClient) => Promise<T>,
-    ) => runWithLlmFallback(llmClients, operation, client => run(getLlmModel(client, kind), client))
+      run: (config: LlmConfig, modelName: string) => Promise<T>,
+    ) => runWithLlmFallback(llmConfigs, operation, config => run(config, resolveLlmModel(config, kind)))
 
-    const modelName = (llmClients[0]?.model || '').toLowerCase()
+    const modelName = (llmConfigs[0]?.model || '').toLowerCase()
     const isGeminiModel = modelName.includes('gemini')
 
     const defaultMaxTokens = isGeminiModel ? 8192 : 4096
@@ -647,12 +652,13 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
           `<story id="${ref.id}" title="${ref.title}" number="${index + 1}">\n${rawContent}\n</story>`,
         ).join('\n\n---\n\n')
 
-        const { text, usage, finishReason } = await runLlm(`extract evidence dossier batch ${batchNumber}`, 'standard', model => collectStreamedText({
+        const { text, usage, finishReason } = await runLlm(`extract evidence dossier batch ${batchNumber}`, 'standard', (config, model) => streamOpenAiChatCompletion({
+          config,
           model,
           system: `${extractStoryDossierPrompt}\n\nImportant: Output <story-dossier id="STORY_ID">...</story-dossier> for all ${missingItems.length} stories in order.`,
           prompt: batchPrompt,
           maxOutputTokens: dossierMaxTokens,
-          maxRetries: AI_SDK_MAX_RETRIES,
+          timeoutMs: llmTimeoutMs,
         }))
 
         const parsedDossiers = parseStoryDossiers(text, missingItems.map(item => item.ref.title))
@@ -750,13 +756,14 @@ ${dossiersString}
 </evidence-dossiers>
 `
 
-      const { script, usage, finishReason, llmProvider, llmModel } = await runLlm('generate podcast script', 'thinking', async (model, client) => {
-        const { text, usage: usageData, finishReason: reason } = await collectStreamedText({
+      const { script, usage, finishReason, llmProvider, llmModel } = await runLlm('generate podcast script', 'thinking', async (config, model) => {
+        const { text, usage: usageData, finishReason: reason } = await streamOpenAiChatCompletion({
+          config,
           model,
           system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
           prompt: enhancedPrompt,
           maxOutputTokens: scriptMaxTokens,
-          maxRetries: AI_SDK_MAX_RETRIES,
+          timeoutMs: llmTimeoutMs,
         })
         const parsedScript = await parsePodcastScriptResponse(text, {
           isEnglish,
@@ -767,8 +774,8 @@ ${dossiersString}
           script: parsedScript,
           usage: usageData,
           finishReason: reason,
-          llmProvider: client.id,
-          llmModel: client.thinkingModel,
+          llmProvider: config.id,
+          llmModel: model,
         }
       })
 
@@ -799,7 +806,8 @@ ${dossiersString}
       console.info('Title missing or too short, triggering dedicated beautification step')
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
         const dossiers = await loadDossiersFromR2(preparedStories)
-        const { text } = await runLlm('beautify missing title', 'standard', model => collectStreamedText({
+        const { text } = await runLlm('beautify missing title', 'standard', (config, model) => streamOpenAiChatCompletion({
+          config,
           model,
           system: isEnglish
             ? `You are the Executive Editor of ${podcastTitleEn}. Based on the provided story dossiers, produce an engaging, accurate English title. Format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]". Output ONLY the title.`
@@ -807,7 +815,7 @@ ${dossiersString}
           prompt: isEnglish
             ? `Date: ${displayDate}\nToday's story dossiers:\n${dossiers.join('\n')}`
             : `日期: ${displayDate}\n今日故事重點：\n${dossiers.join('\n')}`,
-          maxRetries: AI_SDK_MAX_RETRIES,
+          timeoutMs: llmTimeoutMs,
         }))
         return text.trim().replace(/^"|"$/g, '')
       })
@@ -820,12 +828,15 @@ ${dossiersString}
     const blogContent = await step.do('create blog content', AI_STEP_CONFIG, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const dossiers = await loadDossiersFromR2(preparedStories)
-      const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => collectStreamedText({
+      // Blog markdown is synthesized directly from pre-analyzed TRIZ #2 dossiers, so 'standard' tier
+      // keeps latency & chunk volume compact without slow chain-of-thought reasoning.
+      const { text, usage, finishReason } = await runLlm('create blog content', 'standard', (config, model) => streamOpenAiChatCompletion({
+        config,
         model,
         system: isEnglish ? summarizeBlogPromptEn : summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${dossiers.map(d => `<story>${d}</story>`).join('\n\n---\n\n')}`,
         maxOutputTokens: blogMaxTokens,
-        maxRetries: AI_SDK_MAX_RETRIES,
+        timeoutMs: llmTimeoutMs,
       }))
       console.info(`create blog content success`, { usage, finishReason })
       return text
@@ -845,11 +856,12 @@ ${dossiersString}
         })
         const podcastContent = podcastDialogueLines.join('\n')
 
-        const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => collectStreamedText({
+        const { text, usage, finishReason } = await runLlm('create intro content', 'standard', (config, model) => streamOpenAiChatCompletion({
+          config,
           model,
           system: isEnglish ? introPromptEn : introPrompt,
           prompt: podcastContent,
-          maxRetries: AI_SDK_MAX_RETRIES,
+          timeoutMs: llmTimeoutMs,
         }))
         console.info(`create intro content fallback success`, { usage, finishReason })
         return text
