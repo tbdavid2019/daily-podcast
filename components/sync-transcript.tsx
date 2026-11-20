@@ -4,7 +4,8 @@ import type { TimedCue } from '@/lib/transcript'
 import { Check, Copy, Download, Play, Radio, Volume2 } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioTime } from '@/components/audio-player-context'
-import { formatPlaybackTimestamp } from '@/lib/playback-share'
+import { getSpeakerBadgeClass } from '@/lib/cast-registry'
+import { copyTextToClipboard, formatPlaybackTimestamp } from '@/lib/playback-share'
 import {
   calculateCueTimings,
   getTranscriptPath,
@@ -29,7 +30,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
   const { currentTime, duration: playerDuration } = useAudioTime()
   const [autoScroll, setAutoScroll] = useState(true)
   const [hasCopied, setHasCopied] = useState(false)
-  const cueRefs = useRef<(HTMLDivElement | null)[]>([])
+  const cueElementsRef = useRef<(HTMLDivElement | null)[]>([])
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
       return
     }
 
-    const element = cueRefs.current[activeIndex]
+    const element = cueElementsRef.current[activeIndex]
     if (element) {
       element.scrollIntoView({
         behavior: 'smooth',
@@ -106,19 +107,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
   const handleCopyText = async () => {
     const text = article.podcastContent || timedCues.map(c => `${c.speaker ? `${c.speaker}: ` : ''}${c.text}`).join('\n\n')
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text)
-      }
-      else {
-        const textarea = document.createElement('textarea')
-        textarea.value = text
-        textarea.style.position = 'fixed'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-      }
+      await copyTextToClipboard(text)
       setHasCopied(true)
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
@@ -218,15 +207,12 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
       <div className="space-y-3 pt-1">
         {timedCues.map((cue, index) => {
           const isActive = index === activeIndex
-          const speakerLower = cue.speaker.toLowerCase()
-          const isFemale = cue.speaker === '女' || speakerLower === 'cordelia'
-          const isMale = cue.speaker === '男' || speakerLower === 'david'
 
           return (
             <div
               key={`${cue.id}-${cue.start}`}
               ref={(el) => {
-                cueRefs.current[index] = el
+                cueElementsRef.current[index] = el
               }}
               role="button"
               tabIndex={0}
@@ -252,9 +238,7 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
                     <span
                       className={cn(
                         'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold tracking-wide uppercase shadow-none',
-                        isFemale && 'bg-rose-50 text-rose-700 border border-rose-200/80',
-                        isMale && 'bg-sky-50 text-sky-700 border border-sky-200/80',
-                        !isFemale && !isMale && 'bg-zinc-100 text-zinc-700 border border-zinc-200/80',
+                        getSpeakerBadgeClass(cue.speaker),
                       )}
                     >
                       {cue.speaker}

@@ -77,10 +77,14 @@ describe('podcast script XML harness & parser', () => {
 
     // Dynamic speaker mode for ad-hoc guests without pre-registering aliases
     const adHoc = await parsePodcastScriptResponse<string>(
-      '<turn speaker="女">歡迎 Linus。</turn><turn speaker="Linus">Hello everyone.</turn>',
+      '<turn speaker="女">歡迎 Linus。</turn><turn speaker="Linus">Hello everyone.</turn><turn speaker="Herman">Boundary test.</turn>',
       { allowDynamicSpeakers: true },
     )
-    assert.deepEqual(adHoc.dialogue.map(line => line.speaker), ['女', 'Linus'])
+    assert.deepEqual(adHoc.dialogue.map(line => line.speaker), ['女', 'Linus', 'Herman'])
+
+    // Boundary-aware matching prevents "female" from colliding with "male" alias
+    assert.equal(normalizePodcastSpeaker('Cordelia (female)'), '女')
+    assert.equal(normalizePodcastSpeaker('Herman'), null)
   })
 
   it('enforces minTurns and multi-speaker quality gates so broken outputs trigger fallback', async () => {
@@ -192,5 +196,28 @@ describe('podcast script XML harness & parser', () => {
       '### NGINX\n- Core Mechanism: KeepAlive UAF',
       '### SQLite\n- Core Mechanism: WAL lock',
     ])
+  })
+
+  it('resolves speakers, formats display names, and computes deterministic badge classes from CastRegistry', async () => {
+    const {
+      DEFAULT_CAST_REGISTRY,
+      formatSpeakerDisplayName,
+      getSpeakerBadgeClass,
+      resolveCastSpeaker,
+    } = await import('../lib/cast-registry')
+
+    assert.equal(DEFAULT_CAST_REGISTRY.length, 2)
+    assert.equal(resolveCastSpeaker('Cordelia（女）'), '女')
+    assert.equal(resolveCastSpeaker('David'), '男')
+    assert.equal(formatSpeakerDisplayName('女', true), 'Cordelia')
+    assert.equal(formatSpeakerDisplayName('Cordelia', false), '女')
+    assert.equal(formatSpeakerDisplayName('來賓 Alex', false), '來賓 Alex')
+
+    assert.match(getSpeakerBadgeClass('女'), /bg-rose-50/)
+    assert.match(getSpeakerBadgeClass('David'), /bg-sky-50/)
+    const guestClassA = getSpeakerBadgeClass('Alex')
+    const guestClassB = getSpeakerBadgeClass('alex')
+    assert.equal(guestClassA, guestClassB)
+    assert.match(guestClassA, /bg-(?:amber|emerald)-50/)
   })
 })

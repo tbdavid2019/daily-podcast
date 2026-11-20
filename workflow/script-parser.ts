@@ -1,36 +1,20 @@
 import type { PodcastDialogueLine, PodcastScriptResponse } from './types'
+import type { CanonicalPodcastSpeakerId, PodcastSpeakerProfile } from '@/lib/cast-registry'
 import { z } from 'zod'
+import {
+  cleanSpeakerLabel,
+  DEFAULT_CAST_REGISTRY,
+  resolveCastSpeaker,
+} from '@/lib/cast-registry'
 import { MAX_DIALOGUE_LINE_CHARS, splitDialogueText } from './efficiency'
 
 export type ScriptParseFormat = 'xml' | 'json' | 'lines'
 
-/**
- * Extensible speaker definition for N-host / guest podcast casts.
- * Future multi-host or guest episodes can extend DEFAULT_PODCAST_CAST with
- * additional profiles (e.g. { id: '來賓', name: 'Alex', aliases: ['來賓', 'guest', 'alex'], voiceRole: 'custom' }).
- */
-export interface PodcastSpeakerProfile<TSpeaker extends string = string> {
-  id: TSpeaker
-  name: string
-  aliases: readonly string[]
-  voiceRole?: 'female' | 'male' | 'custom'
-  voiceId?: string
-}
+export type { PodcastSpeakerProfile }
 
-export const DEFAULT_PODCAST_CAST: readonly PodcastSpeakerProfile<PodcastDialogueLine['speaker']>[] = [
-  {
-    id: '女',
-    name: 'Cordelia',
-    aliases: ['女', 'cordelia', '女聲', '女性', '女主持人', 'female', 'woman'],
-    voiceRole: 'female',
-  },
-  {
-    id: '男',
-    name: 'David',
-    aliases: ['男', 'david', '男聲', '男性', '男主持人', 'male', 'man'],
-    voiceRole: 'male',
-  },
-]
+export const DEFAULT_PODCAST_CAST: readonly PodcastSpeakerProfile<CanonicalPodcastSpeakerId>[] = DEFAULT_CAST_REGISTRY
+
+export { resolveCastSpeaker as resolvePodcastSpeaker }
 
 export interface ParsePodcastScriptOptions<TSpeaker extends string = PodcastDialogueLine['speaker']> {
   isEnglish?: boolean
@@ -64,65 +48,11 @@ function truncatePreview(value: string, maxLength = 120): string {
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength)}...`
 }
 
-function cleanSpeakerLabel(rawSpeaker: string): string {
-  return rawSpeaker
-    .replace(/^[\s"'`「『【[(*#]+|[\s"'`」』】\])*#]+$/g, '')
-    .trim()
-}
-
-/**
- * Resolves a raw speaker label against a configured speaker cast.
- * Supports exact aliases, parenthetical combinations like "Cordelia（女）" or "David／男",
- * and optional dynamic guest speakers when allowDynamicSpeakers is enabled.
- */
-export function resolvePodcastSpeaker<TSpeaker extends string = PodcastDialogueLine['speaker']>(
-  rawSpeaker: string,
-  cast: readonly PodcastSpeakerProfile<TSpeaker>[] = DEFAULT_PODCAST_CAST as readonly PodcastSpeakerProfile<TSpeaker>[],
-  allowDynamicSpeakers = false,
-): TSpeaker | null {
-  const cleaned = cleanSpeakerLabel(rawSpeaker)
-  if (!cleaned) {
-    return null
-  }
-
-  const lower = cleaned.toLowerCase()
-
-  // 1. Exact ID / name / alias match (highest priority, unambiguous for N speakers).
-  for (const profile of cast) {
-    if (
-      cleaned === profile.id
-      || lower === profile.id.toLowerCase()
-      || lower === profile.name.toLowerCase()
-      || profile.aliases.some(alias => lower === alias.toLowerCase())
-    ) {
-      return profile.id
-    }
-  }
-
-  // 2. Substring/composite token match (e.g. "Cordelia（女）", "來賓 Alex", "David／男")
-  // only when it uniquely matches exactly one cast member.
-  const matchedProfiles = cast.filter((profile) => {
-    const tokens = [profile.id, profile.name, ...profile.aliases]
-      .map(token => token.trim().toLowerCase())
-      .filter(Boolean)
-    return tokens.some(token => lower.includes(token))
-  })
-  if (matchedProfiles.length === 1) {
-    return matchedProfiles[0].id
-  }
-
-  if (allowDynamicSpeakers) {
-    return cleaned as TSpeaker
-  }
-
-  return null
-}
-
 /**
  * Convenience wrapper for the canonical 2-host ('女' | '男') cast.
  */
-export function normalizePodcastSpeaker(rawSpeaker: string): PodcastDialogueLine['speaker'] | null {
-  return resolvePodcastSpeaker(rawSpeaker, DEFAULT_PODCAST_CAST, false)
+export function normalizePodcastSpeaker(rawSpeaker: string): CanonicalPodcastSpeakerId | null {
+  return resolveCastSpeaker(rawSpeaker, DEFAULT_PODCAST_CAST, false)
 }
 
 function decodeBasicXmlEntities(text: string): string {
@@ -323,7 +253,7 @@ function extractPlainDialogueLines<TSpeaker extends string>(
         continue
       }
 
-      const resolved = resolvePodcastSpeaker(prefix, cast, allowDynamicSpeakers)
+      const resolved = resolveCastSpeaker(prefix, cast, allowDynamicSpeakers)
       if (resolved && content) {
         dialogue.push({
           speaker: resolved,
@@ -484,7 +414,7 @@ export async function parsePodcastScriptResponse<TSpeaker extends string = Podca
   const sanitizedDialogue = validated.dialogue.flatMap((line, index) => {
     const rawSpeaker = line.speaker.trim()
     const text = line.text.trim()
-    const speaker = resolvePodcastSpeaker(rawSpeaker, cast, allowDynamicSpeakers)
+    const speaker = resolveCastSpeaker(rawSpeaker, cast, allowDynamicSpeakers)
     if (!speaker || !text) {
       throw new Error(`invalid dialogue line at index ${index} (speaker="${truncatePreview(rawSpeaker, 40)}", textLen=${text.length})`)
     }
@@ -501,6 +431,10 @@ export async function parsePodcastScriptResponse<TSpeaker extends string = Podca
 
   if (requireMultipleSpeakers && cast.length >= 2 && distinctSpeakers.size < 2) {
     throw new Error(`parsed podcast script contains only ${distinctSpeakers.size} distinct speaker(s); expected at least 2`)
+  }
+
+  if (distinctSpeakers.size > 8) {
+    throw new Error(`parsed podcast script contains too many distinct speakers (${distinctSpeakers.size})`)
   }
 
   const normalizedTitle = typeof validated.title === 'string' && validated.title.trim()

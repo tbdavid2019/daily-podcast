@@ -7,7 +7,7 @@ import {
   originValidationResponse,
 } from '@modelcontextprotocol/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { z } from 'zod4'
+import { z } from 'zod'
 import { buildArticleMarkdown, buildHomepageMarkdown, getArticleByDate, getHomepageArticles } from '@/lib/content'
 import { DEFAULT_BASE_URL, getBaseUrl } from '@/lib/discovery'
 import {
@@ -51,8 +51,8 @@ function createPodcastMcpServer(env?: PodcastMcpEnv) {
   }, async ({ page }) => {
     const currentEnv = await getMcpEnv(env)
     const currentPage = normalizeWebMcpPage({ page })
-    const { posts, totalPages } = await getHomepageArticles(currentEnv, currentPage)
-    const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages, currentEnv.NEXT_STATIC_HOST)
+    const { posts, totalPages, currentPage: safePage } = await getHomepageArticles(currentEnv, currentPage)
+    const markdown = buildHomepageMarkdown(getBaseUrl(), posts, safePage, totalPages, currentEnv.NEXT_STATIC_HOST)
 
     return { content: [{ type: 'text', text: truncateWebMcpOutput(markdown) }] }
   })

@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { synthesize } from '@echristian/edge-tts'
+import { getSpeakerVoiceConfig } from '@/lib/cast-registry'
 import { createPcmWavHeader } from './audio-multipart'
 
 export const DEFAULT_GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts'
@@ -137,7 +138,7 @@ export async function callSingleGeminiTts(
   const timeoutMs = options.timeoutMs ?? DEFAULT_GEMINI_TTS_TIMEOUT_MS
   const model = config.model || DEFAULT_GEMINI_TTS_MODEL
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-  const voiceName = gender === '男' ? (env.MAN_VOICE_ID || 'Sadaltager') : (env.WOMAN_VOICE_ID || 'Leda')
+  const { geminiVoice: voiceName } = getSpeakerVoiceConfig(gender, env)
   const isGemini38Tts = model.startsWith('gemini-3.8-') && model.endsWith('-tts')
 
   const payload = {
@@ -276,12 +277,19 @@ export async function geminiTTS(
 async function edgeTTS(text: string, gender: string, env: Env, isEnglish = false) {
   const defaultMaleVoice = isEnglish ? 'en-US-GuyNeural' : 'zh-TW-YunJheNeural'
   const defaultFemaleVoice = isEnglish ? 'en-US-JennyNeural' : 'zh-TW-HsiaoChenNeural'
+  const defaultCustomVoice = isEnglish ? 'en-US-AriaNeural' : 'zh-TW-HsiaoYuNeural'
   const defaultLang = isEnglish ? 'en-US' : 'zh-TW'
+  const { role } = getSpeakerVoiceConfig(gender, env)
+  const voice = role === 'male'
+    ? (env.MAN_VOICE_ID || defaultMaleVoice)
+    : role === 'female'
+      ? (env.WOMAN_VOICE_ID || defaultFemaleVoice)
+      : defaultCustomVoice
 
   const { audio } = await synthesize({
     text,
     language: defaultLang,
-    voice: gender === '男' ? (env.MAN_VOICE_ID || defaultMaleVoice) : (env.WOMAN_VOICE_ID || defaultFemaleVoice),
+    voice,
     rate: env.AUDIO_SPEED || '10%',
   })
   return audio
@@ -291,6 +299,13 @@ async function minimaxTTS(text: string, gender: string, env: Env, isEnglish = fa
   const apiKey = env.TTS_API_SECRET || env.TTS_API_KEY
   const defaultMaleVoice = isEnglish ? 'English_expressive_narrator' : 'Chinese (Mandarin)_Gentleman'
   const defaultFemaleVoice = isEnglish ? 'English_friendly_host' : 'Chinese (Mandarin)_Gentle_Senior'
+  const defaultCustomVoice = isEnglish ? 'English_Trustworth_Man' : 'Chinese (Mandarin)_News_Anchor'
+  const { role } = getSpeakerVoiceConfig(gender, env)
+  const voiceId = role === 'male'
+    ? (env.MAN_VOICE_ID || defaultMaleVoice)
+    : role === 'female'
+      ? (env.WOMAN_VOICE_ID || defaultFemaleVoice)
+      : defaultCustomVoice
 
   const res = await fetch(`${env.TTS_API_URL || 'https://api.minimax.chat/v1/t2a_v2'}?GroupId=${env.TTS_API_ID}`, {
     method: 'POST',
@@ -303,7 +318,7 @@ async function minimaxTTS(text: string, gender: string, env: Env, isEnglish = fa
       text,
       timber_weights: [
         {
-          voice_id: gender === '男' ? (env.MAN_VOICE_ID || defaultMaleVoice) : (env.WOMAN_VOICE_ID || defaultFemaleVoice),
+          voice_id: voiceId,
           weight: 100,
         },
       ],
@@ -342,7 +357,7 @@ async function openaiTTS(text: string, gender: string, env: Env, isEnglish = fal
 
   const baseUrl = (env.OPENAI_TTS_BASE_URL || env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
-  const voice = gender === '男' ? (env.MAN_VOICE_ID || 'onyx') : (env.WOMAN_VOICE_ID || 'nova')
+  const { openaiVoice: voice } = getSpeakerVoiceConfig(gender, env)
 
   const body: Record<string, unknown> = {
     model,

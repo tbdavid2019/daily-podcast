@@ -1,68 +1,60 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import {
+  getBgEnabledServerSnapshot,
+  getBgEnabledSnapshot,
+  subscribeBgEnabled,
+} from '@/lib/bg-preference'
 import { cn } from '@/lib/utils'
+
+const FALLBACK_BING_URL = 'https://cn.bing.com/th?id=OHR.HathawayCottage_EN-US1795877015_UHD.jpg'
 
 export function BingBackground() {
   const [isLoaded, setIsLoaded] = useState(false)
-  const [isEnabled, setIsEnabled] = useState(true) // Default to ON
   const [imageUrl, setImageUrl] = useState('')
+  const isEnabled = useSyncExternalStore(
+    subscribeBgEnabled,
+    getBgEnabledSnapshot,
+    getBgEnabledServerSnapshot,
+  )
 
   useEffect(() => {
-    // Check if enabled from localStorage, default to true if not set
-    const saved = localStorage.getItem('bing-bg-enabled')
-    const initialEnabled = saved === null ? true : saved === 'true'
-    if (saved !== null) {
-      setIsEnabled(initialEnabled)
-    }
-    else {
-      localStorage.setItem('bing-bg-enabled', 'true')
+    if (!isEnabled || imageUrl) {
+      return
     }
 
-    let hasFetchedImage = false
+    let cancelled = false
     const fetchRandomImage = async () => {
-      if (hasFetchedImage) {
-        return
-      }
-      hasFetchedImage = true
       try {
         const response = await fetch('https://raw.githubusercontent.com/v5tech/bing-wallpaper/main/bing-wallpaper.md')
         const text = await response.text()
         const matches = text.match(/https:\/\/cn\.bing\.com\/th\?id=[^)]+/g)
-        if (matches && matches.length > 0) {
-          const randomUrl = matches[Math.floor(Math.random() * matches.length)]
-          setImageUrl(randomUrl)
-        }
-        else {
-          // Fallback
-          setImageUrl('https://cn.bing.com/th?id=OHR.HathawayCottage_EN-US1795877015_UHD.jpg')
+        const selectedUrl = matches && matches.length > 0
+          ? matches[Math.floor(Math.random() * matches.length)]
+          : FALLBACK_BING_URL
+        if (!cancelled) {
+          setImageUrl(selectedUrl)
         }
       }
       catch (error) {
         console.error('Failed to fetch Bing wallpaper list:', error)
-        setImageUrl('https://cn.bing.com/th?id=OHR.HathawayCottage_EN-US1795877015_UHD.jpg')
+        if (!cancelled) {
+          setImageUrl(FALLBACK_BING_URL)
+        }
       }
     }
 
-    // Listen for custom toggle events
-    const handleToggle = (e: any) => {
-      const nextEnabled = Boolean(e?.detail?.enabled)
-      setIsEnabled(nextEnabled)
-      if (nextEnabled) {
-        void fetchRandomImage()
-      }
+    void fetchRandomImage()
+    return () => {
+      cancelled = true
     }
-    window.addEventListener('bing-bg-toggle', handleToggle)
+  }, [isEnabled, imageUrl])
 
-    if (initialEnabled) {
-      void fetchRandomImage()
-    }
-
-    return () => window.removeEventListener('bing-bg-toggle', handleToggle)
-  }, [])
-
-  if (!isEnabled || !imageUrl)
+  if (!isEnabled || !imageUrl) {
     return null
+  }
 
   return (
     <div
@@ -71,11 +63,14 @@ export function BingBackground() {
         isLoaded ? 'opacity-100' : 'opacity-0',
       )}
     >
-      <img
+      <Image
         src={imageUrl}
         alt="Bing Wallpaper"
+        fill
+        unoptimized
+        sizes="100vw"
         className={cn(
-          'h-full w-full object-cover',
+          'object-cover',
           isLoaded && 'animate-zoom-out',
         )}
         onLoad={() => setIsLoaded(true)}

@@ -1,6 +1,8 @@
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
-import type { GeneratedScriptData, WorkflowParams } from './types'
+import type { GeneratedScriptData, PodcastSpeakerId, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
+import { formatSpeakerDisplayName } from '@/lib/cast-registry'
+import { getArticleTimestamp } from '@/lib/utils'
 import { getCalendarDate, parseTimezoneOffset } from '@/worker/workflow-security'
 import {
   buildDialogueTimings,
@@ -15,11 +17,14 @@ import {
   buildAudioBatchKey,
   buildAudioMultipartStateKey,
   buildAudioSegmentKey,
+  buildEpisodeCatalogKey,
   buildRssCacheKey,
   IO_STEP_CONFIG,
   isAudioCheckpointForInstance,
   MAX_TTS_SEGMENT_CHARS,
+  parseEpisodeCatalogIndex,
   splitDialogueText,
+  upsertEpisodeCatalogEntry,
 } from './efficiency'
 import synthesize, { resolveTtsProvider } from './tts'
 
@@ -182,7 +187,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     console.info(`Loaded script with ${dialogue.length} lines`)
 
     // 2. Flatten and chunk all dialogue (keeping original dialogueIndex for exact timing reconstruction)
-    const allSegments: { text: string, speaker: '男' | '女', dialogueIndex: number }[] = []
+    const allSegments: { text: string, speaker: PodcastSpeakerId, dialogueIndex: number }[] = []
     for (const [dialogueIndex, line] of dialogue.entries()) {
       const text = line.text.trim()
       if (!text)
@@ -458,6 +463,46 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       }
 
       await this.env.HACKER_NEWS_KV.delete(rssCacheKey)
+
+      try {
+        const catalogKey = buildEpisodeCatalogKey(runEnv, variant)
+        const existingCatalogRaw = await this.env.HACKER_NEWS_KV.get<unknown>(catalogKey, 'json')
+        const existingCatalog = parseEpisodeCatalogIndex(existingCatalogRaw)
+        const fallbackStoryTitles = (scriptData.stories || [])
+          .slice(0, 3)
+          .map(s => s.title)
+          .filter(Boolean)
+          .join(' | ')
+        const resolvedTitle = scriptData.title
+          || (fallbackStoryTitles ? `[備用標題] ${displayDate} | ${fallbackStoryTitles}` : `[備用標題] ${displayDate}`)
+        const firstLine = dialogue[0]
+          ? `${formatSpeakerDisplayName(dialogue[0].speaker, isEnglish)}: ${dialogue[0].text}`
+          : ''
+        const resolvedIntro = (scriptData.introContent || '').trim() || firstLine
+        const resolvedUpdatedAt = getArticleTimestamp(displayDate, scriptData.generatedAt ?? event.timestamp.getTime())
+        const nextAudioDurationSec = timingSummary?.audioDurationSec ?? scriptData.audioDurationSec
+        const currentEntry = existingCatalog.entries.find(entry => entry.date === displayDate)
+        const shouldUpdateCatalog = !currentEntry
+          || currentEntry.audio !== podcastKey
+          || currentEntry.audioDurationSec !== nextAudioDurationSec
+          || currentEntry.title !== resolvedTitle
+        if (shouldUpdateCatalog) {
+          const nextCatalog = upsertEpisodeCatalogEntry(existingCatalog, {
+            date: displayDate,
+            title: resolvedTitle,
+            introContent: resolvedIntro,
+            audio: podcastKey,
+            updatedAt: resolvedUpdatedAt,
+            variant,
+            ...(typeof nextAudioDurationSec === 'number' ? { audioDurationSec: nextAudioDurationSec } : {}),
+          })
+          await this.env.HACKER_NEWS_KV.put(catalogKey, JSON.stringify(nextCatalog))
+        }
+      }
+      catch (catalogError) {
+        // Catalog index update is non-blocking so KV rate limits never block canonical audio/RSS publication.
+        console.warn('Failed to update episode catalog index after audio publication', { catalogError })
+      }
     })
 
     try {

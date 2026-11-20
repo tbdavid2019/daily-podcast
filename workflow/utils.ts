@@ -1,4 +1,3 @@
-import puppeteer from '@cloudflare/puppeteer'
 import * as cheerio from 'cheerio'
 import {
   normalizeDedupeUrl,
@@ -585,34 +584,6 @@ export async function getHackerNewsStory(
       article ? `<article>${article.substring(0, maxContentChars)}</article>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
-}
-
-export async function concatAudioFiles(audioFiles: string[], BROWSER: Fetcher, { workerUrl }: { workerUrl: string }) {
-  const browser = await puppeteer.launch(BROWSER)
-  const page = await browser.newPage()
-  await page.goto(`${workerUrl}/audio`)
-
-  console.info('start concat audio files', audioFiles)
-  const fileUrl = await page.evaluate(async (audioFiles: string[]) => {
-    // 這段 JS 在瀏覽器中執行
-    // @ts-expect-error 瀏覽器內的物件
-    const blob = await concatAudioFilesOnBrowser(audioFiles)
-
-    const result = new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-    return await result
-  }, audioFiles) as string
-
-  console.info('concat audio files result', fileUrl.substring(0, 100))
-
-  await browser.close()
-
-  const response = await fetch(fileUrl)
-  return await response.blob()
 }
 
 export async function getGitHubTrendingStories() {

@@ -6,8 +6,8 @@ export async function GET(request: Request) {
   const { env } = await getCloudflareContext({ async: true })
   const url = new URL(request.url)
   const currentPage = Number(url.searchParams.get('page')) || 1
-  const { posts, totalPages } = await getHomepageArticles(env, currentPage)
-  const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages, env.NEXT_STATIC_HOST)
+  const { posts, totalPages, currentPage: safePage } = await getHomepageArticles(env, currentPage)
+  const markdown = buildHomepageMarkdown(getBaseUrl(), posts, safePage, totalPages, env.NEXT_STATIC_HOST)
 
   return withMarkdownHeaders(markdown, {
     headers: {

@@ -6,6 +6,7 @@ import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
 import { getRequestArticleByDate } from '@/lib/content'
 import { getBaseUrl } from '@/lib/discovery'
+import { withRenderedBlogHtml } from '@/lib/markdown'
 import { isValidArticleTab } from '@/lib/playback-share'
 
 export const revalidate = 3600
@@ -98,7 +99,7 @@ export default async function PostVariantPage({ params, searchParams }: PostVari
   return (
     <ArticleCard
       key={`${post.date}-${episodeVariant}-${selectedTab}`}
-      article={post}
+      article={withRenderedBlogHtml(post)}
       staticHost={env.NEXT_STATIC_HOST}
       showFooter
       initialTab={selectedTab}

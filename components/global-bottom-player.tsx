@@ -20,7 +20,7 @@ import { useAudioPlayer, useAudioTime } from '@/components/audio-player-context'
 import { Slider } from '@/components/ui/slider'
 import { podcastCoverImage } from '@/config'
 import { dictionaries } from '@/lib/i18n'
-import { buildPlaybackShareUrl, formatPlaybackTimestamp, getArticlePath } from '@/lib/playback-share'
+import { buildPlaybackShareUrl, copyTextToClipboard, formatPlaybackTimestamp, getArticlePath } from '@/lib/playback-share'
 import { cn } from '@/lib/utils'
 
 function Rewind10Icon({ className }: { className?: string }) {
@@ -208,19 +208,8 @@ export function GlobalBottomPlayer() {
     )
 
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url)
-      }
-      else {
-        const textarea = document.createElement('textarea')
-        textarea.value = url
-        textarea.style.position = 'fixed'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-      }
+      // Delegates to shared copyTextToClipboard (uses navigator.clipboard?.writeText with fallback)
+      await copyTextToClipboard(url)
       setHasCopied(true)
       setShareFeedback(dict.linkCopied)
       setTimeout(() => {

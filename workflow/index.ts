@@ -6,6 +6,9 @@ import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams 
 import { generateText, streamText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle, podcastTitleEn } from '@/config'
+import { formatSpeakerDisplayName } from '@/lib/cast-registry'
+import { articleToCatalogEntry } from '@/lib/content'
+import { getArticleTimestamp } from '@/lib/utils'
 import {
   buildChildWorkflowInstanceId,
   buildWorkflowInstanceId,
@@ -17,6 +20,7 @@ import { curateStoriesWithDecision } from './decision'
 import {
   AI_SDK_MAX_RETRIES,
   AI_STEP_CONFIG,
+  buildEpisodeCatalogKey,
   buildEpisodeIndexKey,
   buildRssCacheKey,
   buildStoryArticleCheckpointKey,
@@ -44,6 +48,7 @@ import {
   getPlanBCurationCaps,
   IO_STEP_CONFIG,
   MAX_DIALOGUE_LINE_CHARS,
+  parseEpisodeCatalogIndex,
   parseRedditDedupeIndex,
   parseStoryContentCheckpoint,
   parseStoryDedupeIndex,
@@ -53,6 +58,7 @@ import {
   updateRedditDedupeIndex,
   updateStoryDedupeIndex,
   updateTopicArchiveIndex,
+  upsertEpisodeCatalogEntry,
 } from './efficiency'
 import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
 import {
@@ -196,6 +202,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     // New Script Key: script:{env}:{variant}:{date}
     const scriptKey = `script:${runEnv}:${variant}:${displayDate}`
     const episodeIndexKey = buildEpisodeIndexKey(runEnv, variant)
+    const episodeCatalogKey = buildEpisodeCatalogKey(runEnv, variant)
     const rssCacheKey = buildRssCacheKey(runEnv, variant)
 
     const oldestRetainedCheckpointDate = getDateDaysBefore(localToday, 3)
@@ -848,7 +855,7 @@ ${dossiersString}
 
       introContent = await step.do('create intro content', AI_STEP_CONFIG, async () => {
         const podcastDialogueLines = podcastScript.dialogue.map((line) => {
-          const speakerName = isEnglish ? (line.speaker === '女' ? 'Cordelia' : 'David') : line.speaker
+          const speakerName = formatSpeakerDisplayName(line.speaker, isEnglish)
           const separator = isEnglish ? ': ' : '：'
           return `${speakerName}${separator}${line.text}`
         })
@@ -942,8 +949,79 @@ ${dossiersString}
         topics: todayTopics,
       }
       const nextTopicArchiveIndex = updateTopicArchiveIndex(topicArchiveIndex, todayTopicEntry)
-      const existingDates = await kvGet<string[]>(episodeIndexKey, 'json')
+      const [existingDates, existingCatalogRaw] = await Promise.all([
+        kvGet<string[]>(episodeIndexKey, 'json'),
+        kvGet<unknown>(episodeCatalogKey, 'json'),
+      ])
       const nextDates = updateEpisodeIndexDates(existingDates, displayDate)
+
+      const fallbackStoryTitles = (stories as Story[])
+        .slice(0, 3)
+        .map(s => s.title)
+        .filter(Boolean)
+        .join(' | ')
+      const resolvedCatalogTitle = podcastScript.title
+        || (fallbackStoryTitles ? `[備用標題] ${displayDate} | ${fallbackStoryTitles}` : `[備用標題] ${displayDate}`)
+      const firstDialogueLine = podcastScript.dialogue[0]
+        ? `${formatSpeakerDisplayName(podcastScript.dialogue[0].speaker, isEnglish)}: ${podcastScript.dialogue[0].text}`
+        : ''
+      let workingCatalog = parseEpisodeCatalogIndex(existingCatalogRaw)
+
+      // Bounded progressive backfill in Workflow: reconcile up to 20 missing historical episodes per run
+      // until all indexed dates are present, then mark `seeded: true` for 1-KV-read homepage rendering.
+      if (!workingCatalog.seeded) {
+        const presentDates = new Set(workingCatalog.entries.map(e => e.date))
+        presentDates.add(displayDate)
+        const missingDates = nextDates.filter(d => !presentDates.has(d))
+        const batchMissing = missingDates.slice(0, 20)
+        if (batchMissing.length > 0) {
+          const pastRecords = await Promise.all(batchMissing.map(async (pastDate) => {
+            const rawScript = await kvGet<GeneratedScriptData>(`script:${runEnv}:${variant}:${pastDate}`, 'json')
+            if (rawScript) {
+              const title = rawScript.title || `[備用標題] ${pastDate}`
+              const firstPastLine = Array.isArray(rawScript.dialogue) && rawScript.dialogue[0]
+                ? `${formatSpeakerDisplayName(rawScript.dialogue[0].speaker, isEnglish)}: ${rawScript.dialogue[0].text}`
+                : ''
+              return articleToCatalogEntry({
+                date: pastDate,
+                title,
+                stories: [],
+                podcastContent: firstPastLine,
+                blogContent: '',
+                introContent: rawScript.introContent || '',
+                audio: rawScript.audio || `${pastDate.replaceAll('-', '/')}/${runEnv}/${variant}-${pastDate}.mp3`,
+                updatedAt: getArticleTimestamp(pastDate, rawScript.generatedAt),
+                variant,
+                ...(typeof rawScript.audioDurationSec === 'number' ? { audioDurationSec: rawScript.audioDurationSec } : {}),
+              }, variant)
+            }
+            if (variant === 'hacker-news') {
+              const legacy = await kvGet<Article>(`content:${runEnv}:hacker-news:${pastDate}`, 'json')
+              if (legacy) {
+                return articleToCatalogEntry(legacy, variant)
+              }
+            }
+            return null
+          }))
+          for (const pastEntry of pastRecords) {
+            if (pastEntry) {
+              workingCatalog = upsertEpisodeCatalogEntry(workingCatalog, pastEntry)
+            }
+          }
+        }
+        if (missingDates.length <= batchMissing.length) {
+          workingCatalog = { ...workingCatalog, seeded: true }
+        }
+      }
+
+      const nextCatalogIndex = upsertEpisodeCatalogEntry(workingCatalog, {
+        date: displayDate,
+        title: resolvedCatalogTitle,
+        introContent: introContent.trim() || firstDialogueLine,
+        audio: basePodcastKey,
+        updatedAt: getArticleTimestamp(displayDate, event.timestamp.getTime()),
+        variant,
+      })
 
       await Promise.all([
         kvPut(scriptKey, JSON.stringify(scriptData)), // Permanent storage, never expires
@@ -957,6 +1035,7 @@ ${dossiersString}
           expirationTtl: 60 * 60 * 24 * 60,
         }),
         kvPut(episodeIndexKey, JSON.stringify(nextDates)),
+        kvPut(episodeCatalogKey, JSON.stringify(nextCatalogIndex)),
       ])
       console.info(`✅ Script saved to KV: ${scriptKey}`)
     })

@@ -265,4 +265,24 @@ describe('Gemini TTS retry and fallback behavior', () => {
     assert.equal(resolveTtsProvider('edge'), 'edge')
     assert.equal(resolveTtsProvider('unknown'), 'gemini')
   })
+
+  it('resolves Gemini and OpenAI voices from CastRegistry while honoring env overrides', async () => {
+    const { getSpeakerVoiceConfig } = await import('../lib/cast-registry')
+
+    assert.deepEqual(getSpeakerVoiceConfig('女'), {
+      geminiVoice: 'Leda',
+      openaiVoice: 'nova',
+      role: 'female',
+    })
+    assert.deepEqual(getSpeakerVoiceConfig('David', { MAN_VOICE_ID: 'Fenrir' }), {
+      geminiVoice: 'Fenrir',
+      openaiVoice: 'Fenrir',
+      role: 'male',
+    })
+    assert.deepEqual(getSpeakerVoiceConfig('來賓 Alex'), {
+      geminiVoice: 'Puck',
+      openaiVoice: 'alloy',
+      role: 'custom',
+    })
+  })
 })

@@ -1,31 +1,24 @@
 'use client'
 
 import { Image as ImageIcon, ImageOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
+import {
+  getBgEnabledServerSnapshot,
+  getBgEnabledSnapshot,
+  setBgEnabledPreference,
+  subscribeBgEnabled,
+} from '@/lib/bg-preference'
 import { cn } from '@/lib/utils'
 
 export function BgToggle() {
-  const [enabled, setEnabled] = useState(true)
-
-  useEffect(() => {
-    const saved = localStorage.getItem('bing-bg-enabled')
-    if (saved !== null) {
-      setEnabled(saved === 'true')
-    }
-    else {
-      setEnabled(true)
-    }
-  }, [])
+  const enabled = useSyncExternalStore(
+    subscribeBgEnabled,
+    getBgEnabledSnapshot,
+    getBgEnabledServerSnapshot,
+  )
 
   const toggle = () => {
-    const newState = !enabled
-    setEnabled(newState)
-    localStorage.setItem('bing-bg-enabled', String(newState))
-
-    // Dispatch custom event to notify BingBackground
-    window.dispatchEvent(new CustomEvent('bing-bg-toggle', {
-      detail: { enabled: newState },
-    }))
+    setBgEnabledPreference(!enabled)
   }
 
   return (

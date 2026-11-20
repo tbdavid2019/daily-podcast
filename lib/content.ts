@@ -1,13 +1,16 @@
+import type { EpisodeCatalogEntry } from '@/workflow/efficiency'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { cache } from 'react'
-import { mapScriptToArticle } from '@/lib/utils'
+import { getArticleTimestamp, mapScriptToArticle } from '@/lib/utils'
 import {
+  buildEpisodeCatalogKey,
   buildEpisodeIndexKey,
   buildRssCacheKey,
+  parseEpisodeCatalogIndex,
   updateEpisodeIndexDates,
 } from '@/workflow/efficiency'
 
-export { buildEpisodeIndexKey, buildRssCacheKey }
+export { buildEpisodeCatalogKey, buildEpisodeIndexKey, buildRssCacheKey }
 
 interface ContentEnv {
   HACKER_NEWS_KV: KVNamespace
@@ -128,11 +131,82 @@ export async function appendEpisodeDateToIndex(
   return nextDates
 }
 
+export function resolveCatalogIntroSummary(introContent?: string, podcastContent?: string): string {
+  const trimmedIntro = introContent?.trim()
+  if (trimmedIntro) {
+    return trimmedIntro
+  }
+  const firstLine = podcastContent?.split('\n')?.[0]?.trim()
+  return firstLine || ''
+}
+
+function catalogEntryToArticle(entry: EpisodeCatalogEntry, fallbackVariant: string): Article {
+  return {
+    date: entry.date,
+    title: entry.title,
+    stories: [],
+    podcastContent: '',
+    blogContent: '',
+    introContent: entry.introContent,
+    audio: entry.audio,
+    updatedAt: entry.updatedAt,
+    variant: entry.variant || fallbackVariant,
+    ...(typeof entry.audioDurationSec === 'number' ? { audioDurationSec: entry.audioDurationSec } : {}),
+  }
+}
+
+export function articleToCatalogEntry(article: Article, fallbackVariant: string): EpisodeCatalogEntry {
+  return {
+    date: article.date,
+    title: article.title,
+    introContent: resolveCatalogIntroSummary(article.introContent, article.podcastContent),
+    audio: article.audio,
+    updatedAt: getArticleTimestamp(article.date, article.updatedAt),
+    variant: article.variant || fallbackVariant,
+    ...(typeof article.audioDurationSec === 'number' ? { audioDurationSec: article.audioDurationSec } : {}),
+  }
+}
+
+export async function getEpisodeCatalog(
+  env: ContentEnv,
+  variant = 'hacker-news',
+): Promise<{ entries: EpisodeCatalogEntry[], seeded: boolean }> {
+  const runEnv = env.NEXTJS_ENV || 'production'
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const catalogKey = buildEpisodeCatalogKey(runEnv, normalizedVariant)
+  const cached = await env.HACKER_NEWS_KV.get<unknown>(catalogKey, 'json')
+  const parsed = parseEpisodeCatalogIndex(cached)
+  return {
+    entries: parsed.entries,
+    seeded: Boolean(parsed.seeded),
+  }
+}
+
 export async function getHomepageArticles(env: ContentEnv, currentPage = 1, pageSize = 6, variant = 'hacker-news') {
   const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  const safePageSize = Number.isFinite(pageSize) && pageSize >= 1 ? Math.floor(pageSize) : 6
+  const catalog = await getEpisodeCatalog(env, normalizedVariant)
+
+  if (catalog.seeded && catalog.entries.length > 0) {
+    const totalItems = catalog.entries.length
+    const totalPages = Math.ceil(totalItems / safePageSize) || 1
+    const normalizedPage = Number.isFinite(currentPage) && currentPage >= 1
+      ? Math.min(Math.floor(currentPage), totalPages)
+      : 1
+    const startIndex = (normalizedPage - 1) * safePageSize
+    const currentEntries = catalog.entries.slice(startIndex, startIndex + safePageSize)
+
+    return {
+      posts: currentEntries.map(entry => catalogEntryToArticle(entry, normalizedVariant)),
+      totalPages,
+      currentPage: normalizedPage,
+    }
+  }
+
+  // Fallback when catalog is unseeded or incomplete: read ONLY the requested page slice (<= pageSize KV reads),
+  // overlaying any newer catalog entries without performing unbounded full-history scans or GET KV writes.
   const sortedDates = await getEpisodeDates(env, normalizedVariant)
   const totalItems = sortedDates.length
-  const safePageSize = Number.isFinite(pageSize) && pageSize >= 1 ? Math.floor(pageSize) : 6
   const totalPages = Math.ceil(totalItems / safePageSize) || 1
   const normalizedPage = Number.isFinite(currentPage) && currentPage >= 1
     ? Math.min(Math.floor(currentPage), totalPages)
@@ -140,16 +214,36 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
   const startIndex = (normalizedPage - 1) * safePageSize
   const currentDays = sortedDates.slice(startIndex, startIndex + safePageSize)
 
-  const posts = (await Promise.all(
-    currentDays.map(async (day) => {
-      const article = await getArticleByDate(env, day, normalizedVariant)
-      return article as Article | null
-    }),
-  )).filter(Boolean) as Article[]
+  const catalogByDate = new Map(catalog.entries.map(entry => [entry.date, entry]))
+  const missingDays = currentDays.filter(day => !catalogByDate.has(day))
+  const fetchedArticles = missingDays.length > 0
+    ? await Promise.all(missingDays.map(day => getArticleByDate(env, day, normalizedVariant)))
+    : []
+  const fetchedByDate = new Map<string, Article>()
+  missingDays.forEach((day, idx) => {
+    const article = fetchedArticles[idx]
+    if (article) {
+      fetchedByDate.set(day, article)
+    }
+  })
+
+  const posts: Article[] = []
+  for (const day of currentDays) {
+    const catalogEntry = catalogByDate.get(day)
+    if (catalogEntry) {
+      posts.push(catalogEntryToArticle(catalogEntry, normalizedVariant))
+      continue
+    }
+    const article = fetchedByDate.get(day)
+    if (article) {
+      posts.push(article)
+    }
+  }
 
   return {
     posts,
     totalPages,
+    currentPage: normalizedPage,
   }
 }
 

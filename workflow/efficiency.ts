@@ -791,3 +791,120 @@ export function updateEpisodeIndexDates(
   }
   return Array.from(validDates).sort((a, b) => b.localeCompare(a))
 }
+
+export interface EpisodeCatalogEntry {
+  date: string
+  title: string
+  introContent: string
+  audio: string
+  updatedAt: number
+  variant: string
+  audioDurationSec?: number
+}
+
+export interface EpisodeCatalogIndex {
+  version: 1
+  seeded?: boolean
+  entries: EpisodeCatalogEntry[]
+}
+
+export function buildEpisodeCatalogKey(runEnv: string, variant = 'hacker-news'): string {
+  const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+  return `catalog:${runEnv}:${normalizedVariant}:episodes`
+}
+
+export function parseEpisodeCatalogIndex(value: unknown): EpisodeCatalogIndex {
+  if (!value || typeof value !== 'object' || (value as { version?: unknown }).version !== 1) {
+    return { version: 1, entries: [] }
+  }
+
+  const seeded = (value as { seeded?: unknown }).seeded === true
+  const rawEntries = (value as { entries?: unknown }).entries
+  if (!Array.isArray(rawEntries)) {
+    return { version: 1, ...(seeded ? { seeded: true } : {}), entries: [] }
+  }
+
+  const byDate = new Map<string, EpisodeCatalogEntry>()
+  for (const raw of rawEntries) {
+    if (!raw || typeof raw !== 'object') {
+      continue
+    }
+    const {
+      date,
+      title,
+      introContent,
+      audio,
+      updatedAt,
+      variant,
+      audioDurationSec,
+    } = raw as Record<string, unknown>
+
+    if (
+      typeof date !== 'string'
+      || !/^\d{4}-\d{2}-\d{2}$/.test(date)
+      || typeof title !== 'string'
+      || typeof audio !== 'string'
+      || typeof updatedAt !== 'number'
+      || !Number.isFinite(updatedAt)
+    ) {
+      continue
+    }
+
+    const normalizedVariant = typeof variant === 'string' && variant.trim()
+      ? (variant === 'main' ? 'hacker-news' : variant.trim())
+      : 'hacker-news'
+
+    byDate.set(date, {
+      date,
+      title,
+      introContent: typeof introContent === 'string' ? introContent : '',
+      audio,
+      updatedAt,
+      variant: normalizedVariant,
+      ...(typeof audioDurationSec === 'number' && Number.isFinite(audioDurationSec) && audioDurationSec >= 0
+        ? { audioDurationSec }
+        : {}),
+    })
+  }
+
+  const entries = Array.from(byDate.values()).sort((left, right) => right.date.localeCompare(left.date))
+  return {
+    version: 1,
+    ...(seeded ? { seeded: true } : {}),
+    entries,
+  }
+}
+
+export function upsertEpisodeCatalogEntry(
+  index: EpisodeCatalogIndex,
+  entry: EpisodeCatalogEntry,
+  options?: { seeded?: boolean },
+): EpisodeCatalogIndex {
+  const parsed = parseEpisodeCatalogIndex(index)
+  const seeded = options?.seeded ?? parsed.seeded
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+    return parsed
+  }
+
+  const normalizedVariant = entry.variant === 'main' ? 'hacker-news' : (entry.variant || 'hacker-news')
+  const normalizedEntry: EpisodeCatalogEntry = {
+    date: entry.date,
+    title: entry.title,
+    introContent: entry.introContent || '',
+    audio: entry.audio,
+    updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+    variant: normalizedVariant,
+    ...(typeof entry.audioDurationSec === 'number' && Number.isFinite(entry.audioDurationSec) && entry.audioDurationSec >= 0
+      ? { audioDurationSec: entry.audioDurationSec }
+      : {}),
+  }
+
+  const entries = parsed.entries.filter(existing => existing.date !== normalizedEntry.date)
+  entries.push(normalizedEntry)
+  entries.sort((left, right) => right.date.localeCompare(left.date))
+  return {
+    version: 1,
+    ...(seeded ? { seeded: true } : {}),
+    entries,
+  }
+}

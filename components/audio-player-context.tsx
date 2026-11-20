@@ -58,7 +58,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [playbackRate, setPlaybackRateState] = useState<PlaybackRate>(() => {
+  const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(SPEED_STORAGE_KEY)
@@ -78,8 +78,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [isPlayerVisible, setIsPlayerVisible] = useState(false)
-  const [volume, setVolumeState] = useState<number>(1.0)
-  const [isMuted, setIsMutedState] = useState<boolean>(false)
+  const [volume, setVolume] = useState<number>(1.0)
+  const [isMuted, setIsMuted] = useState<boolean>(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
@@ -91,43 +91,55 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
   // Restore last played episode, progress, and volume upon client mount
   useEffect(() => {
+    let active = true
     try {
       const { volume: savedVol, isMuted: savedMuted } = getVolumePreference()
-      setVolumeState(savedVol)
-      setIsMutedState(savedMuted)
+      const { episode, isVisible } = getLastEpisode()
+      const savedProgress = episode ? getEpisodeProgress(episode.date, episode.variant) : 0
+
       if (savedVol > 0) {
         prevVolumeRef.current = savedVol
       }
       if (audioRef.current) {
         audioRef.current.volume = savedVol
         audioRef.current.muted = savedMuted
-      }
-
-      const { episode, isVisible } = getLastEpisode()
-      if (episode) {
-        const savedProgress = getEpisodeProgress(episode.date, episode.variant)
-        setCurrentEpisode(episode)
-        setIsPlayerVisible(isVisible)
-        if (savedProgress > 0) {
-          setCurrentTime(savedProgress)
-          pendingSeekRef.current = savedProgress
-        }
-        if (episode.duration && episode.duration > 0) {
-          setDuration(episode.duration)
-        }
-        if (audioRef.current) {
+        if (episode) {
           audioRef.current.src = episode.audioSrc
           audioRef.current.playbackRate = playbackRateRef.current
         }
       }
+      if (episode && savedProgress > 0) {
+        pendingSeekRef.current = savedProgress
+      }
+
+      queueMicrotask(() => {
+        if (!active) {
+          return
+        }
+        setVolume(savedVol)
+        setIsMuted(savedMuted)
+        if (episode) {
+          setCurrentEpisode(episode)
+          setIsPlayerVisible(isVisible)
+          if (savedProgress > 0) {
+            setCurrentTime(savedProgress)
+          }
+          if (episode.duration && episode.duration > 0) {
+            setDuration(episode.duration)
+          }
+        }
+      })
     }
     catch {
       // Ignore storage read errors on initial mount
     }
+    return () => {
+      active = false
+    }
   }, [])
 
-  const setPlaybackRate = useCallback((rate: PlaybackRate) => {
-    setPlaybackRateState(rate)
+  const updatePlaybackRate = useCallback((rate: PlaybackRate) => {
+    setPlaybackRate(rate)
     playbackRateRef.current = rate
     if (audioRef.current) {
       try {
@@ -387,13 +399,13 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     setIsPlaying(false)
   }
 
-  const setVolume = useCallback((newVolume: number) => {
+  const updateVolume = useCallback((newVolume: number) => {
     const clamped = Math.max(0, Math.min(1, Number.isFinite(newVolume) ? newVolume : 1.0))
-    setVolumeState(clamped)
+    setVolume(clamped)
     if (clamped > 0) {
       prevVolumeRef.current = clamped
       if (isMuted) {
-        setIsMutedState(false)
+        setIsMuted(false)
         if (audioRef.current) {
           audioRef.current.muted = false
           audioRef.current.volume = clamped
@@ -403,7 +415,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       }
     }
     else {
-      setIsMutedState(true)
+      setIsMuted(true)
       if (audioRef.current) {
         audioRef.current.muted = true
         audioRef.current.volume = 0
@@ -419,7 +431,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   }, [isMuted])
 
   const toggleMute = useCallback(() => {
-    setIsMutedState((prevMuted) => {
+    setIsMuted((prevMuted) => {
       const nextMuted = !prevMuted
       if (audioRef.current) {
         audioRef.current.muted = nextMuted
@@ -427,7 +439,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       if (!nextMuted) {
         if (volume === 0) {
           const restored = prevVolumeRef.current > 0 ? prevVolumeRef.current : 1.0
-          setVolumeState(restored)
+          setVolume(restored)
           if (audioRef.current) {
             audioRef.current.volume = restored
           }
@@ -445,8 +457,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     if (!audio) {
       return
     }
-    setVolumeState(audio.volume)
-    setIsMutedState(audio.muted)
+    setVolume(audio.volume)
+    setIsMuted(audio.muted)
     saveVolumePreference(audio.volume, audio.muted)
   }
 
@@ -463,8 +475,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     togglePlayPause,
     seek,
     skip,
-    setPlaybackRate,
-    setVolume,
+    setPlaybackRate: updatePlaybackRate,
+    setVolume: updateVolume,
     toggleMute,
     closePlayer,
     openPlayer,
@@ -485,8 +497,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     togglePlayPause,
     seek,
     skip,
-    setPlaybackRate,
-    setVolume,
+    updatePlaybackRate,
+    updateVolume,
     toggleMute,
     closePlayer,
     openPlayer,

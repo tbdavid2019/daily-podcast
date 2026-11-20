@@ -133,6 +133,9 @@ export function getHistoryKey(date: string, variant?: string): string {
   return `${normalizedVariant}:${date}`
 }
 
+let cachedHistoryRaw: string | null = null
+let cachedHistoryMap: HistoryMap = {}
+
 export function getListenHistoryMap(): HistoryMap {
   if (typeof window === 'undefined') {
     return {}
@@ -140,9 +143,17 @@ export function getListenHistoryMap(): HistoryMap {
   try {
     const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
     if (!raw) {
-      return {}
+      cachedHistoryRaw = null
+      cachedHistoryMap = {}
+      return cachedHistoryMap
     }
-    return JSON.parse(raw) as HistoryMap
+    if (raw === cachedHistoryRaw) {
+      return cachedHistoryMap
+    }
+    const parsed = JSON.parse(raw) as HistoryMap
+    cachedHistoryRaw = raw
+    cachedHistoryMap = parsed
+    return parsed
   }
   catch {
     return {}
@@ -196,9 +207,23 @@ export function markEpisodeCompleted(date: string, variant?: string, duration?: 
   }
 }
 
-export function getEpisodeListenStatus(date: string, variant?: string): { status: 'unheard' | 'in_progress' | 'completed', progress: number, duration: number } {
+export interface EpisodeListenStatus {
+  status: 'unheard' | 'in_progress' | 'completed'
+  progress: number
+  duration: number
+}
+
+const SERVER_LISTEN_STATUS: EpisodeListenStatus = {
+  status: 'unheard',
+  progress: 0,
+  duration: 0,
+}
+
+const listenStatusCache = new Map<string, { sig: string, value: EpisodeListenStatus }>()
+
+export function getEpisodeListenStatus(date: string, variant?: string): EpisodeListenStatus {
   if (typeof window === 'undefined') {
-    return { status: 'unheard', progress: 0, duration: 0 }
+    return SERVER_LISTEN_STATUS
   }
   try {
     const map = getListenHistoryMap()
@@ -217,10 +242,50 @@ export function getEpisodeListenStatus(date: string, variant?: string): { status
     if (singleProgress >= 2) {
       return { status: 'in_progress', progress: singleProgress, duration: 0 }
     }
-    return { status: 'unheard', progress: 0, duration: 0 }
+    return SERVER_LISTEN_STATUS
   }
   catch {
-    return { status: 'unheard', progress: 0, duration: 0 }
+    return SERVER_LISTEN_STATUS
+  }
+}
+
+export function getEpisodeListenStatusServerSnapshot(): EpisodeListenStatus {
+  return SERVER_LISTEN_STATUS
+}
+
+export function getEpisodeListenStatusSnapshot(date: string, variant?: string): EpisodeListenStatus {
+  const next = getEpisodeListenStatus(date, variant)
+  const key = getHistoryKey(date, variant)
+  const sig = `${next.status}:${next.progress}:${next.duration}`
+  const cached = listenStatusCache.get(key)
+  if (cached && cached.sig === sig) {
+    return cached.value
+  }
+  listenStatusCache.set(key, { sig, value: next })
+  return next
+}
+
+export function subscribeEpisodeListenStatus(date: string, variant: string | undefined, onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  const targetKey = getHistoryKey(date, variant)
+  const handleHistoryUpdate = (event: Event) => {
+    const custom = event as CustomEvent<{ key?: string }>
+    if (!custom.detail?.key || custom.detail.key === targetKey) {
+      onStoreChange()
+    }
+  }
+  const handleStorage = () => {
+    onStoreChange()
+  }
+
+  window.addEventListener('podcast_history_updated', handleHistoryUpdate)
+  window.addEventListener('storage', handleStorage)
+  return () => {
+    window.removeEventListener('podcast_history_updated', handleHistoryUpdate)
+    window.removeEventListener('storage', handleStorage)
   }
 }
 

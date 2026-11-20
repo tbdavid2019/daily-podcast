@@ -106,8 +106,10 @@ describe('timestamped playback sharing', () => {
 
   it('copies timestamp URL directly to clipboard in article card', async () => {
     const source = await readFile(new URL('../components/article-card.tsx', import.meta.url), 'utf8')
+    const helperSource = await readFile(new URL('../lib/playback-share.ts', import.meta.url), 'utf8')
 
-    assert.match(source, /navigator\.clipboard\?\.writeText/)
+    assert.match(source, /copyTextToClipboard\(url\)/)
+    assert.match(helperSource, /navigator\.clipboard\?\.writeText/)
     assert.match(source, /hasCopied/)
   })
 
@@ -210,7 +212,9 @@ describe('playback rate presets and global player', () => {
 
   it('copies timestamped share URL directly to clipboard with visual feedback', async () => {
     const source = await readFile(new URL('../components/global-bottom-player.tsx', import.meta.url), 'utf8')
-    assert.match(source, /navigator\.clipboard\?\.writeText/)
+    const helperSource = await readFile(new URL('../lib/playback-share.ts', import.meta.url), 'utf8')
+    assert.match(source, /copyTextToClipboard\(url\)/)
+    assert.match(helperSource, /navigator\.clipboard\?\.writeText/)
     assert.match(source, /hasCopied/)
   })
 

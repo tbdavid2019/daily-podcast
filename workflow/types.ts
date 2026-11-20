@@ -1,3 +1,7 @@
+import type { PodcastSpeakerId } from '@/lib/cast-registry'
+
+export type { PodcastSpeakerId }
+
 export interface WorkflowParams {
   today?: string
   force?: boolean
@@ -8,7 +12,7 @@ export interface WorkflowParams {
 }
 
 export interface PodcastDialogueLine {
-  speaker: '男' | '女'
+  speaker: PodcastSpeakerId
   text: string
 }
 

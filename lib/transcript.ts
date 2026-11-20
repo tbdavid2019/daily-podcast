@@ -220,3 +220,38 @@ export function getTranscriptPath(date: string, variant?: string, format: 'vtt' 
     ? `${basePath}/${encodeURIComponent(variant)}/transcript.${format}`
     : `${basePath}/transcript.${format}`
 }
+
+export function createTranscriptOptionsResponse(): Response {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Accept',
+    },
+  })
+}
+
+export function createTranscriptResponse(
+  article: Pick<Article, 'podcastContent' | 'dialogue' | 'audioDurationSec' | 'dialogueTimings' | 'title'> | null | undefined,
+  format: 'vtt' | 'srt',
+): Response {
+  if (!article) {
+    return new Response('Episode not found', { status: 404 })
+  }
+
+  const cues = parseDialogueLines(article.podcastContent, article.dialogue)
+  const timedCues = calculateCueTimings(cues, article.audioDurationSec, article.dialogueTimings)
+  const body = format === 'vtt'
+    ? generateWebVTT(timedCues, article.title)
+    : generateSRT(timedCues)
+
+  return new Response(body, {
+    headers: {
+      'Content-Type': format === 'vtt' ? 'text/vtt; charset=utf-8' : 'application/x-subrip; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    },
+  })
+}

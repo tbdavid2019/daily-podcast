@@ -27,8 +27,8 @@ the podcast-generation Workflows.
    - Uses R2 and Durable Objects for OpenNext incremental/tag cache behavior.
 
 2. Generation Worker (`worker/index.ts`, local config `worker/wrangler.jsonc`)
-   - Owns the Cron trigger and the public HTTP entry points `/workflow`,
-     `/script`, and `/audio`.
+   - Owns the Cron trigger and the public HTTP entry points `/workflow` and
+     `/script`.
    - Exports `PodcastScriptWorkflow` and `PodcastAudioWorkflow`.
    - The script Workflow collects stories, calls the text model, writes the
      generated script to KV, then starts the audio Workflow.
@@ -64,8 +64,8 @@ compatible across both Workers or be deployed in a deliberate order.
 - `worker/wrangler.example.jsonc`: safe backend configuration template.
 - `worker/wrangler.jsonc`: ignored local/deployment configuration; it can
   contain secrets and must never be printed wholesale or committed.
-- `cloudflare-env.d.ts` and `worker-configuration.d.ts`: generated binding
-  types; regenerate them instead of hand-editing them.
+- `cloudflare-env.d.ts`: generated binding
+  types; regenerate it instead of hand-editing it.
 
 ## Data and routing invariants
 
@@ -76,6 +76,7 @@ compatible across both Workers or be deployed in a deliberate order.
   one side without checking the other Worker and RSS/article routes.
 - `main` is an alias for the canonical `hacker-news` variant.
 - Script KV key: `script:{env}:{variant}:{date}`.
+- Episode catalog KV key: `catalog:{env}:{variant}:episodes`. Stores sorted compact episode summaries; homepage uses 1-read O(1) mode only when `seeded: true` and falls back to date-index + page-bounded reads when unseeded.
 - Legacy content KV key: `content:{env}:hacker-news:{date}`. Web reads still
   fall back to it, so do not remove it without a migration.
 - Per-story cached content is prefixed from the legacy content key with

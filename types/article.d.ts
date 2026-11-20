@@ -4,6 +4,7 @@ interface Article {
   stories: Story[]
   podcastContent: string
   blogContent: string
+  blogHtml?: string
   introContent: string
   audio: string
   updatedAt: number

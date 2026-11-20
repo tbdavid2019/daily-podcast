@@ -12,6 +12,7 @@ import {
   buildAudioBatchKey,
   buildAudioMultipartStateKey,
   buildAudioSegmentKey,
+  buildEpisodeCatalogKey,
   buildEpisodeIndexKey,
   buildRssCacheKey,
   buildStoryArticleCheckpointKey,
@@ -35,6 +36,7 @@ import {
   getPlanBCurationCaps,
   isAudioCheckpointForInstance,
   normalizeDedupeUrl,
+  parseEpisodeCatalogIndex,
   parseStoryContentCheckpoint,
   parseStoryDedupeIndex,
   parseTopicArchiveIndex,
@@ -44,6 +46,7 @@ import {
   updateRedditDedupeIndex,
   updateStoryDedupeIndex,
   updateTopicArchiveIndex,
+  upsertEpisodeCatalogEntry,
 } from '../workflow/efficiency'
 
 describe('workflow retry budgets', () => {
@@ -462,5 +465,143 @@ describe('topic archive and historical callbacks', () => {
     assert.match(getScriptSection, /authenticateWorkflowRequest/)
     assert.doesNotMatch(getScriptSection, /key:\s*scriptKey/)
     assert.doesNotMatch(workerSource, /oobwei\.workers\.dev/)
+  })
+})
+
+describe('episode catalog index and cold-start backfill', () => {
+  it('builds canonical catalog key, parses entries safely, and upserts sorted deduplicated entries', () => {
+    assert.equal(buildEpisodeCatalogKey('production', 'hacker-news'), 'catalog:production:hacker-news:episodes')
+    assert.equal(buildEpisodeCatalogKey('production', 'main'), 'catalog:production:hacker-news:episodes')
+    assert.equal(buildEpisodeCatalogKey('staging', 'en'), 'catalog:staging:en:episodes')
+
+    const invalid = parseEpisodeCatalogIndex({ version: 2, entries: [] })
+    assert.deepEqual(invalid, { version: 1, entries: [] })
+
+    const parsed = parseEpisodeCatalogIndex({
+      version: 1,
+      entries: [
+        { date: '2026-11-18', title: 'Old', introContent: 'Intro 18', audio: 'a18.mp3', updatedAt: 100, variant: 'main' },
+        { date: 'bad-date', title: 'Skip', introContent: '', audio: 'x.mp3', updatedAt: 1, variant: 'en' },
+        { date: '2026-11-20', title: 'New', introContent: 'Intro 20', audio: 'a20.mp3', updatedAt: 200, variant: 'hacker-news', audioDurationSec: 900 },
+      ],
+    })
+    assert.deepEqual(parsed.entries.map(e => e.date), ['2026-11-20', '2026-11-18'])
+    assert.equal(parsed.entries[1].variant, 'hacker-news')
+
+    const upserted = upsertEpisodeCatalogEntry(parsed, {
+      date: '2026-11-18',
+      title: 'Updated 18',
+      introContent: 'Updated Intro',
+      audio: 'a18-new.mp3',
+      updatedAt: 300,
+      variant: 'hacker-news',
+      audioDurationSec: 640,
+    })
+    assert.equal(upserted.entries.length, 2)
+    assert.equal(upserted.entries[1].title, 'Updated 18')
+    assert.equal(upserted.entries[1].audioDurationSec, 640)
+  })
+
+  it('serves homepage articles in 1 KV read when seeded and safely slices unseeded/cold archives without KV writes', async () => {
+    const { buildEpisodeCatalogKey, parseEpisodeCatalogIndex, upsertEpisodeCatalogEntry } = await import('../workflow/efficiency')
+    const { getEpisodeCatalog, getHomepageArticles } = await import('../lib/content')
+
+    const kvStore = new Map<string, unknown>()
+    const kvGets: string[] = []
+    const kvPuts: string[] = []
+
+    kvStore.set('index:production:hacker-news:dates', ['2026-11-20', '2026-11-19', '2026-11-18'])
+    kvStore.set('script:production:hacker-news:2026-11-20', {
+      displayDate: '2026-11-20',
+      title: 'EP 20',
+      introContent: 'Summary 20',
+      blogContent: '# Full Blog 20',
+      dialogue: [{ speaker: '女', text: 'Hi' }],
+      stories: [{ id: '1', title: 'Story 1' }],
+      generatedAt: 2000,
+      audio: '2026/11/20/production/hacker-news-2026-11-20.mp3',
+      audioDurationSec: 600,
+    })
+    kvStore.set('script:production:hacker-news:2026-11-19', {
+      displayDate: '2026-11-19',
+      title: 'EP 19',
+      introContent: '',
+      blogContent: '# Full Blog 19',
+      dialogue: [{ speaker: '男', text: 'Fallback intro line' }],
+      stories: [],
+      generatedAt: 1000,
+      audio: '2026/11/19/production/hacker-news-2026-11-19.mp3',
+    })
+    kvStore.set('script:production:hacker-news:2026-11-18', {
+      displayDate: '2026-11-18',
+      title: 'EP 18',
+      introContent: 'Summary 18',
+      blogContent: '# Full Blog 18',
+      dialogue: [{ speaker: '女', text: 'Hey' }],
+      stories: [],
+      generatedAt: 500,
+      audio: '2026/11/18/production/hacker-news-2026-11-18.mp3',
+    })
+
+    // Simulate Workflow writing an unseeded 1-entry catalog BEFORE full archive seeding
+    kvStore.set(buildEpisodeCatalogKey('production', 'hacker-news'), {
+      version: 1,
+      entries: [{
+        date: '2026-11-20',
+        title: 'EP 20',
+        introContent: 'Summary 20',
+        audio: '2026/11/20/production/hacker-news-2026-11-20.mp3',
+        updatedAt: 2000,
+        variant: 'hacker-news',
+        audioDurationSec: 600,
+      }],
+    })
+
+    const env = {
+      NEXTJS_ENV: 'production',
+      HACKER_NEWS_KV: {
+        get: async (key: string) => {
+          kvGets.push(key)
+          return kvStore.get(key) ?? null
+        },
+        put: async (key: string, value: string) => {
+          kvPuts.push(key)
+          kvStore.set(key, JSON.parse(value))
+        },
+        list: async () => ({ keys: [], list_complete: true }),
+      } as unknown as KVNamespace,
+    }
+
+    // Unseeded partial catalog: must NOT hide history, writes 0 KV entries during GET, and reads <= 1 page
+    const unseededPage = await getHomepageArticles(env, 99, 1, 'hacker-news')
+    assert.equal(kvPuts.length, 0)
+    assert.equal(unseededPage.totalPages, 3)
+    assert.equal(unseededPage.currentPage, 3)
+    assert.equal(unseededPage.posts[0].date, '2026-11-18')
+
+    // Once Workflow/backfill marks catalog seeded=true, getHomepageArticles executes 1 KV read total (O(1))
+    const seededIndex = ['2026-11-20', '2026-11-19', '2026-11-18'].reduce(
+      (idx, day, pos) => upsertEpisodeCatalogEntry(idx, {
+        date: day,
+        title: `EP ${20 - pos}`,
+        introContent: day === '2026-11-19' ? '男: Fallback intro line' : `Summary ${20 - pos}`,
+        audio: `2026/11/${20 - pos}/production/hacker-news-${day}.mp3`,
+        updatedAt: 3000 - pos,
+        variant: 'hacker-news',
+      }),
+      parseEpisodeCatalogIndex(null),
+    )
+    kvStore.set(buildEpisodeCatalogKey('production', 'hacker-news'), { ...seededIndex, seeded: true })
+
+    kvGets.length = 0
+    const catalog = await getEpisodeCatalog(env, 'hacker-news')
+    assert.equal(catalog.seeded, true)
+    assert.equal(catalog.entries.length, 3)
+
+    kvGets.length = 0
+    const warmPage = await getHomepageArticles(env, 2, 1, 'hacker-news')
+    assert.deepEqual(kvGets, ['catalog:production:hacker-news:episodes'])
+    assert.equal(warmPage.posts[0].date, '2026-11-19')
+    assert.equal(warmPage.posts[0].introContent, '男: Fallback intro line')
   })
 })

@@ -2,17 +2,16 @@
 
 import type { ArticleTab } from '@/lib/playback-share'
 import { Check, Pause, Play, Share2 } from 'lucide-react'
-import MarkdownIt from 'markdown-it'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useAudioPlayer } from '@/components/audio-player-context'
-import { Comments } from '@/components/comments'
-import { SyncTranscript } from '@/components/sync-transcript'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dictionaries } from '@/lib/i18n'
 import {
   buildPlaybackShareUrl,
+  copyTextToClipboard,
   formatPlaybackTimestamp,
   getArticlePath,
   getPlaybackStartFromHash,
@@ -21,24 +20,21 @@ import {
   parseTabFromUrl,
   sanitizeExternalUrl,
 } from '@/lib/playback-share'
-import { getEpisodeListenStatus, getEpisodeProgress } from '@/lib/playback-storage'
+import {
+  getEpisodeListenStatusServerSnapshot,
+  getEpisodeListenStatusSnapshot,
+  getEpisodeProgress,
+  subscribeEpisodeListenStatus,
+} from '@/lib/playback-storage'
 import { cn } from '@/lib/utils'
 
-const markdownRenderer = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-})
+const SyncTranscript = dynamic(
+  () => import('@/components/sync-transcript').then(mod => mod.SyncTranscript),
+)
 
-const defaultLinkRenderer = markdownRenderer.renderer.rules.link_open
-  ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
-
-markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
-  const token = tokens[idx]
-  token.attrSet('target', '_blank')
-  token.attrSet('rel', 'nofollow noopener noreferrer')
-  return defaultLinkRenderer(tokens, idx, options, env, self)
-}
+const Comments = dynamic(
+  () => import('@/components/comments').then(mod => mod.Comments),
+)
 
 interface ArticleCardProps {
   article: Article
@@ -59,17 +55,54 @@ export function ArticleCard({
 }: ArticleCardProps) {
   const isEn = article.variant === 'en'
   const dict = isEn ? dictionaries.en : dictionaries.zh
-  const [activeTab, setActiveTab] = useState<ArticleTab>(() => {
-    if (initialTab && isValidArticleTab(initialTab)) {
-      return initialTab
-    }
-    return 'summary'
-  })
+  const defaultTab: ArticleTab = initialTab && isValidArticleTab(initialTab) ? initialTab : 'summary'
   const [shareMessage, setShareMessage] = useState('')
   const [hasCopied, setHasCopied] = useState(false)
-  const [listenStatus, setListenStatus] = useState(() => {
-    return getEpisodeListenStatus(article.date, article.variant)
-  })
+
+  const subscribeArticleTab = useCallback((onStoreChange: () => void) => {
+    if (typeof window === 'undefined') {
+      return () => {}
+    }
+    window.addEventListener('popstate', onStoreChange)
+    window.addEventListener('hashchange', onStoreChange)
+    window.addEventListener('article-tab-change', onStoreChange)
+    return () => {
+      window.removeEventListener('popstate', onStoreChange)
+      window.removeEventListener('hashchange', onStoreChange)
+      window.removeEventListener('article-tab-change', onStoreChange)
+    }
+  }, [])
+
+  const getArticleTabSnapshot = useCallback((): ArticleTab => {
+    if (typeof window === 'undefined') {
+      return defaultTab
+    }
+    if (isEpisodePath(window.location.pathname, article.date, article.variant)) {
+      return parseTabFromUrl(window.location) ?? 'summary'
+    }
+    return defaultTab
+  }, [article.date, article.variant, defaultTab])
+
+  const activeTab = useSyncExternalStore(
+    subscribeArticleTab,
+    getArticleTabSnapshot,
+    () => defaultTab,
+  )
+
+  const subscribeListenStatus = useCallback(
+    (onStoreChange: () => void) => subscribeEpisodeListenStatus(article.date, article.variant, onStoreChange),
+    [article.date, article.variant],
+  )
+  const getListenStatusSnapshot = useCallback(
+    () => getEpisodeListenStatusSnapshot(article.date, article.variant),
+    [article.date, article.variant],
+  )
+  const listenStatus = useSyncExternalStore(
+    subscribeListenStatus,
+    getListenStatusSnapshot,
+    getEpisodeListenStatusServerSnapshot,
+  )
+
   const audio = `${staticHost}/${article.audio}?t=${article.updatedAt}`
   const summary = article.introContent || article.podcastContent?.split('\n')?.[0]
 
@@ -108,47 +141,27 @@ export function ArticleCard({
     }
   }, [article.date, article.title, article.updatedAt, article.variant, audio, currentEpisode, isPlaying, isSameEpisode, updateCurrentEpisode])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const tabFromUrl = parseTabFromUrl(window.location)
-    if (tabFromUrl) {
-      setActiveTab(tabFromUrl)
-    }
-
-    const handlePopState = () => {
-      const nextTab = parseTabFromUrl(window.location) ?? 'summary'
-      setActiveTab(nextTab)
-    }
-
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
-
   const handleTabChange = (value: string) => {
     if (!isValidArticleTab(value)) {
       return
     }
-    setActiveTab(value)
 
     if (typeof window !== 'undefined') {
       const newPath = getArticlePath(article.date, article.variant, value)
-      const currentHash = window.location.hash
-      const newUrl = currentHash ? `${newPath}${currentHash}` : newPath
+      // Preserve only valid playback timestamp hashes (#t=...); drop legacy tab hashes (#podcast, etc.)
+      const playbackStart = getPlaybackStartFromHash(window.location.hash)
+      const nextHash = playbackStart !== null ? `#t=${playbackStart}` : ''
+      const newUrl = `${newPath}${nextHash}`
       const currentUrl = window.location.pathname + window.location.hash
 
       if (currentUrl !== newUrl) {
         window.history.pushState(null, '', newUrl)
+        window.dispatchEvent(new Event('article-tab-change'))
       }
     }
   }
 
-  const renderedBlogHtml = useMemo(
-    () => article.blogContent ? markdownRenderer.render(article.blogContent) : '',
-    [article.blogContent],
-  )
+  const renderedBlogHtml = article.blogContent ? (article.blogHtml ?? '') : ''
 
   useEffect(() => {
     if (!isCurrentEpisode) {
@@ -168,19 +181,6 @@ export function ArticleCard({
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [article.date, article.variant, isCurrentEpisode, seek])
-
-  useEffect(() => {
-    const handleHistoryUpdate = (event: Event) => {
-      const custom = event as CustomEvent<{ key?: string }>
-      const key = `${article.variant || 'hacker-news'}:${article.date}`
-      if (!custom.detail?.key || custom.detail.key === key) {
-        setListenStatus(getEpisodeListenStatus(article.date, article.variant))
-      }
-    }
-
-    window.addEventListener('podcast_history_updated', handleHistoryUpdate)
-    return () => window.removeEventListener('podcast_history_updated', handleHistoryUpdate)
-  }, [article.date, article.variant])
 
   const handlePlayToggle = async () => {
     let start: number | undefined
@@ -226,20 +226,8 @@ export function ArticleCard({
     const url = buildPlaybackShareUrl(window.location.origin, article.date, article.variant, time, activeTab)
 
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url)
-      }
-      else {
-        const textarea = document.createElement('textarea')
-        textarea.value = url
-        textarea.style.position = 'fixed'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-      }
-
+      // Delegates to shared copyTextToClipboard (uses navigator.clipboard?.writeText with fallback)
+      await copyTextToClipboard(url)
       setHasCopied(true)
       setShareMessage(dict.linkCopied)
       setTimeout(() => {
@@ -378,6 +366,8 @@ export function ArticleCard({
                 <CardFooter className={cn('flex-col pt-4 bg-white/40', !showComments && 'rounded-b-2xl')}>
                   <TabsContent value="summary" className="w-full prose prose-zinc max-w-none py-6 prose-headings:text-zinc-900 prose-headings:font-bold prose-p:text-zinc-800 prose-p:leading-relaxed prose-a:text-pantone-blue prose-a:font-semibold hover:prose-a:underline">
                     {renderedBlogHtml && (
+                      // Pre-rendered server-side via markdown-it (html: false, sanitized links)
+                      // eslint-disable-next-line react/dom-no-dangerously-set-innerhtml
                       <div dangerouslySetInnerHTML={{ __html: renderedBlogHtml }} />
                     )}
                   </TabsContent>

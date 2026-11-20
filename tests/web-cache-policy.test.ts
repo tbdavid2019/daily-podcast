@@ -197,4 +197,105 @@ describe('Web cache deployment guardrails', () => {
     assert.match(staticSource, /\(\?:-\\d\{10,14\}\)\?/)
     assert.match(staticSource, /file\.httpMetadata\?\.cacheControl/)
   })
+
+  it('renders sanitized server-side markdown HTML, builds RSS feed responses, and copies text to clipboard', async () => {
+    const { renderArticleMarkdownHtml, withRenderedBlogHtml } = await import('../lib/markdown')
+    const { buildRssFeedResponse } = await import('../lib/rss')
+    const { copyTextToClipboard } = await import('../lib/playback-share')
+
+    const html = renderArticleMarkdownHtml('Visit [Safe](https://example.com), [Internal](/post/2026-11-19), [Anchor](#references), and [Bad](ftp://example.com) and <script>x</script>')
+    assert.match(html, /href="https:\/\/example\.com\/"/)
+    assert.match(html, /href="\/post\/2026-11-19"/)
+    assert.match(html, /href="#references"/)
+    assert.match(html, /href="#"/)
+    assert.match(html, /target="_blank"/)
+    assert.match(html, /rel="nofollow noopener noreferrer"/)
+    assert.doesNotMatch(html, /ftp:/)
+    assert.doesNotMatch(html, /<script>/)
+
+    const enriched = withRenderedBlogHtml({
+      date: '2026-11-20',
+      title: 'Test',
+      stories: [],
+      podcastContent: '',
+      blogContent: '# Heading',
+      introContent: '',
+      audio: 'a.mp3',
+      updatedAt: 1,
+    })
+    assert.match(enriched.blogHtml ?? '', /<h1>Heading<\/h1>/)
+
+    const kvPuts: Array<{ key: string, value: string }> = []
+    const rssRes = await buildRssFeedResponse({
+      NEXTJS_ENV: 'production',
+      NEXT_STATIC_HOST: 'https://static.example.com',
+      HACKER_NEWS_KV: {
+        get: async (key: string) => {
+          if (key === 'index:production:hacker-news:dates')
+            return ['2026-11-20']
+          if (key === 'script:production:hacker-news:2026-11-20') {
+            return {
+              displayDate: '2026-11-20',
+              title: 'RSS Episode',
+              introContent: 'Intro',
+              blogContent: 'Body',
+              dialogue: [{ speaker: '女', text: 'Hi' }],
+              stories: [{ title: 'Story', url: 'https://news.ycombinator.com/item?id=1' }],
+              generatedAt: 1234,
+              audio: '2026/11/20/production/hacker-news-2026-11-20.mp3',
+            }
+          }
+          return null
+        },
+        put: async (key: string, value: string) => {
+          kvPuts.push({ key, value })
+        },
+      } as unknown as KVNamespace,
+      HACKER_NEWS_R2: {
+        head: async () => ({ size: 4096, httpMetadata: { contentType: 'audio/wav' } }) as unknown as R2Object,
+      },
+    }, {
+      variant: 'hacker-news',
+      title: 'Feed Title',
+      description: 'Feed Desc',
+      feedPath: '/rss.xml',
+      sitePath: '',
+      coverImagePath: '/podcast-cover.png',
+      language: 'zh-TW',
+      categories: ['technology'],
+      webLinkLabel: 'Link: ',
+      linksHeading: 'Links:',
+    })
+    assert.equal(rssRes.status, 200)
+    assert.equal(rssRes.headers.get('Content-Type'), 'application/xml')
+    const xml = await rssRes.text()
+    assert.match(xml, /RSS Episode/)
+    assert.match(xml, /audio\/wav/)
+    assert.equal(kvPuts.length, 1)
+
+    let copiedText = ''
+    const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText: async (text: string) => {
+            copiedText = text
+          },
+        },
+      },
+    })
+    try {
+      await copyTextToClipboard('https://podcast.david888.com/post/2026-11-20#t=15')
+      assert.equal(copiedText, 'https://podcast.david888.com/post/2026-11-20#t=15')
+    }
+    finally {
+      if (originalDescriptor) {
+        Object.defineProperty(globalThis, 'navigator', originalDescriptor)
+      }
+      else {
+        Reflect.deleteProperty(globalThis, 'navigator')
+      }
+    }
+  })
 })

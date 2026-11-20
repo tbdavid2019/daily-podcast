@@ -1,6 +1,7 @@
 import type { ClassValue } from 'clsx'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { formatSpeakerDisplayName } from '@/lib/cast-registry'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -40,29 +41,12 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
   // Format dialogue and normalize speakers based on variant
   const isEnglish = variant === 'en'
   const normalizedDialogue: { speaker: string, text: string }[] | undefined = Array.isArray(data.dialogue)
-    ? data.dialogue.map((line: any) => {
-        let speaker = line.speaker
-        if (isEnglish) {
-          if (speaker === '女' || speaker?.toLowerCase() === 'cordelia') {
-            speaker = 'Cordelia'
-          }
-          else if (speaker === '男' || speaker?.toLowerCase() === 'david') {
-            speaker = 'David'
-          }
-        }
-        else {
-          if (speaker?.toLowerCase() === 'cordelia') {
-            speaker = '女'
-          }
-          else if (speaker?.toLowerCase() === 'david') {
-            speaker = '男'
-          }
-        }
-        return {
-          speaker: speaker || '',
-          text: typeof line.text === 'string' ? line.text : '',
-        }
-      })
+    ? data.dialogue.map((line: { speaker?: string, text?: string }) => ({
+        speaker: typeof line.speaker === 'string'
+          ? formatSpeakerDisplayName(line.speaker, isEnglish)
+          : '',
+        text: typeof line.text === 'string' ? line.text : '',
+      }))
     : undefined
 
   const podcastContent = normalizedDialogue

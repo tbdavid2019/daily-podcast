@@ -21,7 +21,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const resolvedSearchParams = await searchParams
   // Parse page number
   const currentPage = Number(resolvedSearchParams?.page) || 1
-  const { posts, totalPages } = await getHomepageArticles(env, currentPage, PAGE_SIZE)
+  const { posts, totalPages, currentPage: safePage } = await getHomepageArticles(env, currentPage, PAGE_SIZE)
 
   return (
     <>
@@ -44,7 +44,7 @@ export default async function Home({ searchParams }: HomeProps) {
       ))}
 
       <Pagination
-        currentPage={currentPage}
+        currentPage={safePage}
         totalPages={totalPages}
         className="mt-8"
       />

@@ -163,3 +163,56 @@ export function sanitizeExternalUrl(rawUrl?: string | null): string | undefined 
     return undefined
   }
 }
+
+export function sanitizeMarkdownLinkUrl(rawUrl?: string | null): { href: string, isExternal: boolean } | undefined {
+  if (!rawUrl) {
+    return undefined
+  }
+
+  const trimmed = rawUrl.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  if (trimmed.startsWith('#') && !/\s/.test(trimmed)) {
+    return { href: trimmed, isExternal: false }
+  }
+
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return { href: trimmed, isExternal: false }
+  }
+
+  const safeExternal = sanitizeExternalUrl(trimmed)
+  if (safeExternal) {
+    return { href: safeExternal, isExternal: true }
+  }
+
+  return undefined
+}
+
+export async function copyTextToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  if (typeof document === 'undefined') {
+    throw new TypeError('Clipboard API is unavailable outside the browser')
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  try {
+    textarea.select()
+    const copied = document.execCommand('copy')
+    if (!copied) {
+      throw new Error('Fallback clipboard copy failed')
+    }
+  }
+  finally {
+    document.body.removeChild(textarea)
+  }
+}

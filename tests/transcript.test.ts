@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   calculateCueTimings,
+  createTranscriptOptionsResponse,
+  createTranscriptResponse,
   formatSrtTimestamp,
   formatVttTimestamp,
   generateSRT,
@@ -99,5 +101,29 @@ describe('podcast transcript and subtitles', () => {
     const fallback = calculateCueTimings(cues, 30, [[0, 10]])
     assert.equal(fallback[0].start, 0)
     assert.equal(fallback[1].end, 30)
+  })
+
+  it('builds shared VTT, SRT, 404, and CORS OPTIONS responses', async () => {
+    const optionsRes = createTranscriptOptionsResponse()
+    assert.equal(optionsRes.status, 204)
+    assert.equal(optionsRes.headers.get('Access-Control-Allow-Origin'), '*')
+
+    const missingRes = createTranscriptResponse(null, 'vtt')
+    assert.equal(missingRes.status, 404)
+
+    const article = {
+      title: '測試節目',
+      podcastContent: '女: 歡迎收聽。',
+      audioDurationSec: 10,
+    }
+    const vttRes = createTranscriptResponse(article, 'vtt')
+    assert.equal(vttRes.status, 200)
+    assert.equal(vttRes.headers.get('Content-Type'), 'text/vtt; charset=utf-8')
+    assert.match(await vttRes.text(), /^WEBVTT/)
+
+    const srtRes = createTranscriptResponse(article, 'srt')
+    assert.equal(srtRes.status, 200)
+    assert.equal(srtRes.headers.get('Content-Type'), 'application/x-subrip; charset=utf-8')
+    assert.match(await srtRes.text(), /00:00:00,000 -->/)
   })
 })

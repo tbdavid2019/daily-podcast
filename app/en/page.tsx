@@ -59,7 +59,7 @@ export default async function EnHome({ searchParams }: EnHomeProps) {
 
   const resolvedSearchParams = await searchParams
   const currentPage = Number(resolvedSearchParams?.page) || 1
-  const { posts, totalPages } = await getHomepageArticles(env, currentPage, PAGE_SIZE, 'en')
+  const { posts, totalPages, currentPage: safePage } = await getHomepageArticles(env, currentPage, PAGE_SIZE, 'en')
 
   return (
     <>
@@ -101,7 +101,7 @@ export default async function EnHome({ searchParams }: EnHomeProps) {
 
       {totalPages > 1 && (
         <Pagination
-          currentPage={currentPage}
+          currentPage={safePage}
           totalPages={totalPages}
           basePath="/en"
           className="mt-8"

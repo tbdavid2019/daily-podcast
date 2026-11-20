@@ -18,8 +18,6 @@ interface Env extends CloudflareEnv {
   HACKER_NEWS_WORKFLOW: Workflow<WorkflowParams>
   HACKER_NEWS_AUDIO_WORKFLOW: Workflow<WorkflowParams>
   HACKER_NEWS_KV: KVNamespace
-  BROWSER: Fetcher
-  ASSETS: Fetcher
   API_SECRET_TOKEN?: string
   WORKER_ENV?: string
   TIMEZONE_OFFSET?: string
@@ -235,12 +233,6 @@ export default {
     // Handle script preview endpoint
     if (url.pathname === '/script') {
       return this.getScript(request, env)
-    }
-
-    if (url.pathname === '/audio') {
-      const assetUrl = new URL('/audio.html', request.url)
-      const assetRequest = new Request(assetUrl, request)
-      return env.ASSETS.fetch(assetRequest)
     }
 
     // Redirect to our Web application instead of the original author's site

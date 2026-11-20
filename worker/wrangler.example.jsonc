@@ -15,9 +15,6 @@
     "nodejs_compat"
   ],
   "minify": true,
-  "assets": {
-    "directory": "./static"
-  },
   "observability": {
     "enabled": true
   },
@@ -81,9 +78,6 @@
     // --- Voice Customization (Optional Overrides) ---
     // "MAN_VOICE_ID": "Sadaltager", // Gemini: Sadaltager (default), Fenrir, Puck, Zephyr; OpenAI: onyx; Edge: zh-TW-YunJheNeural
     // "WOMAN_VOICE_ID": "Leda"  // Gemini: Leda, OpenAI: nova, Edge: zh-TW-HsiaoChenNeural
-  },
-  "browser": {
-    "binding": "BROWSER"
   },
   "workflows": [
     {
