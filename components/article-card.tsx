@@ -19,6 +19,7 @@ import {
   isEpisodePath,
   isValidArticleTab,
   parseTabFromUrl,
+  sanitizeExternalUrl,
 } from '@/lib/playback-share'
 import { getEpisodeListenStatus, getEpisodeProgress } from '@/lib/playback-storage'
 import { cn } from '@/lib/utils'
@@ -396,20 +397,21 @@ export function ArticleCard({
                         }
                       })()
 
-                      const sourceLink = (() => {
+                      const storyHref = sanitizeExternalUrl(story.url ?? story.sourceUrl) ?? '#'
+                      const sourceLink = sanitizeExternalUrl((() => {
                         if (story.source === 'hacker-news') {
                           return story.hackerNewsUrl ?? story.sourceUrl ?? (story.id ? `https://news.ycombinator.com/item?id=${story.id}` : undefined)
                         }
                         return story.sourceUrl ?? story.url
-                      })()
+                      })())
 
                       return (
                         <div key={`${story.id}-${story.source}`} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/60 transition-colors group/item border border-transparent hover:border-zinc-200/60">
                           <Link
-                            href={story.url ?? story.sourceUrl ?? '#'}
+                            href={storyHref}
                             className="text-md text-zinc-800 hover:text-pantone-blue transition-colors line-clamp-1 flex-1 font-semibold"
                             title={story.title}
-                            rel="nofollow"
+                            rel="nofollow noopener noreferrer"
                             target="_blank"
                           >
                             {story.title}
@@ -419,7 +421,7 @@ export function ArticleCard({
                               href={sourceLink}
                               className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 transition-all font-bold tracking-wide uppercase"
                               title={sourceLabel}
-                              rel="nofollow"
+                              rel="nofollow noopener noreferrer"
                               target="_blank"
                             >
                               {sourceLabel}

@@ -4,9 +4,10 @@
 
 ## 核心服務與頁面 (Core Pages & Services)
 
-- [DAVID888 Daily 每日放送首頁](https://podcast.david888.com/): 展示最新 30 天每日科技新聞摘要與 Podcast 音訊播放器。
-- [節目文章頁面](https://podcast.david888.com/post/{date}): 包含指定日期（如 https://podcast.david888.com/post/2026-08-10）的完整報導內文、故事導讀與延伸參考連結。
-- [Podcast RSS Feed](https://podcast.david888.com/rss.xml): 提供適用於各大 Podcast 播放器的標準 RSS 訂閱源。
+- [DAVID888 Daily 每日放送首頁](https://podcast.david888.com/): 展示歷史每日科技新聞摘要與 Podcast 音訊播放器（支援分頁瀏覽全量歷史集數）。
+- [English Edition](https://podcast.david888.com/en): 每日英文版 Podcast 節目列表與單集頁（`/post/{date}/en`）。
+- [節目文章頁面](https://podcast.david888.com/post/{date}): 包含指定日期（如 https://podcast.david888.com/post/2026-08-10）的完整報導內文、故事導讀、字幕檔（`/transcript.vtt`、`/transcript.srt`）與延伸參考連結。
+- [Podcast RSS Feed](https://podcast.david888.com/rss.xml): 提供適用於各大 Podcast 播放器的標準 RSS 訂閱源（英文版為 `/rss-en.xml`）。
 - [Sitemap](https://podcast.david888.com/sitemap.xml): 完整網站頁面索引與搜尋檢索地圖。
 
 ## AI Agent & API Discovery

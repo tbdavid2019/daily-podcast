@@ -11,21 +11,20 @@ export function BingBackground() {
   useEffect(() => {
     // Check if enabled from localStorage, default to true if not set
     const saved = localStorage.getItem('bing-bg-enabled')
+    const initialEnabled = saved === null ? true : saved === 'true'
     if (saved !== null) {
-      setIsEnabled(saved === 'true')
+      setIsEnabled(initialEnabled)
     }
     else {
       localStorage.setItem('bing-bg-enabled', 'true')
     }
 
-    // Listen for custom toggle events
-    const handleToggle = (e: any) => {
-      setIsEnabled(e.detail.enabled)
-    }
-    window.addEventListener('bing-bg-toggle', handleToggle)
-
-    // Fetch random image from GitHub source
+    let hasFetchedImage = false
     const fetchRandomImage = async () => {
+      if (hasFetchedImage) {
+        return
+      }
+      hasFetchedImage = true
       try {
         const response = await fetch('https://raw.githubusercontent.com/v5tech/bing-wallpaper/main/bing-wallpaper.md')
         const text = await response.text()
@@ -45,12 +44,24 @@ export function BingBackground() {
       }
     }
 
-    fetchRandomImage()
+    // Listen for custom toggle events
+    const handleToggle = (e: any) => {
+      const nextEnabled = Boolean(e?.detail?.enabled)
+      setIsEnabled(nextEnabled)
+      if (nextEnabled) {
+        void fetchRandomImage()
+      }
+    }
+    window.addEventListener('bing-bg-toggle', handleToggle)
+
+    if (initialEnabled) {
+      void fetchRandomImage()
+    }
 
     return () => window.removeEventListener('bing-bg-toggle', handleToggle)
   }, [])
 
-  if (!isEnabled)
+  if (!isEnabled || !imageUrl)
     return null
 
   return (

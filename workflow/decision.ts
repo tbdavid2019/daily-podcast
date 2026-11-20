@@ -211,12 +211,16 @@ export async function callSingleTier(
 export async function callDecisionSystemOne(
   request: SystemOneRequest,
   env: DecisionEnv,
-  options: { timeoutMs?: number, deadline?: number } = {},
+  options: { timeoutMs?: number, deadline?: number, trippedTiers?: Set<string> } = {},
 ): Promise<{ response: SystemOneResponse, tierUsed: string }> {
   const tiers = resolveDecisionTiers(env, options.timeoutMs)
   let lastError: Error | null = null
 
   for (const tier of tiers) {
+    if (options.trippedTiers?.has(tier.name)) {
+      continue
+    }
+
     const remainingMs = options.deadline ? options.deadline - Date.now() : tier.timeoutMs
     if (remainingMs <= 2000) {
       console.warn(`[Decision System One] Skipping tier ${tier.name} due to low time budget (${remainingMs}ms remaining)`)
@@ -239,6 +243,7 @@ export async function callDecisionSystemOne(
     catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err))
       console.warn(`[Decision System One] Tier ${effectiveTier.name} failed:`, error.message)
+      options.trippedTiers?.add(tier.name)
       lastError = error
     }
   }
@@ -298,101 +303,110 @@ export async function curateStoriesWithDecision(
     return []
   }
 
-  // 若使用者明確關閉 Clef
-  if (env.CLEF_ENABLED === 'false') {
-    console.info('[Decision] Clef is explicitly disabled via CLEF_ENABLED=false, keeping candidate stories')
-    return candidateStories
-  }
-
-  const batchSize = Math.max(1, options.batchSize || DEFAULT_DECISION_BATCH_SIZE)
-  const minThreshold = options.minScoreThreshold ?? DEFAULT_SCORE_THRESHOLD
-  const overallTimeoutMs = options.overallTimeoutMs ?? 90_000
-  const deadline = Date.now() + overallTimeoutMs
-  const batches = chunkArray(candidateStories, batchSize)
   const scoredStories: Story[] = []
+  const minThreshold = options.minScoreThreshold ?? DEFAULT_SCORE_THRESHOLD
 
-  console.info(`[Decision] Curating ${candidateStories.length} stories across ${batches.length} batch(es) of max ${batchSize}, budget: ${overallTimeoutMs}ms`)
-
-  for (let bIndex = 0; bIndex < batches.length; bIndex++) {
-    const batch = batches[bIndex]
-
-    if (Date.now() >= deadline - 3000) {
-      console.warn(`[Decision] Curation deadline reached before batch ${bIndex + 1}/${batches.length}, using neutral score for remaining`)
-      for (const story of batch) {
-        scoredStories.push({
-          ...story,
-          decisionScore: 0.5,
-        })
-      }
-      continue
+  if (env.CLEF_ENABLED === 'false') {
+    // When decision scoring is disabled, still enforce dual-track source quotas and budget caps
+    // instead of passing all ~57 raw candidates downstream.
+    console.info('[Decision] Clef is explicitly disabled via CLEF_ENABLED=false, applying quota caps only')
+    for (const story of candidateStories) {
+      scoredStories.push({
+        ...story,
+        decisionScore: Math.max(0.5, minThreshold),
+      })
     }
+  }
+  else {
+    const batchSize = Math.max(1, options.batchSize || DEFAULT_DECISION_BATCH_SIZE)
+    const overallTimeoutMs = options.overallTimeoutMs ?? 90_000
+    const deadline = Date.now() + overallTimeoutMs
+    const batches = chunkArray(candidateStories, batchSize)
+    const trippedTiers = new Set<string>()
 
-    if (bIndex > 0 && options.delayBetweenBatchesMs) {
-      await new Promise(resolve => setTimeout(resolve, options.delayBetweenBatchesMs))
-    }
+    console.info(`[Decision] Curating ${candidateStories.length} stories across ${batches.length} batch(es) of max ${batchSize}, budget: ${overallTimeoutMs}ms`)
 
-    const state = batch.map((story, idx) => {
-      const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
-      return {
-        id: story.id || `idx-${idx}`,
-        title: story.title || '',
-        source: story.source || 'unknown',
-        ...(typeof points === 'number' && Number.isFinite(points) && points > 0 ? { points } : {}),
-        ...(typeof story.comments === 'number' && Number.isFinite(story.comments) && story.comments >= 0 ? { comments: story.comments } : {}),
-        ...(typeof story.description === 'string' && story.description ? { description: story.description.slice(0, 200) } : {}),
+    for (let bIndex = 0; bIndex < batches.length; bIndex++) {
+      const batch = batches[bIndex]
+
+      if (Date.now() >= deadline - 3000) {
+        console.warn(`[Decision] Curation deadline reached before batch ${bIndex + 1}/${batches.length}, assigning conservative fallback score`)
+        for (const story of batch) {
+          scoredStories.push({
+            ...story,
+            decisionScore: 0.45,
+          })
+        }
+        continue
       }
-    })
 
-    const questionKeys: string[] = []
-    const questions: Record<string, SystemOneNoulQuestion> = {}
-    for (const [idx, story] of batch.entries()) {
-      const rawId = story.id || `idx-${idx}`
-      const safeId = rawId.replace(/[^\w-]/g, '_').slice(0, 30)
-      const qKey = `fit_${bIndex}_${idx}_${safeId}`
-      questionKeys.push(qKey)
-      const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim().slice(0, 300)
-      const srcTag = story.source ? `[${story.source}] ` : ''
-      const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
-      const comments = story.comments
-      const communitySignals = [
-        typeof points === 'number' && Number.isFinite(points) && points > 0 ? `${points} points` : '',
-        typeof comments === 'number' && Number.isFinite(comments) && comments > 0 ? `${comments} comments` : '',
-      ].filter(Boolean).join(', ')
-      const metaTag = communitySignals ? ` (${communitySignals})` : ''
-
-      questions[qKey] = {
-        type: 'noul',
-        instructions: `Rate the suitability of story ${safeId}: ${srcTag}"${cleanTitle}"${metaTag} for a premier daily hacker & tech news podcast (like Hacker News Daily in Traditional Chinese). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, semiconductors & hardware architecture breakthroughs, critical cybersecurity incidents/CVEs, and hacker tech culture (strong community discussion/points reinforce relevance). Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, absolute beginner tutorials, pure marketing/commercial accessory promotions, or general non-tech news regardless of points.`,
+      if (bIndex > 0 && options.delayBetweenBatchesMs) {
+        await new Promise(resolve => setTimeout(resolve, options.delayBetweenBatchesMs))
       }
-    }
 
-    try {
-      const { response, tierUsed } = await callDecisionSystemOne(
-        { model: 'clef-flash', state, questions },
-        env,
-        { timeoutMs: options.timeoutMs, deadline },
-      )
+      const state = batch.map((story, idx) => {
+        const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
+        return {
+          id: story.id || `idx-${idx}`,
+          title: story.title || '',
+          source: story.source || 'unknown',
+          ...(typeof points === 'number' && Number.isFinite(points) && points > 0 ? { points } : {}),
+          ...(typeof story.comments === 'number' && Number.isFinite(story.comments) && story.comments >= 0 ? { comments: story.comments } : {}),
+          ...(typeof story.description === 'string' && story.description ? { description: story.description.slice(0, 200) } : {}),
+        }
+      })
 
+      const questionKeys: string[] = []
+      const questions: Record<string, SystemOneNoulQuestion> = {}
       for (const [idx, story] of batch.entries()) {
-        const qKey = questionKeys[idx]
-        const answer = response.answers[qKey]
-        const score = (typeof answer?.noul === 'number' && Number.isFinite(answer.noul))
-          ? Math.max(0, Math.min(1, answer.noul))
-          : 0.5
-        scoredStories.push({
-          ...story,
-          decisionScore: score,
-        })
+        const rawId = story.id || `idx-${idx}`
+        const safeId = rawId.replace(/[^\w-]/g, '_').slice(0, 30)
+        const qKey = `fit_${bIndex}_${idx}_${safeId}`
+        questionKeys.push(qKey)
+        const cleanTitle = (story.title || '').replace(/[\r\n]+/g, ' ').replace(/"/g, '\'').trim().slice(0, 300)
+        const srcTag = story.source ? `[${story.source}] ` : ''
+        const points = story.score ?? story.upvotes ?? story.votes ?? story.stars
+        const comments = story.comments
+        const communitySignals = [
+          typeof points === 'number' && Number.isFinite(points) && points > 0 ? `${points} points` : '',
+          typeof comments === 'number' && Number.isFinite(comments) && comments > 0 ? `${comments} comments` : '',
+        ].filter(Boolean).join(', ')
+        const metaTag = communitySignals ? ` (${communitySignals})` : ''
+
+        questions[qKey] = {
+          type: 'noul',
+          instructions: `Rate the suitability of story ${safeId}: ${srcTag}"${cleanTitle}"${metaTag} for a premier daily hacker & tech news podcast (like Hacker News Daily in Traditional Chinese). High suitability (0.7-1.0): cutting-edge AI/LLM models, developer tooling, databases, open-source projects, system engineering, semiconductors & hardware architecture breakthroughs, critical cybersecurity incidents/CVEs, and hacker tech culture (strong community discussion/points reinforce relevance). Low suitability (0.0-0.4): obituaries/memorials, hiring/job ads, absolute beginner tutorials, pure marketing/commercial accessory promotions, or general non-tech news regardless of points.`,
+        }
       }
-      console.info(`[Decision] Batch ${bIndex + 1}/${batches.length} evaluated via ${tierUsed}`)
-    }
-    catch (err: unknown) {
-      console.warn(`[Decision] Batch ${bIndex + 1}/${batches.length} decision call failed, using neutral score:`, err instanceof Error ? err.message : err)
-      for (const story of batch) {
-        scoredStories.push({
-          ...story,
-          decisionScore: 0.5,
-        })
+
+      try {
+        const { response, tierUsed } = await callDecisionSystemOne(
+          { model: 'clef-flash', state, questions },
+          env,
+          { timeoutMs: options.timeoutMs, deadline, trippedTiers },
+        )
+
+        for (const [idx, story] of batch.entries()) {
+          const qKey = questionKeys[idx]
+          const answer = response.answers[qKey]
+          const score = (typeof answer?.noul === 'number' && Number.isFinite(answer.noul))
+            ? Math.max(0, Math.min(1, answer.noul))
+            : 0.5
+          scoredStories.push({
+            ...story,
+            decisionScore: score,
+          })
+        }
+        console.info(`[Decision] Batch ${bIndex + 1}/${batches.length} evaluated via ${tierUsed}`)
+      }
+      catch (err: unknown) {
+        console.warn(`[Decision] Batch ${bIndex + 1}/${batches.length} decision call failed, using conservative fallback score:`, err instanceof Error ? err.message : err)
+        for (const story of batch) {
+          scoredStories.push({
+            ...story,
+            decisionScore: 0.45,
+          })
+        }
       }
     }
   }
@@ -459,12 +473,12 @@ export async function curateStoriesWithDecision(
     // 若通過門檻或合格數量未達 minKeepCount：
     // 第一階段：優先從未入選的故事中挑選「仍符合來源配額上限」的故事（按分數由高到低，確保社群多樣性與遵守上限）
     if (finalSelection.length < minKeepCount) {
-      const selectedIds = new Set(finalSelection.map(s => s.id))
+      const selectedKeys = new Set(finalSelection.map(s => `${s.source || 'unknown'}:${s.id || ''}`))
       const currentCounts: Record<string, number> = {
         'hacker-news': selectedHn.length,
         ...secondaryCounts,
       }
-      const unselected = sorted.filter(s => s.id && !selectedIds.has(s.id))
+      const unselected = sorted.filter(s => s.id && !selectedKeys.has(`${s.source || 'unknown'}:${s.id}`))
       const remainingUnselected: Story[] = []
 
       for (const story of unselected) {

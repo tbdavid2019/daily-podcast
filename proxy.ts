@@ -15,6 +15,10 @@ function wantsMarkdown(request: NextRequest) {
   return accept.includes('text/markdown')
 }
 
+function isTranscriptPath(pathname: string): boolean {
+  return pathname.endsWith('/transcript.vtt') || pathname.endsWith('/transcript.srt')
+}
+
 function withDiscoveryHeaders(response: NextResponse, addLinkHeader: boolean) {
   response.headers.append('Vary', 'Accept')
 
@@ -25,7 +29,7 @@ function withDiscoveryHeaders(response: NextResponse, addLinkHeader: boolean) {
   return response
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (pathname === '/') {
@@ -38,7 +42,7 @@ export function middleware(request: NextRequest) {
     return withDiscoveryHeaders(NextResponse.next(), true)
   }
 
-  if (pathname.startsWith('/post/')) {
+  if (pathname.startsWith('/post/') && !isTranscriptPath(pathname)) {
     if (wantsMarkdown(request)) {
       const url = request.nextUrl.clone()
       url.pathname = `/agent-markdown${pathname}`

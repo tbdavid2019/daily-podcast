@@ -661,6 +661,17 @@ export async function getGitHubTrendingStories() {
   return stories.slice(0, GITHUB_CONFIG.MAX_REPOS)
 }
 
+const EXTERNAL_RSS_FETCH_TIMEOUT_MS = 15_000
+
+function shuffleArray<T>(items: readonly T[]): T[] {
+  const copy = [...items]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
 export async function getProductHuntStories() {
   console.info('Fetching Product Hunt stories...')
 
@@ -679,6 +690,7 @@ export async function getProductHuntStories() {
       headers: {
         'User-Agent': 'DailyPodcast/1.0 (for tech news aggregation)',
       },
+      signal: AbortSignal.timeout(EXTERNAL_RSS_FETCH_TIMEOUT_MS),
     })
 
     if (response.ok) {
@@ -715,9 +727,9 @@ export async function getProductHuntStories() {
       console.info(`[Product Hunt] RSS returned ${rssStories.length} valid stories`)
 
       if (rssStories.length > 0) {
-        // 隨機從前 10 名中挑選
+        // 隨機從前 10 名中挑選（Fisher-Yates 無偏洗牌）
         const pool = rssStories.slice(0, 10)
-        const shuffled = pool.sort(() => 0.5 - Math.random())
+        const shuffled = shuffleArray(pool)
 
         console.info(`[Product Hunt RSS] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
         return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
@@ -795,9 +807,9 @@ export async function getProductHuntStories() {
 
   console.info('Product Hunt stories processed:', stories.length)
 
-  // 隨機從前 10 名中挑選
+  // 隨機從前 10 名中挑選（Fisher-Yates 無偏洗牌）
   const pool = stories.slice(0, 10)
-  const shuffled = pool.sort(() => 0.5 - Math.random())
+  const shuffled = shuffleArray(pool)
 
   console.info(`[Product Hunt Web] Selected ${PRODUCT_HUNT_CONFIG.MAX_PRODUCTS} stories randomly from top ${pool.length}`)
   return shuffled.slice(0, PRODUCT_HUNT_CONFIG.MAX_PRODUCTS)
@@ -865,6 +877,7 @@ export async function getDevToStories() {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/rss+xml, application/xml, text/xml, */*',
       },
+      signal: AbortSignal.timeout(EXTERNAL_RSS_FETCH_TIMEOUT_MS),
     })
 
     if (!response.ok) {

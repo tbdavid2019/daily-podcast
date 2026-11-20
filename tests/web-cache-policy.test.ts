@@ -131,11 +131,13 @@ describe('Web cache deployment guardrails', () => {
   })
 
   it('rewrites Markdown negotiation to a routable App Router segment', async () => {
-    const middlewareSource = await readFile(new URL('middleware.ts', rootUrl), 'utf8')
+    const proxySource = await readFile(new URL('proxy.ts', rootUrl), 'utf8')
     const markdownRoute = await readFile(new URL('app/agent-markdown/route.ts', rootUrl), 'utf8')
 
-    assert.match(middlewareSource, /url\.pathname = '\/agent-markdown'/)
-    assert.doesNotMatch(middlewareSource, /\/__markdown/)
+    assert.match(proxySource, /export function proxy\(/)
+    assert.match(proxySource, /isTranscriptPath/)
+    assert.match(proxySource, /url\.pathname = '\/agent-markdown'/)
+    assert.doesNotMatch(proxySource, /\/__markdown/)
     assert.match(markdownRoute, /buildHomepageMarkdown/)
   })
 

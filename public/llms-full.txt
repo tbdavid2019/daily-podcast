@@ -8,21 +8,21 @@
 
 ## 完整路由與頁面說明 (Route Directory)
 
-### 1. 首頁 (`https://podcast.david888.com/`)
-- **功能**: 展示近 30 天的 Podcast 集數列表與線上音訊播放器。
+### 1. 首頁 (`https://podcast.david888.com/` 與 `https://podcast.david888.com/en`)
+- **功能**: 展示歷年 Podcast 集數列表（支援分頁瀏覽全量歷史，`/en` 為英文版）與線上音訊播放器。
 - **內容協商**: 發送 `Accept: text/markdown` 可直接取得 Markdown 格式之當日重點與摘要。
 
 ### 2. 單集文章頁面 (`https://podcast.david888.com/post/{date}` 或 `https://podcast.david888.com/post/{date}/{variant}`)
-- **功能**: 單一日期（例如 `2026-08-10`）的完整新聞報導與對話逐字稿。
+- **功能**: 單一日期（例如 `2026-08-10`）的完整新聞報導與對話逐字稿，另提供 `/post/{date}/transcript.vtt` 與 `/post/{date}/transcript.srt` 字幕端點。
 - **內容協商**: 發送 `Accept: text/markdown` 標頭取得對應 Markdown 內文。
-- **變體預設**: 預設變體為 `hacker-news`（可別名 `main`）。
+- **變體預設**: 預設變體為 `hacker-news`（可別名 `main`），英文版為 `en`。
 
-### 3. Podcast RSS 訂閱源 (`https://podcast.david888.com/rss.xml`)
-- **功能**: 提供符合 PodcastIndex 規範的 RSS XML，包含音訊檔 enclosure 與文章連結。
+### 3. Podcast RSS 訂閱源 (`https://podcast.david888.com/rss.xml` 與 `/rss-en.xml`)
+- **功能**: 提供符合 PodcastIndex 規範的中／英文 RSS XML，包含音訊檔 enclosure、逐字稿字幕與文章連結。
 - **快取策略**: 邊緣快取 10 分鐘，支援跨網域 CORS GET 請求。
 
 ### 4. 網站地圖 (`https://podcast.david888.com/sitemap.xml`)
-- **功能**: 輸出最近 30 天內所有文章的 XML 地圖供 AI 爬蟲與檢索機器人索引。
+- **功能**: 動態輸出所有歷史真實存在的中／英文文章 XML 地圖供 AI 爬蟲與檢索機器人索引。
 
 ### 5. API 狀態節點 (`https://podcast.david888.com/api/status`)
 - **功能**: 提供輕量級 JSON 狀態，包含服務名稱、當前狀態與 RSS URL。

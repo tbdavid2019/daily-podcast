@@ -143,3 +143,23 @@ export function formatPlaybackTimestamp(currentTime: number) {
     ? `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`
     : `${minutes}:${paddedSeconds}`
 }
+
+export function isEnglishPath(pathname: string): boolean {
+  return /^\/en(?:\/|$)/.test(pathname) || /^\/post\/[^/]+\/en(?:\/|$)/.test(pathname)
+}
+
+export function sanitizeExternalUrl(rawUrl?: string | null): string | undefined {
+  if (!rawUrl) {
+    return undefined
+  }
+
+  try {
+    const parsed = new URL(rawUrl)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.toString()
+      : undefined
+  }
+  catch {
+    return undefined
+  }
+}

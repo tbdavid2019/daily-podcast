@@ -132,9 +132,13 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
   const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
   const sortedDates = await getEpisodeDates(env, normalizedVariant)
   const totalItems = sortedDates.length
-  const totalPages = Math.ceil(totalItems / pageSize) || 1
-  const startIndex = (currentPage - 1) * pageSize
-  const currentDays = sortedDates.slice(startIndex, startIndex + pageSize)
+  const safePageSize = Number.isFinite(pageSize) && pageSize >= 1 ? Math.floor(pageSize) : 6
+  const totalPages = Math.ceil(totalItems / safePageSize) || 1
+  const normalizedPage = Number.isFinite(currentPage) && currentPage >= 1
+    ? Math.min(Math.floor(currentPage), totalPages)
+    : 1
+  const startIndex = (normalizedPage - 1) * safePageSize
+  const currentDays = sortedDates.slice(startIndex, startIndex + safePageSize)
 
   const posts = (await Promise.all(
     currentDays.map(async (day) => {

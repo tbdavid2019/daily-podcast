@@ -158,7 +158,7 @@ test('chunkArray partitions items into conservative batches', () => {
   assert.equal(chunks[2].length, 1)
 })
 
-test('curateStoriesWithDecision respects CLEF_ENABLED=false', async () => {
+test('curateStoriesWithDecision respects CLEF_ENABLED=false while enforcing quota caps', async () => {
   const stories: Story[] = [
     { id: '1', title: 'Story 1', source: 'hacker-news' },
     { id: '2', title: 'Story 2', source: 'reddit' },
@@ -167,6 +167,17 @@ test('curateStoriesWithDecision respects CLEF_ENABLED=false', async () => {
   assert.equal(result.length, 2)
   assert.equal(result[0].id, '1')
   assert.equal(result[1].id, '2')
+
+  const manyStories: Story[] = Array.from({ length: 30 }, (_, idx) => ({
+    id: `hn-${idx}`,
+    title: `Story ${idx}`,
+    source: 'hacker-news' as const,
+  }))
+  const capped = await curateStoriesWithDecision(manyStories, { CLEF_ENABLED: 'false' }, {
+    maxBudget: 12,
+    targetLimits: { 'hacker-news': 10 },
+  })
+  assert.equal(capped.length, 10)
 })
 
 test('curateStoriesWithDecision filters and ranks with mock decision endpoint', async () => {
@@ -242,8 +253,8 @@ test('curateStoriesWithDecision gracefully falls back when all tiers fail', asyn
     })
 
     assert.equal(result.length, 2)
-    assert.equal(result[0].decisionScore, 0.5) // neutral fallback score
-    assert.equal(result[1].decisionScore, 0.5)
+    assert.equal(result[0].decisionScore, 0.45) // conservative fallback below live threshold
+    assert.equal(result[1].decisionScore, 0.45)
   }
   finally {
     globalThis.fetch = originalFetch
@@ -841,6 +852,54 @@ test('curateStoriesWithDecision maps stars for github-trending and sanitizes NaN
     const result = await curateStoriesWithDecision(mockStories, { CLEF_ENABLED: 'true' })
     assert.equal(result.length, 1)
     assert.equal(result[0].decisionScore, 0.5) // Sanitized from NaN
+  }
+  finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('curateStoriesWithDecision remembers tripped failing tiers within the same curation run', async () => {
+  const mockStories: Story[] = Array.from({ length: 4 }, (_, idx) => ({
+    id: `s-${idx}`,
+    title: `Story ${idx}`,
+    source: 'hacker-news' as const,
+  }))
+  const requestedUrls: string[] = []
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    requestedUrls.push(url)
+    if (url.includes('clef.create360.ai')) {
+      return new Response('Upstream down', { status: 503 })
+    }
+    const body = JSON.parse(init?.body as string)
+    const answers: Record<string, { type: 'noul', noul: number }> = {}
+    for (const qKey of Object.keys(body.questions)) {
+      answers[qKey] = { type: 'noul', noul: 0.85 }
+    }
+    return new Response(JSON.stringify({ model: 'clef-flash', answers }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    const result = await curateStoriesWithDecision(mockStories, {
+      CLEF_ENABLED: 'true',
+      CLEF_BASE_URL: 'https://clef.create360.ai/v1',
+      CLEF_FALLBACK_BASE_URL: 'https://clef.aiurl.tw/v1',
+    }, {
+      batchSize: 2,
+    })
+
+    assert.equal(result.length, 4)
+    // Primary failed in batch 1 and should be circuit-broken in batch 2
+    assert.deepEqual(requestedUrls, [
+      'https://clef.create360.ai/v1/systemone',
+      'https://clef.aiurl.tw/v1/systemone',
+      'https://clef.aiurl.tw/v1/systemone',
+    ])
   }
   finally {
     globalThis.fetch = originalFetch

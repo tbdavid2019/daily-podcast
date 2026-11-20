@@ -8,9 +8,11 @@ import {
   getArticlePath,
   getPlaybackStartFromHash,
   getTabFromPath,
+  isEnglishPath,
   isEpisodePath,
   parsePlaybackStart,
   parseTabFromUrl,
+  sanitizeExternalUrl,
 } from '../lib/playback-share'
 
 describe('timestamped playback sharing', () => {
@@ -28,6 +30,12 @@ describe('timestamped playback sharing', () => {
     assert.equal(getArticlePath('2026-10-17', 'en', 'podcast'), '/post/2026-10-17/en/podcast')
     assert.equal(getArticlePath('2026-10-17', 'en', 'references'), '/post/2026-10-17/en/references')
     assert.equal(getArticlePath('2026-10-17', 'en', 'summary'), '/post/2026-10-17/en')
+    assert.equal(isEnglishPath('/en'), true)
+    assert.equal(isEnglishPath('/post/2026-10-17/en'), true)
+    assert.equal(isEnglishPath('/post/2026-10-17/en/references'), true)
+    assert.equal(isEnglishPath('/post/2026-10-17/podcast'), false)
+    assert.equal(sanitizeExternalUrl('https://news.ycombinator.com/item?id=1'), 'https://news.ycombinator.com/item?id=1')
+    assert.equal(sanitizeExternalUrl('javascript:alert(1)'), undefined)
   })
 
   it('matches episode paths regardless of active tab segment', () => {

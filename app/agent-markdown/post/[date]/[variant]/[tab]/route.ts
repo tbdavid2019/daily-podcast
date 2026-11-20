@@ -18,7 +18,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
     return new Response('Not found', { status: 404 })
   }
 
-  return withMarkdownHeaders(buildArticleMarkdown(getBaseUrl(), article), {
+  return withMarkdownHeaders(buildArticleMarkdown(getBaseUrl(), article, env.NEXT_STATIC_HOST), {
     headers: {
       'Cache-Control': 'public, max-age=600',
     },

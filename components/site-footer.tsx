@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { podcastTitle, podcastTitleEn } from '@/config'
 import { dictionaries } from '@/lib/i18n'
+import { isEnglishPath } from '@/lib/playback-share'
 
 export function SiteFooter() {
   const pathname = usePathname()
-  const isEn = pathname.startsWith('/en') || pathname.endsWith('/en')
+  const isEn = isEnglishPath(pathname)
   const dict = isEn ? dictionaries.en : dictionaries.zh
   const title = isEn ? podcastTitleEn : podcastTitle
 

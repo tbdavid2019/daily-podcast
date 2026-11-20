@@ -118,7 +118,7 @@ export default function RootLayout({
                 'name': podcastTitle,
                 'description': podcastDescription,
                 'url': 'https://podcast.david888.com',
-              }),
+              }).replace(/</g, '\\u003c'),
             }}
           />
           <Script

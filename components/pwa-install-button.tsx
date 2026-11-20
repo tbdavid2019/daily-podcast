@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { isEnglishPath } from '@/lib/playback-share'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -9,7 +10,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function PwaInstallButton() {
   const pathname = usePathname()
-  const isEn = pathname.startsWith('/en') || pathname.endsWith('/en')
+  const isEn = isEnglishPath(pathname)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {

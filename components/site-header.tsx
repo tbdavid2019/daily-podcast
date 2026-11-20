@@ -12,6 +12,7 @@ import {
   podcastTitle,
   podcastTitleEn,
 } from '@/config'
+import { isEnglishPath } from '@/lib/playback-share'
 
 interface SiteHeaderProps {
   installButton?: React.ReactNode
@@ -19,7 +20,7 @@ interface SiteHeaderProps {
 
 export function SiteHeader({ installButton }: SiteHeaderProps = {}) {
   const pathname = usePathname()
-  const isEn = pathname.startsWith('/en') || pathname.endsWith('/en')
+  const isEn = isEnglishPath(pathname)
 
   useEffect(() => {
     document.documentElement.lang = isEn ? 'en' : 'zh-TW'
