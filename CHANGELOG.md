@@ -2,6 +2,28 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-20] TRIZ #1–#4 全棧演進、原生 SSE 串流架構與線上端到端實測驗證
+
+- **原生 SSE 串流取代 AI SDK 串流（解決 HTTP 524 與 Free Plan 10ms CPU 上限，`workflow/llm.ts`、`workflow/index.ts`）**：
+  - 線上實測抓出 `create blog content` 在非串流 `generateText` + `'thinking'` 模式下等待首字元超過 Cloudflare Proxy 100 秒上限而雙雙回傳 `HTTP 524`，而改用 AI SDK `streamText` 後又因 `@ai-sdk/openai` + Zod 逐 chunk 解析在 4,000 chunk 下消耗 `5,097.8 ms` CPU，觸發 Cloudflare Free Plan 10ms CPU 超限。
+  - 新增輕量原生 SSE 客戶端 `streamOpenAiChatCompletion`（4,000 SSE chunk 本地實測 `5.8 ms`），直接以 `fetch` + `TextDecoder` 讀取串流、跳過純 `reasoning_content` chunk 之 `JSON.parse`，並將 `create blog content` 切回 `'standard'` 模型（直接消化已萃取的 Evidence Dossier）。
+  - 移除 `workflow/llm.ts` 與 `workflow/index.ts` 對 `ai` / `@ai-sdk/openai` 之執行期依賴，使 Generation Worker 部署體積由 `433.69 KiB`（gzip）降至 `283.03 KiB`、啟動時間由 `41 ms` 降至 `26 ms`。
+- **TRIZ #1 毫秒級逐字稿時間軸（`dialogueTimings`）**：
+  - [workflow/audio.ts](workflow/audio.ts) 與 [workflow/audio-multipart.ts](workflow/audio-multipart.ts) 於 TTS 批次合成階段記錄每句音訊的精確長度 `segmentDurationsMs`，於最後合併發布時回寫 `dialogueTimings` 與 `audioDurationSec`。
+  - [lib/transcript.ts](lib/transcript.ts) 與 [components/sync-transcript.tsx](components/sync-transcript.tsx) 優先以精準時間軸產生 WebVTT / SRT 與驅動網頁同步高亮及點擊跳轉，保留字數比例估算作為舊集數向下相容回退。
+- **TRIZ #2 共享 Evidence Dossier 與單次 `<intro>` 生成**：
+  - [workflow/index.ts](workflow/index.ts)、[workflow/prompt.ts](workflow/prompt.ts) 與 [workflow/script-parser.ts](workflow/script-parser.ts) 改採分批提煉每則新聞的結構化 Evidence Dossier 並持久化至 R2，讓 `generate podcast script` 在單次 XML 輸出同時產出 `<title>`、`<intro>` 與 `<turn>`（僅於缺少或過短時才走 `create intro content` 備援）。
+- **TRIZ #3 Seeded 輕量 Catalog 索引與漸進回填**：
+  - [workflow/efficiency.ts](workflow/efficiency.ts)、[lib/content.ts](lib/content.ts)、[workflow/index.ts](workflow/index.ts) 與 [workflow/audio.ts](workflow/audio.ts) 引入 `EpisodeCatalogIndex`（`catalog:{env}:{variant}:episodes`）；僅於 `seeded: true` 時啟用首頁單次 KV 讀取，未完成前由日期索引受控分頁降級並每次漸進回填最多 20 筆既有集數。
+- **TRIZ #4 全棧角色註冊表（`lib/cast-registry.ts`）**：
+  - 統一管理主持人與來賓識別字、顯示名稱、TTS 聲音參數與 UI 徽章樣式，貫穿 [workflow/script-parser.ts](workflow/script-parser.ts)、[workflow/tts.ts](workflow/tts.ts) 與 [components/sync-transcript.tsx](components/sync-transcript.tsx)。
+- **安全防護、Web 路由去重與依賴瘦身**：
+  - 收緊 [worker/index.ts](worker/index.ts) `/script` 與 `/workflow` Bearer 驗證、`--force` 重跑期間保留既有 `scriptKey` 直至新內容原子覆寫；統一 [lib/rss.ts](lib/rss.ts)、修復 Agent Markdown / MCP（[lib/mcp-server.ts](lib/mcp-server.ts)）指向 R2 音檔 URL、修正文章頁 `canonical` / `og:url` 與 `/en` 語系路徑探索（[lib/discovery.ts](lib/discovery.ts)、`app/sitemap.ts`、`llms.txt`），並清理過時 Edge TTS 文件（`README.md`、`docs/CONFIG-GUIDE.md`）。
+  - 完成 Next.js 16 [proxy.ts](proxy.ts) 遷移、[workflow/decision.ts](workflow/decision.ts) Tier 熔斷與超時強化、[lib/markdown.ts](lib/markdown.ts) 伺服器端 Markdown 預渲染、重元件動態載入、冗餘依賴與殘留檔案清理（包含移除 `worker-configuration.d.ts` 與 `worker/static/audio.html`），達成 ESLint 0 error / 0 warning 與 OpenCode + Codex + OMP 三方審查收斂。
+- **測試與線上驗證**：
+  - 擴充 [tests/llm-fallback.test.ts](tests/llm-fallback.test.ts)、[tests/transcript.test.ts](tests/transcript.test.ts)、[tests/workflow-efficiency.test.ts](tests/workflow-efficiency.test.ts)、[tests/web-cache-policy.test.ts](tests/web-cache-policy.test.ts)、[tests/decision.test.ts](tests/decision.test.ts) 等單元測試，`pnpm check` 與 `pnpm build` 全數通過。
+  - `2026-11-20` 中文版已完成正式環境端到端全鏈路實測（`podcast-script-20261120-a6f724179d2e537204d61df4d1c7fc82` 與 `podcast-audio-child-131be2a93cb0245ff60ba35c48a8dd6e` 皆 `Completed`），線上確認 `/post/2026-11-20`、`transcript.vtt` 毫秒時間軸（`00:00:00.000 --> 00:00:33.400` 等）與 R2 音檔（`73,357,484` bytes）正常運作。
+
 ## [2026-11-19] 重構腳本生成 Harness 為可擴充多人 XML 標記協議，並修復 LLM 錯誤觀測盲區
 
 - **可擴充多人主持／來賓 XML 腳本協議 (`workflow/script-parser.ts`、`workflow/prompt.ts`)**：
