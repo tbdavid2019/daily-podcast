@@ -3,7 +3,6 @@ import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import type { TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
 import type { LlmClient } from './llm'
 import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
-import { generateText, streamText } from 'ai'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { podcastTitle, podcastTitleEn } from '@/config'
 import { formatSpeakerDisplayName } from '@/lib/cast-registry'
@@ -60,7 +59,7 @@ import {
   updateTopicArchiveIndex,
   upsertEpisodeCatalogEntry,
 } from './efficiency'
-import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
+import { collectStreamedText, createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
 import {
   extractStoryDossierPrompt,
   introPrompt,
@@ -648,7 +647,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
           `<story id="${ref.id}" title="${ref.title}" number="${index + 1}">\n${rawContent}\n</story>`,
         ).join('\n\n---\n\n')
 
-        const { text, usage, finishReason } = await runLlm(`extract evidence dossier batch ${batchNumber}`, 'standard', model => generateText({
+        const { text, usage, finishReason } = await runLlm(`extract evidence dossier batch ${batchNumber}`, 'standard', model => collectStreamedText({
           model,
           system: `${extractStoryDossierPrompt}\n\nImportant: Output <story-dossier id="STORY_ID">...</story-dossier> for all ${missingItems.length} stories in order.`,
           prompt: batchPrompt,
@@ -752,28 +751,13 @@ ${dossiersString}
 `
 
       const { script, usage, finishReason, llmProvider, llmModel } = await runLlm('generate podcast script', 'thinking', async (model, client) => {
-        let streamError: unknown
-        const result = streamText({
+        const { text, usage: usageData, finishReason: reason } = await collectStreamedText({
           model,
           system: isEnglish ? podcastScriptPromptEn : podcastScriptPrompt,
           prompt: enhancedPrompt,
           maxOutputTokens: scriptMaxTokens,
           maxRetries: AI_SDK_MAX_RETRIES,
-          onError: ({ error }) => {
-            streamError = error
-          },
         })
-        let text: string
-        try {
-          text = await result.text
-        }
-        catch (error) {
-          throw streamError ?? error
-        }
-        if (streamError) {
-          throw streamError
-        }
-        const [usageData, reason] = await Promise.all([result.usage, result.finishReason])
         const parsedScript = await parsePodcastScriptResponse(text, {
           isEnglish,
           minTurns: Math.min(6, dialoguePlan.minLines),
@@ -815,7 +799,7 @@ ${dossiersString}
       console.info('Title missing or too short, triggering dedicated beautification step')
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
         const dossiers = await loadDossiersFromR2(preparedStories)
-        const { text } = await runLlm('beautify missing title', 'standard', model => generateText({
+        const { text } = await runLlm('beautify missing title', 'standard', model => collectStreamedText({
           model,
           system: isEnglish
             ? `You are the Executive Editor of ${podcastTitleEn}. Based on the provided story dossiers, produce an engaging, accurate English title. Format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]". Output ONLY the title.`
@@ -836,7 +820,7 @@ ${dossiersString}
     const blogContent = await step.do('create blog content', AI_STEP_CONFIG, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
       const dossiers = await loadDossiersFromR2(preparedStories)
-      const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => generateText({
+      const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => collectStreamedText({
         model,
         system: isEnglish ? summarizeBlogPromptEn : summarizeBlogPrompt,
         prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${dossiers.map(d => `<story>${d}</story>`).join('\n\n---\n\n')}`,
@@ -861,7 +845,7 @@ ${dossiersString}
         })
         const podcastContent = podcastDialogueLines.join('\n')
 
-        const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({
+        const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => collectStreamedText({
           model,
           system: isEnglish ? introPromptEn : introPrompt,
           prompt: podcastContent,

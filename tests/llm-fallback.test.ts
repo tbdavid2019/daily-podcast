@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { createLlmConfigs, runWithLlmFallback } from '../workflow/llm'
+import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
+import { collectStreamedText, createLlmConfigs, runWithLlmFallback } from '../workflow/llm'
 
 describe('LLM fallback configuration', () => {
   it('keeps the primary provider first and reads independent fallback settings', () => {
@@ -181,5 +182,59 @@ describe('LLM fallback execution', () => {
     assert.equal(configs[0]?.apiKey, 'legacy-secret')
     assert.equal(configs[0]?.baseUrl, 'https://legacy.example/v1')
     assert.equal(configs[0]?.model, 'legacy-model')
+  })
+
+  it('collects streamed text, usage, and finishReason via collectStreamedText', async () => {
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
+            { type: 'text-delta', id: 'text-1', delta: 'Streaming!' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 5, text: 5, reasoning: 0 },
+              },
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await collectStreamedText({
+      model,
+      system: 'sys',
+      prompt: 'hi',
+    })
+
+    assert.equal(result.text, 'Hello Streaming!')
+    assert.equal(result.finishReason, 'stop')
+    assert.equal(result.usage.outputTokens, 5)
+  })
+
+  it('rethrows stream errors from collectStreamedText', async () => {
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'error', error: new Error('upstream stream aborted') },
+          ],
+        }),
+      }),
+    })
+
+    await assert.rejects(
+      collectStreamedText({
+        model,
+        system: 'sys',
+        prompt: 'hi',
+      }),
+      /upstream stream aborted/,
+    )
   })
 })

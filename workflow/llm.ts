@@ -1,5 +1,6 @@
 import type { LanguageModel } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
+import { streamText } from 'ai'
 
 export const DEFAULT_LLM_BASE_URL = 'https://llm.aiurl.tw/v1'
 export const DEFAULT_LLM_MODEL = 'group/do'
@@ -177,6 +178,37 @@ export function createLlmClients(env: object): LlmClient[] {
 
 export function getLlmModel(client: LlmClient, kind: 'standard' | 'thinking'): LanguageModel {
   return client.provider.chat(kind === 'thinking' ? client.thinkingModel : client.model)
+}
+
+/**
+ * Stream an LLM completion and collect text, usage, and finishReason.
+ * Streaming keeps SSE chunks flowing so reverse proxies (such as Cloudflare's 100s origin timeout)
+ * do not sever long-running thinking or multi-story generations with HTTP 524 while waiting for the first byte.
+ */
+export async function collectStreamedText(
+  options: Omit<Parameters<typeof streamText>[0], 'onError'>,
+) {
+  let streamError: unknown
+  const result = streamText({
+    ...options,
+    onError: ({ error }) => {
+      streamError = error
+    },
+  } as Parameters<typeof streamText>[0])
+
+  let text: string
+  try {
+    text = await result.text
+  }
+  catch (error) {
+    throw streamError ?? error
+  }
+  if (streamError) {
+    throw streamError
+  }
+
+  const [usage, finishReason] = await Promise.all([result.usage, result.finishReason])
+  return { text, usage, finishReason }
 }
 
 function truncateLogText(value: string, maxLength: number): string {
