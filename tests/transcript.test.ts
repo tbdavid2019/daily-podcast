@@ -80,4 +80,24 @@ describe('podcast transcript and subtitles', () => {
     assert.equal(getTranscriptPath('2026-10-17', 'en', 'vtt'), '/post/2026-10-17/en/transcript.vtt')
     assert.equal(getTranscriptPath('2026-10-17', 'en', 'srt'), '/post/2026-10-17/en/transcript.srt')
   })
+
+  it('prefers exact precomputed dialogueTimings over character-weight estimation', () => {
+    const cues = [
+      { id: 1, speaker: '女', text: '短句' },
+      { id: 2, speaker: '男', text: '這一句雖然很長但我們故意測試以實測時間為主，而不是預估比例。' },
+    ]
+    const timed = calculateCueTimings(cues, 30, [
+      [0, 12.345],
+      [12.345, 18.5],
+    ])
+    assert.deepEqual(timed.map(c => ({ start: c.start, end: c.end, duration: c.duration })), [
+      { start: 0, end: 12.345, duration: 12.345 },
+      { start: 12.345, end: 18.5, duration: 6.155 },
+    ])
+
+    // Mismatched length falls back cleanly to estimation
+    const fallback = calculateCueTimings(cues, 30, [[0, 10]])
+    assert.equal(fallback[0].start, 0)
+    assert.equal(fallback[1].end, 30)
+  })
 })

@@ -24,7 +24,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
   }
 
   const cues = parseDialogueLines(article.podcastContent, article.dialogue)
-  const timedCues = calculateCueTimings(cues)
+  const timedCues = calculateCueTimings(cues, article.audioDurationSec, article.dialogueTimings)
   const srt = generateSRT(timedCues)
 
   return new Response(srt, {

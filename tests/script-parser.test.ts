@@ -5,6 +5,7 @@ import {
   DEFAULT_PODCAST_CAST,
   normalizePodcastSpeaker,
   parsePodcastScriptResponse,
+  parseStorySummaries,
   parseXmlPodcastScript,
   repairDialogueJson,
 } from '../workflow/script-parser'
@@ -142,5 +143,29 @@ describe('podcast script XML harness & parser', () => {
       parsePodcastScriptResponse('<turn speaker="Narrator">Invalid speaker</turn>'),
       /invalid dialogue line at index 0 \(speaker="Narrator"/,
     )
+  })
+
+  it('extracts story summaries across XML attributes, truncated tails, headings, and title splits', () => {
+    const xmlWithAttrs = `
+<story-summary id="1">第一篇摘要內容</story-summary>
+<story-summary id="2">第二篇摘要（尾端截斷`
+    assert.deepEqual(parseStorySummaries(xmlWithAttrs, ['One', 'Two']), [
+      '第一篇摘要內容',
+      '第二篇摘要（尾端截斷',
+    ])
+
+    const byTitles = 'First Story Title\nDetail A\nSecond Story Title\nDetail B'
+    assert.deepEqual(parseStorySummaries(byTitles, ['First Story Title', 'Second Story Title']), [
+      'First Story Title\nDetail A',
+      'Second Story Title\nDetail B',
+    ])
+
+    const byHeadings = '## Summary 1\nBody 1\n## Summary 2\nBody 2'
+    assert.deepEqual(parseStorySummaries(byHeadings, ['Unmatched']), [
+      '## Summary 1\nBody 1',
+      '## Summary 2\nBody 2',
+    ])
+
+    assert.throws(() => parseStorySummaries('   \n  ', ['Title']), /empty summaries/)
   })
 })

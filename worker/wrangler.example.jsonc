@@ -38,8 +38,8 @@
     "HACKER_NEWS_WORKER_URL": "https://podcast.yourdomain.com",
     // Store LLM_PRIMARY_API_KEY with `wrangler secret put --cwd worker LLM_PRIMARY_API_KEY`.
     "LLM_PRIMARY_BASE_URL": "https://llm.aiurl.tw/v1",
-    "OPENAI_MAX_COMPLETION_TOKENS": "1000000",
-    "OPENAI_MAX_TOKENS": "1000000",
+    "OPENAI_MAX_COMPLETION_TOKENS": "32768",
+    "OPENAI_MAX_TOKENS": "8192",
     "LLM_PRIMARY_MODEL": "group/do",
     "LLM_PRIMARY_THINKING_MODEL": "group/do",
 

@@ -1,9 +1,10 @@
 import { Buffer } from 'node:buffer'
 import { synthesize } from '@echristian/edge-tts'
+import { createPcmWavHeader } from './audio-multipart'
 
 export const DEFAULT_GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts'
 export const DEFAULT_GEMINI_TTS_TIMEOUT_MS = 45_000
-export const DEFAULT_GEMINI_TTS_MAX_RETRIES = 2
+export const DEFAULT_GEMINI_TTS_MAX_RETRIES = 0
 export const MAX_GEMINI_TTS_FALLBACKS = 5
 
 export interface GeminiTtsConfig {
@@ -39,42 +40,12 @@ export interface Env extends CloudflareEnv {
   GEMINI_API_KEY?: string
 }
 
-function writeString(view: DataView, offset: number, string: string) {
-  for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i))
-  }
-}
-
 export function pcmToWav(pcmData: Uint8Array, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): ArrayBuffer {
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8
-  const blockAlign = (numChannels * bitsPerSample) / 8
-  const dataSize = pcmData.byteLength
-  const buffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buffer)
-
-  // RIFF chunk descriptor
-  writeString(view, 0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeString(view, 8, 'WAVE')
-
-  // fmt sub-chunk
-  writeString(view, 12, 'fmt ')
-  view.setUint32(16, 16, true) // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true) // AudioFormat (1 for PCM)
-  view.setUint16(22, numChannels, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, byteRate, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, bitsPerSample, true)
-
-  // data sub-chunk
-  writeString(view, 36, 'data')
-  view.setUint32(40, dataSize, true)
-
-  // Write PCM data
-  const pcmView = new Uint8Array(buffer, 44)
-  pcmView.set(pcmData)
-
+  const header = createPcmWavHeader(pcmData.byteLength, sampleRate, numChannels, bitsPerSample)
+  const buffer = new ArrayBuffer(header.byteLength + pcmData.byteLength)
+  const out = new Uint8Array(buffer)
+  out.set(header, 0)
+  out.set(pcmData, header.byteLength)
   return buffer
 }
 
@@ -220,12 +191,7 @@ export async function callSingleGeminiTts(
     throw new Error('Gemini TTS response missing audio data')
   }
 
-  const binaryString = atob(base64Audio)
-  const len = binaryString.length
-  const bytes = new Uint8Array(len)
-  for (let i = 0; i < len; i += 1) {
-    bytes[i] = binaryString.charCodeAt(i)
-  }
+  const bytes = new Uint8Array(Buffer.from(base64Audio, 'base64'))
 
   const wavBuffer = pcmToWav(bytes, 24000, 1, 16)
   return new Blob([wavBuffer], { type: 'audio/wav' })
@@ -415,17 +381,28 @@ export interface SynthesizeOptions {
   isEnglish?: boolean
 }
 
+export type ResolvedTtsProvider = 'gemini' | 'openai' | 'minimax' | 'edge'
+
+export function resolveTtsProvider(provider?: string): ResolvedTtsProvider {
+  const normalized = provider?.trim().toLowerCase()
+  if (normalized === 'openai' || normalized === 'minimax' || normalized === 'edge' || normalized === 'gemini') {
+    return normalized
+  }
+  return 'gemini'
+}
+
 export default async function (text: string, gender: string, env: Env, options?: SynthesizeOptions) {
   const isEnglish = options?.isEnglish ?? (/[a-z]/i.test(text) && !/[\u4E00-\u9FFF]/.test(text))
-  if (env.TTS_PROVIDER === 'openai') {
+  const provider = resolveTtsProvider(env.TTS_PROVIDER)
+  if (provider === 'openai') {
     return openaiTTS(text, gender, env, isEnglish)
   }
-  if (env.TTS_PROVIDER === 'minimax') {
+  if (provider === 'minimax') {
     return minimaxTTS(text, gender, env, isEnglish)
   }
-  if (env.TTS_PROVIDER === 'edge') {
+  if (provider === 'edge') {
     return edgeTTS(text, gender, env, isEnglish)
   }
-  // Default: Gemini TTS with automatic retries and multi-key fallback
+  // Default: Gemini TTS with multi-key failover (no inner retry loop; Workflow handles retries)
   return geminiTTS(text, gender, env)
 }

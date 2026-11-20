@@ -284,3 +284,54 @@ export async function uploadAudioMultipartPart(
   }
   return uploadResult.value
 }
+
+// Gemini TTS emits 24kHz, 16-bit, mono PCM WAV = 48,000 bytes/sec = 48 bytes/ms.
+export const GEMINI_PCM_BYTES_PER_MS = 48
+
+export function computeWavSegmentDurationMs(wavByteLength: number): number {
+  return Math.max(0, wavByteLength - WAV_HEADER_BYTES) / GEMINI_PCM_BYTES_PER_MS
+}
+
+export function buildDialogueTimings(
+  dialogueCount: number,
+  segmentDialogueIndices: readonly number[],
+  segmentDurationsMs: readonly number[],
+): { dialogueTimings: [number, number][], audioDurationSec: number } | null {
+  if (
+    dialogueCount <= 0
+    || segmentDialogueIndices.length === 0
+    || segmentDialogueIndices.length !== segmentDurationsMs.length
+  ) {
+    return null
+  }
+
+  const lineDurationsMs = Array.from<number>({ length: dialogueCount }).fill(0)
+  for (let i = 0; i < segmentDialogueIndices.length; i++) {
+    const dialogueIndex = segmentDialogueIndices[i]
+    const durationMs = segmentDurationsMs[i]
+    if (
+      !Number.isInteger(dialogueIndex)
+      || dialogueIndex < 0
+      || dialogueIndex >= dialogueCount
+      || !Number.isFinite(durationMs)
+      || durationMs < 0
+    ) {
+      return null
+    }
+    lineDurationsMs[dialogueIndex] += durationMs
+  }
+
+  let cursorMs = 0
+  const dialogueTimings: [number, number][] = []
+  for (let i = 0; i < dialogueCount; i++) {
+    const startSec = Math.round(cursorMs) / 1000
+    cursorMs += lineDurationsMs[i]
+    const endSec = Math.round(cursorMs) / 1000
+    dialogueTimings.push([startSec, endSec])
+  }
+
+  return {
+    dialogueTimings,
+    audioDurationSec: Math.round(cursorMs) / 1000,
+  }
+}

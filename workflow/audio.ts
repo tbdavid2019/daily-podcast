@@ -3,9 +3,12 @@ import type { GeneratedScriptData, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { getCalendarDate, parseTimezoneOffset } from '@/worker/workflow-security'
 import {
+  buildDialogueTimings,
+  computeWavSegmentDurationMs,
   createPcmWavHeader,
   planAudioMultipartUpload,
   uploadAudioMultipartPart,
+  WAV_HEADER_BYTES,
 } from './audio-multipart'
 import {
   AUDIO_BATCH_STEP_CONFIG,
@@ -18,7 +21,7 @@ import {
   MAX_TTS_SEGMENT_CHARS,
   splitDialogueText,
 } from './efficiency'
-import synthesize, { pcmToWav } from './tts'
+import synthesize, { resolveTtsProvider } from './tts'
 
 interface Env extends CloudflareEnv {
   WORKER_ENV?: string
@@ -81,31 +84,28 @@ function combineAudioBuffers(buffers: Uint8Array[], isWav: boolean): Uint8Array 
     return new Uint8Array(0)
 
   if (isWav) {
-    // WAV concatenation: Strip 44-byte header from each, concat PCM, then wrapper with new header
-    // 1. Calculate total PCM length
+    // WAV concatenation: Strip 44-byte header from each and assemble PCM directly into one buffer.
     let totalPcmLength = 0
-    const pcmParts: Uint8Array[] = []
-
     for (const buffer of buffers) {
-      if (buffer.byteLength > 44) {
-        // Strip 44-byte WAV header
-        const pcmPart = buffer.subarray(44)
-        pcmParts.push(pcmPart)
-        totalPcmLength += pcmPart.byteLength
+      if (buffer.byteLength > WAV_HEADER_BYTES) {
+        totalPcmLength += buffer.byteLength - WAV_HEADER_BYTES
       }
     }
 
-    // 2. Concatenate PCM data
-    const combinedPcm = new Uint8Array(totalPcmLength)
-    let offset = 0
-    for (const part of pcmParts) {
-      combinedPcm.set(part, offset)
-      offset += part.byteLength
+    const header = createPcmWavHeader(totalPcmLength)
+    const combined = new Uint8Array(WAV_HEADER_BYTES + totalPcmLength)
+    combined.set(header, 0)
+
+    let offset = WAV_HEADER_BYTES
+    for (const buffer of buffers) {
+      if (buffer.byteLength > WAV_HEADER_BYTES) {
+        const pcmPart = buffer.subarray(WAV_HEADER_BYTES)
+        combined.set(pcmPart, offset)
+        offset += pcmPart.byteLength
+      }
     }
 
-    // 3. Create new WAV file with correct header
-    // pcmToWav returns ArrayBuffer, convert to Uint8Array
-    return new Uint8Array(pcmToWav(combinedPcm))
+    return combined
   }
   else {
     // Simple concatenation for MP3
@@ -134,8 +134,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     const isEnglish = variant === 'en'
 
-    // Check if using Gemini TTS (which outputs WAV)
-    const isGeminiTTS = this.env.TTS_PROVIDER === 'gemini'
+    // Check if using Gemini TTS (which outputs WAV); default resolves to Gemini when unset
+    const isGeminiTTS = resolveTtsProvider(this.env.TTS_PROVIDER) === 'gemini'
 
     // 時區處理邏輯
     const now = new Date(event.timestamp.getTime())
@@ -163,11 +163,11 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       return
     }
 
-    // Output R2 Key: If forced rerun, append generated timestamp to ensure CDN edge cache busting
+    // Output R2 Key: If forced rerun, append deterministic workflow event timestamp for CDN edge cache busting
     const isForced = Boolean(params.force)
     const basePodcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
     const podcastKey = params.audioKey || (isForced
-      ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${scriptData.generatedAt || Date.now()}.mp3`
+      ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${scriptData.generatedAt || event.timestamp.getTime()}.mp3`
       : basePodcastKey)
 
     console.info('Audio Generation Config:', {
@@ -181,15 +181,15 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     console.info(`Loaded script with ${dialogue.length} lines`)
 
-    // 2. Flatten and chunk all dialogue
-    const allSegments: { text: string, speaker: '男' | '女' }[] = []
-    for (const line of dialogue) {
+    // 2. Flatten and chunk all dialogue (keeping original dialogueIndex for exact timing reconstruction)
+    const allSegments: { text: string, speaker: '男' | '女', dialogueIndex: number }[] = []
+    for (const [dialogueIndex, line] of dialogue.entries()) {
       const text = line.text.trim()
       if (!text)
         continue
       const chunks = splitDialogueText(text, isEnglish ? 1000 : MAX_TTS_SEGMENT_CHARS)
       for (const chunk of chunks) {
-        allSegments.push({ text: chunk, speaker: line.speaker })
+        allSegments.push({ text: chunk, speaker: line.speaker, dialogueIndex })
       }
     }
 
@@ -197,6 +197,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const BATCH_SIZE = 5
     const batchKeys: string[] = []
     const segmentCheckpointKeys: string[] = []
+    const allSegmentDurationsMs: number[] = []
+    let hasAllSegmentDurations = isGeminiTTS
 
     for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {
       const batchIndex = Math.floor(i / BATCH_SIZE)
@@ -216,23 +218,49 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       segmentCheckpointKeys.push(...segmentKeys)
 
       // To avoid exceeding Cloudflare Workers Free limit (50 external subrequests per invocation),
-      // we sleep for 1 second periodically to suspend and start a fresh Worker invocation.
-      if (batchIndex > 0 && batchIndex % 3 === 0) {
+      // suspend every 2 batches (<= 10 TTS calls plus any key failover attempts per invocation).
+      if (batchIndex > 0 && batchIndex % 2 === 0) {
         await step.sleep(`pause before audio batch ${batchIndex + 1}`, '1 second')
       }
 
-      const batchKey = await step.do(`create audio batch ${batchIndex + 1}`, AUDIO_BATCH_STEP_CONFIG, async () => {
-        if (await this.env.HACKER_NEWS_R2.head(deterministicBatchKey)) {
-          return deterministicBatchKey
+      const batchResult = await step.do(`create audio batch ${batchIndex + 1}`, AUDIO_BATCH_STEP_CONFIG, async () => {
+        const existingBatch = await this.env.HACKER_NEWS_R2.head(deterministicBatchKey)
+        if (existingBatch) {
+          let existingDurations: number[] | null = null
+          const rawDurations = existingBatch.customMetadata?.segmentDurationsMs
+          if (rawDurations) {
+            try {
+              const parsed = JSON.parse(rawDurations) as unknown
+              if (
+                Array.isArray(parsed)
+                && parsed.length === batchSegments.length
+                && parsed.every(item => typeof item === 'number' && Number.isFinite(item) && item >= 0)
+              ) {
+                existingDurations = parsed
+              }
+            }
+            catch {
+              existingDurations = null
+            }
+          }
+          return {
+            key: deterministicBatchKey,
+            segmentDurationsMs: existingDurations,
+          }
         }
 
         const segmentBuffers: Uint8Array[] = []
+        const segmentDurationsMs: number[] | null = isGeminiTTS ? [] : null
 
         for (const [index, segment] of batchSegments.entries()) {
           const segmentKey = segmentKeys[index]
           const checkpoint = await this.env.HACKER_NEWS_R2.get(segmentKey)
           if (checkpoint) {
-            segmentBuffers.push(new Uint8Array(await checkpoint.arrayBuffer()))
+            const buffer = new Uint8Array(await checkpoint.arrayBuffer())
+            segmentBuffers.push(buffer)
+            if (segmentDurationsMs) {
+              segmentDurationsMs.push(computeWavSegmentDurationMs(buffer.byteLength))
+            }
             continue
           }
 
@@ -244,6 +272,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
           await this.env.HACKER_NEWS_R2.put(segmentKey, typedBuffer)
           segmentBuffers.push(typedBuffer)
+          if (segmentDurationsMs) {
+            segmentDurationsMs.push(computeWavSegmentDurationMs(typedBuffer.byteLength))
+          }
 
           // Rate limit between segments
           if (index < batchSegments.length - 1) {
@@ -254,12 +285,35 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         // Combine batch
         const combined = combineAudioBuffers(segmentBuffers, isGeminiTTS)
 
-        await this.env.HACKER_NEWS_R2.put(deterministicBatchKey, combined)
-        return deterministicBatchKey
+        await this.env.HACKER_NEWS_R2.put(
+          deterministicBatchKey,
+          combined,
+          segmentDurationsMs
+            ? { customMetadata: { segmentDurationsMs: JSON.stringify(segmentDurationsMs) } }
+            : undefined,
+        )
+        return {
+          key: deterministicBatchKey,
+          segmentDurationsMs,
+        }
       })
 
-      batchKeys.push(batchKey)
+      batchKeys.push(batchResult.key)
+      if (hasAllSegmentDurations && batchResult.segmentDurationsMs) {
+        allSegmentDurationsMs.push(...batchResult.segmentDurationsMs)
+      }
+      else {
+        hasAllSegmentDurations = false
+      }
     }
+
+    const timingSummary = hasAllSegmentDurations
+      ? buildDialogueTimings(
+          dialogue.length,
+          allSegments.map(segment => segment.dialogueIndex),
+          allSegmentDurationsMs,
+        )
+      : null
 
     // 4. Merge all batches with bounded-memory R2 multipart streams.
     const completedAudioLength = await step.do('check final audio checkpoint', IO_STEP_CONFIG, async () => {
@@ -372,33 +426,47 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       }
     }
 
+    // Publish metadata & RSS cache invalidation in a durable step so partial failures
+    // never leave a newly synthesized episode unpublished.
+    await step.do('publish final audio metadata', IO_STEP_CONFIG, async () => {
+      const shouldUpdateScript = scriptData.audio !== podcastKey
+        || Boolean(timingSummary && (
+          !scriptData.dialogueTimings
+          || scriptData.audioDurationSec !== timingSummary.audioDurationSec
+        ))
+
+      if (shouldUpdateScript) {
+        scriptData.audio = podcastKey
+        if (timingSummary) {
+          scriptData.dialogueTimings = timingSummary.dialogueTimings
+          scriptData.audioDurationSec = timingSummary.audioDurationSec
+        }
+        await this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData))
+      }
+
+      if (podcastKey !== basePodcastKey) {
+        const freshAudio = await this.env.HACKER_NEWS_R2.get(podcastKey)
+        if (freshAudio) {
+          const freshContentType = freshAudio.httpMetadata?.contentType || (isGeminiTTS ? 'audio/wav' : 'audio/mpeg')
+          await this.env.HACKER_NEWS_R2.put(basePodcastKey, freshAudio.body, {
+            httpMetadata: {
+              contentType: freshContentType,
+              cacheControl: 'public, max-age=60',
+            },
+          })
+        }
+      }
+
+      await this.env.HACKER_NEWS_KV.delete(rssCacheKey)
+    })
+
     try {
       await step.do('cleanup audio checkpoints', IO_STEP_CONFIG, async () => {
-        const cleanupTasks: Promise<unknown>[] = [
-          this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey]),
-          this.env.HACKER_NEWS_KV.delete(rssCacheKey),
-        ]
-        if (scriptData.audio !== podcastKey) {
-          scriptData.audio = podcastKey
-          cleanupTasks.push(this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData)))
-        }
-        if (podcastKey !== basePodcastKey) {
-          const freshAudio = await this.env.HACKER_NEWS_R2.get(podcastKey)
-          if (freshAudio) {
-            const freshContentType = freshAudio.httpMetadata?.contentType || (isGeminiTTS ? 'audio/wav' : 'audio/mpeg')
-            cleanupTasks.push(this.env.HACKER_NEWS_R2.put(basePodcastKey, freshAudio.body, {
-              httpMetadata: {
-                contentType: freshContentType,
-                cacheControl: 'public, max-age=60',
-              },
-            }))
-          }
-        }
-        await Promise.allSettled(cleanupTasks)
+        await this.env.HACKER_NEWS_R2.delete([...batchKeys, ...segmentCheckpointKeys, multipartStateKey])
       })
     }
     catch (error) {
-      // The final podcast is already durable. Cleanup failure must not mark paid work as failed.
+      // The final podcast is already published. Cleanup failure must not mark paid work as failed.
       console.warn('Failed to cleanup temporary audio checkpoints', { error })
     }
 

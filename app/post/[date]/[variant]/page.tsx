@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
 import { getRequestArticleByDate } from '@/lib/content'
+import { getBaseUrl } from '@/lib/discovery'
 import { isValidArticleTab } from '@/lib/playback-share'
 
 export const revalidate = 3600
@@ -34,7 +35,6 @@ function resolveEpisodeAndTab(paramVariant: string, searchTab?: string): { episo
 
 // 產生頁面的中繼資料
 export async function generateMetadata({ params, searchParams }: PostVariantPageProps): Promise<Metadata> {
-  const { env } = await getCloudflareContext({ async: true })
   const resolvedParams = await params
   const resolvedSearchParams = searchParams ? await searchParams : undefined
   const { episodeVariant, selectedTab, isDirectTabRoute } = resolveEpisodeAndTab(resolvedParams.variant, resolvedSearchParams?.tab)
@@ -56,13 +56,17 @@ export async function generateMetadata({ params, searchParams }: PostVariantPage
 
   const title = `${post.title}${tabSuffix}`
   const description = post.introContent || post.podcastContent?.slice(0, 200) || post.title
+  const baseUrl = getBaseUrl()
   const url = isDirectTabRoute
-    ? `${env.NEXT_STATIC_HOST}/post/${post.date}/${selectedTab}`
-    : `${env.NEXT_STATIC_HOST}/post/${post.date}/${episodeVariant}`
+    ? `${baseUrl}/post/${post.date}/${selectedTab}`
+    : `${baseUrl}/post/${post.date}/${episodeVariant}`
 
   return {
     title,
     description,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
       title,
       description,

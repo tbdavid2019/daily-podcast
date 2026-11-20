@@ -94,5 +94,7 @@ export function mapScriptToArticle(data: any, runEnv: string, variant: string = 
     audio: audioPath,
     variant,
     dialogue: normalizedDialogue,
+    ...(Array.isArray(data.dialogueTimings) ? { dialogueTimings: data.dialogueTimings } : {}),
+    ...(typeof data.audioDurationSec === 'number' ? { audioDurationSec: data.audioDurationSec } : {}),
   }
 }

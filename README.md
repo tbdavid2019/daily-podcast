@@ -29,7 +29,7 @@
 - **🌐 RSS CORS 與 Cloudflare 部署指令修正 (2026-07-08)**：`/rss.xml` 現在會回傳 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods` 與 `Access-Control-Allow-Headers`，可供前端瀏覽器直接跨站抓取 RSS。另已釐清 Cloudflare 正確部署指令必須使用 `pnpm run deploy`，不能使用 `pnpm deploy`，並同步修正文件與腳本。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🤖 Agent Discovery / robots.txt / Markdown for Agents (2026-07-07)**：新增正式 `robots.txt`（含 `GPTBot`、`OAI-SearchBot`、`Claude-Web`、`Google-Extended` 與 wildcard 規則）、`Content-Signal`、首頁 `Link` discovery headers、`/.well-known/api-catalog`、`/.well-known/agent-skills/index.json`、`/openapi.json`、`/api/status` 與 `/docs/api`。同時支援首頁與文章頁在 `Accept: text/markdown` 時回傳 Markdown，並已部署至 `https://podcast.david888.com`。詳見 [CHANGELOG.md](CHANGELOG.md)。
 - **🖼️ Bing 背景與 Bento 視覺最佳化 (2026-04-24)**：加入動態 Bing 桌布背景功能，支援從 GitHub 來源隨機抓取歷史桌布，並套用平滑的呼吸動畫。同時全面套用 **Bento 設計風格**，加入毛玻璃質感 (`backdrop-blur`)、現代 `Inter` 字體與精緻的間距系統。背景開關預設調整為 **開啟 (ON)**，使用者仍可於右上角手動切換。
-- **🗣️ Edge TTS 台灣用語調整 (2026-02-05)**：預設 Edge TTS 聲線已從中國普通話切換為 **台灣繁體中文聲線**，採用 `zh-TW-HsiaoChenNeural`（女聲／曉臻）與 `zh-TW-YunJheNeural`（男聲／雲哲）。產生的 Podcast 會使用台灣口音。此功能免費且預設啟用，不需額外設定。
+- **🎙️ Gemini TTS 多金鑰容錯 (2026-07)**：預設採用 **Gemini 2.5 Pro Preview TTS**（男聲 `Charon` / 女聲 `Leda`）進行繁體中文與英文雙人對談語音合成，支援主金鑰與多組備援金鑰自動故障轉移；不再自動降級至免費 Edge TTS。
 - **🎙️ OpenAI TTS 語速調整 (2026-02-05)**：新增 OpenAI TTS 的 `speed` 參數支援，預設語速調整為 **1.3 倍**（快 30%），大幅縮短播放時間。這讓文稿可以更長、內容更豐富，同時保持合理的播放時長。可透過 `AUDIO_SPEED` 環境變數自訂（範圍 0.25-4.0，建議 1.0-1.5）。
 - **🔧 Reddit Self Post 修復 (2026-02-05)**：移除了 `!postData.is_self` 過濾條件，解決 Reddit 回傳 0 篇文章的問題。之前的邏輯會過濾掉所有純文字討論貼文，導致 r/sysadmin (10/10) 和 r/dataengineering (9/10) 的文章幾乎全部被排除。現在 self posts 可以透過 JSON API 正確擷取 selftext 內容，大幅增加 Reddit 來源的文章數量與討論深度。
 - **Reddit 來源最佳化**：改用資訊密度較高的技術版面（LocalLLaMA、coding、netsec、sysadmin、dataengineering），移除政治相關與較淺的討論版。
@@ -41,7 +41,7 @@
 - **排程比例**：Hacker News 7 篇、Reddit 3 篇。
 - **內容來源**：一般文章先以 `http://2md.aiurl.tw` 的 `/v1/batch` 每批最多取得 5 篇，再個別 fallback 至 `http://2md.aiurl.tw`、`https://2md.glsoft.ai`、`https://create360.ai`；Hacker News 留言仍逐篇取得。Reddit 以一個合併 subreddit RSS 取得候選，再以單篇 RSS 取得正文與留言，外部文章才使用自架 reader。
 - **Gemini TTS 支援 (2026-02-08)**：新增 Google Gemini TTS 支援，使用 **Fenrir（男）**與 **Leda（女）**聲音。透過 `generativelanguage.googleapis.com` API 呼叫，需設定 Cloudflare Secret `GEMINI_TTS_API_SECRET`，可作為 OpenAI TTS 的替代方案。
-- **TTS 故障自動轉移（Fallback）(2026-02-08)**：實作 TTS 容錯機制。當主要 TTS 服務供應商（如 Gemini／OpenAI）發生錯誤時，系統會改用免費的 **Edge TTS** 繼續產生音訊，確保 Podcast 每日更新不中斷。
+- **TTS 多金鑰容錯機制**：當預設 Gemini TTS 的主 API 金鑰遇到配額或端點異常時，會依序切換至 `GEMINI_TTS_FALLBACK_*_API_KEY` 備援金鑰繼續合成，並搭配 R2 segment checkpoint 在 Workflow 重試時續傳。
 
 ---
 
@@ -66,7 +66,7 @@
 - 💰 **AdSense 整合**：內建 PC 雙側邊欄 (Sidebar) 與 Mobile 列表廣告穿插機制。
 - 🤖 **多源聚合**：Hacker News, Reddit, GitHub, Product Hunt, Dev.to
 - 🧠 **AI 智慧摘要**：自動產生台灣繁體中文摘要與講稿（OpenAI／Gemini）
-- 🎙️ **語音合成**：Edge TTS / OpenAI TTS / Minimax 多種選擇
+- 🎙️ **語音合成**：Gemini TTS（預設）/ OpenAI TTS / Minimax / Edge TTS 多種選擇
 - 🎯 **Reddit 熱門隨機化**：每版保留前 K 名後再隨機抽樣，避免熱門貼文長期霸榜
 - ☁️ **全雲端執行**：部署於 Cloudflare Workers，不需要自建伺服器
 
@@ -231,7 +231,7 @@ npx wrangler tail daily-podcast-worker
 | **Gemini**（建議） | `gemini` | `GEMINI_TTS_API_SECRET` | 使用 Google Gemini 3.8 Flash-Lite TTS 產生中文語音（Fenrir／Leda）。 |
 | **OpenAI** | `openai` | `OPENAI_TTS_API_SECRET` (或 `OPENAI_API_SECRET`) | 使用 OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer)。 |
 | **Minimax** | `minimax` | `TTS_API_ID`, `TTS_API_SECRET` | 使用 Minimax 語音模型。 |
-| **Edge TTS**（預設） | `edge`（或留空） | 無 | 使用微軟免費 Edge TTS 與台灣聲線（zh-TW-HsiaoChenNeural）。 |
+| **Gemini TTS**（預設） | `gemini`（或留空） | `GEMINI_TTS_API_KEY`（選填 `GEMINI_TTS_FALLBACK_*_API_KEY`） | 預設語音合成服務，使用自然對談音色並支援多組金鑰容錯。 |
 
 ### Gemini TTS 設定範例
 
@@ -267,7 +267,7 @@ pnpm exec wrangler secret put --cwd worker GEMINI_TTS_API_SECRET
 
 ### 🛡️ 自動故障轉移 (Fallback Mechanism)
 
-若設定的付費 TTS 服務（如 `gemini`、`openai`、`minimax`）發生錯誤，例如額度用盡、API 異常或網路問題，系統會自動處理錯誤並**改用免費的 Edge TTS**，確保 Podcast 音檔能順利產生，不會因單一服務故障而中斷流程。
+預設的 Gemini TTS 支援多組備援金鑰（`GEMINI_TTS_FALLBACK_1_API_KEY` 等）；若單一金鑰額度耗盡或端點暫時異常，系統會自動切換下一組 Gemini 金鑰繼續合成，不會自動降級回免費的 Edge TTS。只有在明確設定 `TTS_PROVIDER=edge` 時才會使用 Edge TTS。
 
 ---
 

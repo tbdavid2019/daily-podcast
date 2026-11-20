@@ -8,7 +8,7 @@ const corsHeaders = {
 }
 
 const ALLOWED_EXTENSIONS = new Set(['.mp3', '.wav', '.png', '.jpg', '.jpeg'])
-const AUDIO_PATH_PATTERN = /^\d{4}\/\d{2}\/\d{2}\/[\w-]+\/[\w-]+-\d{4}-\d{2}-\d{2}\.(?:mp3|wav)$/
+const AUDIO_PATH_PATTERN = /^\d{4}\/\d{2}\/\d{2}\/[\w-]+\/[\w-]+-\d{4}-\d{2}-\d{2}(?:-\d{10,14})?\.(?:mp3|wav)$/
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -70,7 +70,7 @@ export async function HEAD(
       'Content-Type': resolveContentType(filePath, file.httpMetadata?.contentType),
       'Accept-Ranges': 'bytes',
       'Content-Length': file.size.toString(),
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': file.httpMetadata?.cacheControl || 'public, max-age=31536000, immutable',
       ...corsHeaders,
     },
   })
@@ -104,7 +104,7 @@ export async function GET(
           'Content-Type': resolveContentType(filePath, file.httpMetadata?.contentType),
           'Accept-Ranges': 'bytes',
           'Content-Length': file.size.toString(),
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cache-Control': file.httpMetadata?.cacheControl || 'public, max-age=31536000, immutable',
           ...corsHeaders,
         },
       })
@@ -130,7 +130,7 @@ export async function GET(
         'Accept-Ranges': 'bytes',
         'Content-Range': contentRange,
         'Content-Length': contentLength.toString(),
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': file.httpMetadata?.cacheControl || 'public, max-age=31536000, immutable',
         ...corsHeaders,
       },
     })

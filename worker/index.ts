@@ -131,32 +131,71 @@ async function startWorkflow(
 
 export default {
   async getScript(request: Request, env: Env) {
-    const url = new URL(request.url)
-    const today = url.searchParams.get('today')
-    const variant = url.searchParams.get('variant') || url.searchParams.get('type') || 'hacker-news'
-
-    const runEnv = env.WORKER_ENV || 'production'
-
-    // Calculate date if not provided
-    let displayDate = today
-    if (!displayDate) {
-      displayDate = getCalendarDate(new Date(), parseTimezoneOffset(env.TIMEZONE_OFFSET))
+    const auth = authenticateWorkflowRequest(request, env.API_SECRET_TOKEN)
+    if (!auth.ok) {
+      return jsonResponse(
+        {
+          error: {
+            code: auth.code,
+            message: auth.message,
+          },
+        },
+        auth.status,
+      )
     }
 
-    const normalizedVariant = variant === 'main' ? 'hacker-news' : variant
+    const url = new URL(request.url)
+    const today = url.searchParams.get('today')?.trim()
+    const rawVariant = (url.searchParams.get('variant') || url.searchParams.get('type') || 'hacker-news').trim()
+
+    if (today && !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+      return jsonResponse(
+        {
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid date parameter',
+          },
+        },
+        400,
+      )
+    }
+
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(rawVariant)) {
+      return jsonResponse(
+        {
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid variant parameter',
+          },
+        },
+        400,
+      )
+    }
+
+    const runEnv = env.WORKER_ENV || 'production'
+    const displayDate = today || getCalendarDate(new Date(), parseTimezoneOffset(env.TIMEZONE_OFFSET))
+    const normalizedVariant = rawVariant === 'main' ? 'hacker-news' : rawVariant
     const scriptKey = `script:${runEnv}:${normalizedVariant}:${displayDate}`
 
     const data = await env.HACKER_NEWS_KV.get(scriptKey)
 
     if (!data) {
-      return new Response(JSON.stringify({ error: 'Script not found', key: scriptKey }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse(
+        {
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Script not found',
+          },
+        },
+        404,
+      )
     }
 
     return new Response(data, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      },
     })
   },
 
@@ -205,7 +244,7 @@ export default {
     }
 
     // Redirect to our Web application instead of the original author's site
-    return Response.redirect('https://daily-podcast.oobwei.workers.dev/')
+    return Response.redirect('https://podcast.david888.com/')
   },
   async scheduled(event: ScheduledEvent, env: Env) {
     console.info('scheduled event', event.cron)

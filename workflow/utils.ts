@@ -397,12 +397,20 @@ export async function getHackerNewsTopStories(
   return []
 }
 
+export const MAX_STORY_CONTENT_CHARS = 32_000
+
+export function resolveStoryContentMaxChars(maxTokens: number): number {
+  const safeMaxTokens = Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 8192
+  return Math.min(safeMaxTokens * 4, MAX_STORY_CONTENT_CHARS)
+}
+
 export async function getHackerNewsStory(
   story: Story,
   maxTokens: number,
   _config?: unknown,
   prefetchedArticle = '',
 ) {
+  const maxContentChars = resolveStoryContentMaxChars(maxTokens)
   console.info(`[Content Fetch] Processing story: ${story.title}`)
   console.info(`[Content Fetch] Source: ${story.source}, URL: ${story.url}`)
 
@@ -466,8 +474,8 @@ export async function getHackerNewsStory(
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
-      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxTokens * 4)}</article>` : '',
-      commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
+      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxContentChars)}</article>` : '',
+      commentsLength ? `<comments>${comments.substring(0, maxContentChars)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
   else if (story.source === 'reddit') {
@@ -533,8 +541,8 @@ export async function getHackerNewsStory(
 
     return [
       story.title ? `<title>${story.title}</title>` : '',
-      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxTokens * 4)}</article>` : '',
-      commentsLength ? `<comments>${comments.substring(0, maxTokens * 4)}</comments>` : '',
+      finalArticleLength ? `<article>${resolvedArticle.substring(0, maxContentChars)}</article>` : '',
+      commentsLength ? `<comments>${comments.substring(0, maxContentChars)}</comments>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
   else {
@@ -574,7 +582,7 @@ export async function getHackerNewsStory(
       story.title ? `<title>${story.title}</title>` : '',
       story.description ? `<description>${story.description}</description>` : '',
       story.source ? `<source>${story.source}</source>` : '',
-      article ? `<article>${article.substring(0, maxTokens * 4)}</article>` : '',
+      article ? `<article>${article.substring(0, maxContentChars)}</article>` : '',
     ].filter(Boolean).join('\n\n---\n\n')
   }
 }

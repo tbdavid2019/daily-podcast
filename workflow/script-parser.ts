@@ -505,3 +505,83 @@ export async function parsePodcastScriptResponse<TSpeaker extends string = Podca
 }
 
 export type CanonicalPodcastScript = PodcastScriptResponse
+
+/**
+ * Extracts individual story summary blocks from the batch summarization response.
+ * Supports canonical `<story-summary>` XML tags (including a truncated trailing tag),
+ * markdown heading/separator fallbacks, title-anchor splitting, or paragraph chunks.
+ * Throws if the LLM output is completely empty so fallback providers can retry.
+ */
+export function parseStorySummaries(text: string, expectedTitles: readonly string[]): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    throw new Error('summarize all stories returned empty summaries')
+  }
+
+  // 1. Primary XML <story-summary ...>...</story-summary> blocks (tolerant of attributes and trailing unclosed tag)
+  const summaries: string[] = []
+  const closedRegex = /<story-summary(?:\s[^>]*)?>([\s\S]*?)<\/story-summary>/gi
+  let lastMatchedEnd = 0
+  for (const match of trimmed.matchAll(closedRegex)) {
+    const content = (match[1] ?? '').trim()
+    if (content) {
+      summaries.push(content)
+    }
+    lastMatchedEnd = (match.index ?? 0) + match[0].length
+  }
+
+  const trailingRemainder = trimmed.slice(lastMatchedEnd)
+  const unclosedMatch = trailingRemainder.match(/<story-summary(?:\s[^>]*)?>([\s\S]+)$/i)
+  if (unclosedMatch) {
+    const trailingContent = (unclosedMatch[1] ?? '').replace(/<\/story-summary>[\s\S]*$/i, '').trim()
+    if (trailingContent) {
+      summaries.push(trailingContent)
+    }
+  }
+
+  if (summaries.length > 0) {
+    return summaries
+  }
+
+  // 2. Fallback: split around occurrences of expected story titles in document order
+  if (expectedTitles.length > 0) {
+    const positions = expectedTitles
+      .map(title => title.trim())
+      .filter(Boolean)
+      .map(title => trimmed.indexOf(title))
+      .filter(pos => pos >= 0)
+      .sort((a, b) => a - b)
+
+    if (positions.length >= 2) {
+      const uniquePositions = [...new Set(positions)]
+      const byTitle = uniquePositions
+        .map((start, idx) => {
+          const end = idx + 1 < uniquePositions.length ? uniquePositions[idx + 1] : trimmed.length
+          return trimmed.slice(start, end).trim()
+        })
+        .filter(Boolean)
+      if (byTitle.length > 0) {
+        return byTitle
+      }
+    }
+  }
+
+  // 3. Fallback: markdown separators / level 2-3 headings
+  const headingSections = trimmed
+    .split(/\n(?=#{1,4}\s)/)
+    .map(section => section.trim())
+    .filter(section => section.length > 0)
+  if (headingSections.length >= 2) {
+    return headingSections
+  }
+
+  const ruleSections = trimmed
+    .split(/\n\s*-{3,}\s*\n/)
+    .map(section => section.trim())
+    .filter(section => section.length > 0)
+  if (ruleSections.length >= 2) {
+    return ruleSections
+  }
+
+  return [trimmed]
+}

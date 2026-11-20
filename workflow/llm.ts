@@ -123,10 +123,52 @@ export function createLlmClients(env: object): LlmClient[] {
           : controller.signal
 
         try {
-          return await fetch(url, { ...init, signal })
+          const response = await fetch(url, { ...init, signal })
+          if (!response.body) {
+            clearTimeout(timeoutId)
+            return response
+          }
+
+          let settled = false
+          const clearTimer = () => {
+            if (!settled) {
+              settled = true
+              clearTimeout(timeoutId)
+            }
+          }
+
+          const reader = response.body.getReader()
+          const timedBody = new ReadableStream({
+            async pull(streamController) {
+              try {
+                const { done, value } = await reader.read()
+                if (done) {
+                  clearTimer()
+                  streamController.close()
+                  return
+                }
+                streamController.enqueue(value)
+              }
+              catch (error) {
+                clearTimer()
+                streamController.error(error)
+              }
+            },
+            cancel(reason) {
+              clearTimer()
+              return reader.cancel(reason)
+            },
+          })
+
+          return new Response(timedBody, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
         }
-        finally {
+        catch (error) {
           clearTimeout(timeoutId)
+          throw error
         }
       },
     }),

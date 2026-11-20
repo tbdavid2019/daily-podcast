@@ -421,4 +421,32 @@ describe('topic archive and historical callbacks', () => {
     assert.match(context, /GrapheneOS 大幅翻新預設應用與剪貼簿安全/)
     assert.match(context, /自研開源 RCS 客戶端對抗閉源生態/)
   })
+
+  it('enforces replay determinism, durable metadata publishing, and endpoint auth guardrails', async () => {
+    const audioSource = await readFile(new URL('../workflow/audio.ts', import.meta.url), 'utf8')
+    assert.doesNotMatch(audioSource, /Date\.now\(\)/)
+    assert.match(audioSource, /resolveTtsProvider\(this\.env\.TTS_PROVIDER\)/)
+    assert.match(audioSource, /step\.do\('publish final audio metadata'/)
+
+    const indexSource = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
+    const forceClearBlock = indexSource.slice(
+      indexSource.indexOf("step.do('force clear script cache'"),
+      indexSource.indexOf("step.do('force clear script cache'") + 450,
+    )
+    assert.doesNotMatch(forceClearBlock, /kvDelete\(scriptKey\)/)
+    assert.match(indexSource, /parseStorySummaries/)
+
+    const utilsSource = await readFile(new URL('../workflow/utils.ts', import.meta.url), 'utf8')
+    assert.match(utilsSource, /MAX_STORY_CONTENT_CHARS\s*=\s*32_000/)
+    assert.match(utilsSource, /Math\.min\(safeMaxTokens \* 4,\s*MAX_STORY_CONTENT_CHARS\)/)
+
+    const workerSource = await readFile(new URL('../worker/index.ts', import.meta.url), 'utf8')
+    const getScriptSection = workerSource.slice(
+      workerSource.indexOf('async getScript('),
+      workerSource.indexOf('async fetch('),
+    )
+    assert.match(getScriptSection, /authenticateWorkflowRequest/)
+    assert.doesNotMatch(getScriptSection, /key:\s*scriptKey/)
+    assert.doesNotMatch(workerSource, /oobwei\.workers\.dev/)
+  })
 })

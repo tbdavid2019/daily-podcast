@@ -147,7 +147,7 @@ export const rssDays = 30 // 一個月 RSS
 | `LLM_PRIMARY_BASE_URL`      | 主要 LLM API 端點 | `https://api.openai.com/v1`                       | ✅   |
 | `LLM_PRIMARY_MODEL`         | 主要 LLM 模型 | `gpt-4o-mini`                                     | ✅   |
 | `LLM_PRIMARY_THINKING_MODEL` | 主要 LLM 思考模型 | `gpt-4o-mini`                                  | ⭕   |
-| `TTS_PROVIDER`              | 語音合成提供者   | `edge` / `openai` / `minimax`                     | ⭕   |
+| `TTS_PROVIDER`              | 語音合成提供者   | `gemini` / `openai` / `minimax` / `edge`          | ⭕   |
 | `AUDIO_SPEED`               | TTS 語速倍數     | `1.3`（快 30%）範圍：`0.25`-`4.0`                 | ⭕   |
 
 ### LLM fallback 設定
@@ -343,9 +343,10 @@ pnpx wrangler secret list
 
 | TTS Provider    | 支援 AUDIO_SPEED | 預設值 | 備註                              |
 | --------------- | ---------------- | ------ | --------------------------------- |
-| **Edge TTS**    | ✅               | `10%`  | 使用百分比格式（如 `10%`、`20%`） |
+| **Gemini TTS**（預設） | 否（固定自然語速） | `1.0` | 多組 API Key 自動故障轉移          |
 | **OpenAI TTS**  | ✅               | `1.3`  | 使用倍數格式（範圍 0.25-4.0）     |
 | **Minimax TTS** | ✅               | `1.1`  | 使用倍數格式                      |
+| **Edge TTS**（手動啟用） | ✅       | `10%`  | 僅在 `TTS_PROVIDER=edge` 時使用，採百分比格式（如 `10%`） |
 
 #### 修改語速步驟
 

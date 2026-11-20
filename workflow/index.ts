@@ -65,7 +65,7 @@ import {
   summarizeStoryPromptEn,
 } from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
-import { parsePodcastScriptResponse } from './script-parser'
+import { parsePodcastScriptResponse, parseStorySummaries } from './script-parser'
 import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
@@ -221,7 +221,8 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
     if (force) {
       await step.do('force clear script cache', IO_STEP_CONFIG, async () => {
-        await kvDelete(scriptKey)
+        // Keep the existing live scriptKey intact until `save script to kv` atomically overwrites it,
+        // so listeners never hit a 404 window while the forced rerun is still generating.
         await kvDelete(rawContentKey)
         await kvDelete(rssCacheKey)
 
@@ -272,11 +273,12 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
     const parsedMaxTokens = Number.parseInt(this.env.OPENAI_MAX_TOKENS || '', 10)
     const parsedCompletionTokens = Number.parseInt(this.env.OPENAI_MAX_COMPLETION_TOKENS || '', 10)
 
+    // Decouple huge OPENAI_MAX_TOKENS overrides (e.g. 1_000_000) from runaway output-token/prompt caps.
     const maxTokens = Number.isFinite(parsedMaxTokens) && parsedMaxTokens > 0
-      ? parsedMaxTokens
+      ? Math.min(parsedMaxTokens, 8192)
       : defaultMaxTokens
     const completionTokenLimit = Number.isFinite(parsedCompletionTokens) && parsedCompletionTokens > 0
-      ? parsedCompletionTokens
+      ? Math.min(parsedCompletionTokens, 32768)
       : defaultCompletionTokens
 
     const isDecisionEnabled = this.env.CLEF_ENABLED !== 'false'
@@ -607,37 +609,9 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
       console.info('batch summarize all stories success', { usage, finishReason, responseLength: text.length })
 
-      const parts = text.split('<story-summary')
-      if (parts.length > 1) {
-        for (let i = 1; i < parts.length; i++) {
-          const endIndex = parts[i].indexOf('</story-summary>')
-          if (endIndex !== -1) {
-            const content = parts[i].substring(parts[i].indexOf('>') + 1, endIndex).trim()
-            summaries.push(`<story>${content}</story>`)
-          }
-        }
-      }
-      else {
-        console.warn('No story-summary tags found, using fallback parsing')
-        // Fallback parsing logic (simplified for brevity but keeping robustness if desired)
-        const storyTitles = allStoryContents.map(s => s.title)
-        let foundByTitle = false
-        for (let i = 0; i < storyTitles.length && !foundByTitle; i++) {
-          if (text.includes(storyTitles[i])) {
-            foundByTitle = true
-            // Simple split by title if found (simplified for brevity)
-          }
-        }
-
-        if (!foundByTitle) {
-          const textParts = text.split('---').filter(part => part.trim())
-          if (textParts.length > 1) {
-            textParts.forEach(p => summaries.push(`<story>${p.trim()}</story>`))
-          }
-          else {
-            summaries.push(`<story>${text}</story>`)
-          }
-        }
+      const parsedSummaries = parseStorySummaries(text, allStoryContents.map(story => story.title))
+      for (const content of parsedSummaries) {
+        summaries.push(`<story>${content}</story>`)
       }
 
       return summaries

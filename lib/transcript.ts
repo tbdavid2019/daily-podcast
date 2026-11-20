@@ -108,9 +108,38 @@ export function estimateSpeechDuration(cues: DialogueCue[]): number {
   return Math.round(totalEstimatedSeconds)
 }
 
-export function calculateCueTimings(cues: DialogueCue[], totalDuration?: number): TimedCue[] {
+export function calculateCueTimings(
+  cues: DialogueCue[],
+  totalDuration?: number,
+  dialogueTimings?: ReadonlyArray<readonly [number, number]>,
+): TimedCue[] {
   if (cues.length === 0) {
     return []
+  }
+
+  if (
+    dialogueTimings
+    && dialogueTimings.length === cues.length
+    && dialogueTimings.every(pair =>
+      Array.isArray(pair)
+      && pair.length >= 2
+      && Number.isFinite(pair[0])
+      && Number.isFinite(pair[1])
+      && pair[0] >= 0
+      && pair[1] >= pair[0],
+    )
+  ) {
+    return cues.map((cue, index) => {
+      const [rawStart, rawEnd] = dialogueTimings[index]
+      const start = Math.round(rawStart * 1000) / 1000
+      const end = Math.round(rawEnd * 1000) / 1000
+      return {
+        ...cue,
+        start,
+        end,
+        duration: Math.max(0, Math.round((end - start) * 1000) / 1000),
+      }
+    })
   }
 
   const duration = (typeof totalDuration === 'number' && totalDuration > 0)

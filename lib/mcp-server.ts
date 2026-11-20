@@ -16,7 +16,10 @@ import {
   truncateWebMcpOutput,
 } from '@/lib/webmcp'
 
-type PodcastMcpEnv = Pick<CloudflareEnv, 'HACKER_NEWS_KV'> & { NEXTJS_ENV?: string }
+type PodcastMcpEnv = Pick<CloudflareEnv, 'HACKER_NEWS_KV'> & {
+  NEXTJS_ENV?: string
+  NEXT_STATIC_HOST?: string
+}
 
 const siteHostname = new URL(DEFAULT_BASE_URL).hostname
 const allowedHostnames = [...new Set([...localhostAllowedHostnames(), siteHostname])]
@@ -49,7 +52,7 @@ function createPodcastMcpServer(env?: PodcastMcpEnv) {
     const currentEnv = await getMcpEnv(env)
     const currentPage = normalizeWebMcpPage({ page })
     const { posts, totalPages } = await getHomepageArticles(currentEnv, currentPage)
-    const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages)
+    const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages, currentEnv.NEXT_STATIC_HOST)
 
     return { content: [{ type: 'text', text: truncateWebMcpOutput(markdown) }] }
   })
@@ -77,7 +80,7 @@ function createPodcastMcpServer(env?: PodcastMcpEnv) {
     return {
       content: [{
         type: 'text',
-        text: truncateWebMcpOutput(buildArticleMarkdown(getBaseUrl(), article)),
+        text: truncateWebMcpOutput(buildArticleMarkdown(getBaseUrl(), article, currentEnv.NEXT_STATIC_HOST)),
       }],
     }
   })

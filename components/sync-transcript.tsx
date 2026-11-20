@@ -49,11 +49,17 @@ export function SyncTranscript({ article, audioSrc }: SyncTranscriptProps) {
     [article.podcastContent, article.dialogue],
   )
 
-  // Use player's real duration if playing this episode, otherwise estimate
-  const effectiveDuration = isCurrentEpisode && playerDuration > 0 ? playerDuration : 0
+  // Use exact precomputed timings if available, or player's real duration, otherwise estimate
+  const effectiveDuration = isCurrentEpisode && playerDuration > 0
+    ? playerDuration
+    : (typeof article.audioDurationSec === 'number' && article.audioDurationSec > 0 ? article.audioDurationSec : 0)
   const timedCues: TimedCue[] = useMemo(
-    () => calculateCueTimings(rawCues, effectiveDuration > 0 ? effectiveDuration : undefined),
-    [rawCues, effectiveDuration],
+    () => calculateCueTimings(
+      rawCues,
+      effectiveDuration > 0 ? effectiveDuration : undefined,
+      article.dialogueTimings,
+    ),
+    [rawCues, effectiveDuration, article.dialogueTimings],
   )
 
   // Find currently active cue

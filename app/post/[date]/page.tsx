@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
 import { getRequestArticleByDate } from '@/lib/content'
+import { getBaseUrl } from '@/lib/discovery'
 import { isValidArticleTab } from '@/lib/playback-share'
 
 export const revalidate = 3600
@@ -15,7 +16,6 @@ interface PostPageProps {
 
 // 產生頁面的中繼資料
 export async function generateMetadata({ params, searchParams }: PostPageProps): Promise<Metadata> {
-  const { env } = await getCloudflareContext({ async: true })
   const date = (await params).date
   const variant = 'hacker-news'
   const post = await getRequestArticleByDate(date, variant)
@@ -30,11 +30,15 @@ export async function generateMetadata({ params, searchParams }: PostPageProps):
   const tabSuffix = tab === 'podcast' ? ' - Podcast' : tab === 'references' ? ' - 參考來源' : ''
   const title = `${post.title}${tabSuffix}`
   const description = post.introContent || post.podcastContent?.slice(0, 200) || post.title
-  const url = tab ? `${env.NEXT_STATIC_HOST}/post/${post.date}/${tab}` : `${env.NEXT_STATIC_HOST}/post/${post.date}`
+  const baseUrl = getBaseUrl()
+  const url = tab ? `${baseUrl}/post/${post.date}/${tab}` : `${baseUrl}/post/${post.date}`
 
   return {
     title,
     description,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
       title,
       description,

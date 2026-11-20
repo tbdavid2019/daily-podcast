@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { describe, it } from 'node:test'
+import { checkRssPostsAudio } from '../lib/rss'
 import {
   EDGE_CACHE_CONTROL,
   PRIVATE_CACHE_CONTROL,
@@ -148,5 +149,50 @@ describe('Web cache deployment guardrails', () => {
     const openNextConfig = await readFile(new URL('open-next.config.ts', rootUrl), 'utf8')
 
     assert.doesNotMatch(openNextConfig, /shouldLazilyUpdateOnCacheHit\s*:\s*true/)
+  })
+
+  it('bounds RSS R2 head concurrency and skips 7-day KV caching while recent audio is pending', async () => {
+    let activeHeads = 0
+    let maxActiveHeads = 0
+    const posts = Array.from({ length: 10 }, (_, idx) => ({
+      date: `2026-11-${String(20 - idx).padStart(2, '0')}`,
+      title: `Episode ${idx}`,
+      stories: [],
+      podcastContent: '',
+      blogContent: '',
+      introContent: '',
+      audio: `2026/11/20/production/hacker-news-${idx}.mp3`,
+      updatedAt: 1000 + idx,
+    }))
+
+    const bucket = {
+      async head(key: string) {
+        activeHeads += 1
+        maxActiveHeads = Math.max(maxActiveHeads, activeHeads)
+        await new Promise(resolve => setTimeout(resolve, 5))
+        activeHeads -= 1
+        if (key.endsWith('-0.mp3')) {
+          return null
+        }
+        return { size: 12345, httpMetadata: { contentType: 'audio/wav' } } as unknown as R2Object
+      },
+    }
+
+    const result = await checkRssPostsAudio(posts, bucket, 6)
+    assert.ok(maxActiveHeads <= 6, `Expected <= 6 concurrent R2 heads, got ${maxActiveHeads}`)
+    assert.equal(result.hasRecentPendingAudio, true)
+    assert.equal(result.verifiedPosts.length, 9)
+  })
+
+  it('enforces RSS cache safety, zh-TW metadata, and timestamped static audio patterns', async () => {
+    const rssSource = await readFile(new URL('app/rss.xml/route.ts', rootUrl), 'utf8')
+    const rssEnSource = await readFile(new URL('app/rss-en.xml/route.ts', rootUrl), 'utf8')
+    const staticSource = await readFile(new URL('app/static/[...path]/route.ts', rootUrl), 'utf8')
+
+    assert.match(rssSource, /language:\s*'zh-TW'/)
+    assert.doesNotMatch(rssSource, /searchParams\.get\('force'\)/)
+    assert.doesNotMatch(rssEnSource, /searchParams\.get\('force'\)/)
+    assert.match(staticSource, /\(\?:-\\d\{10,14\}\)\?/)
+    assert.match(staticSource, /file\.httpMetadata\?\.cacheControl/)
   })
 })

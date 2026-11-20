@@ -58,7 +58,7 @@ compatible across both Workers or be deployed in a deliberate order.
   bounded-memory ranged-stream upload helpers.
 - `workflow/efficiency.ts`: bounded retry policies, compact state/index helpers,
   and deterministic R2 checkpoint keys.
-- `workflow/tts.ts`: Gemini, OpenAI, Minimax, and Edge TTS adapters/fallback.
+- `workflow/tts.ts`: Gemini (default with multi-key failover), OpenAI, Minimax, and Edge TTS adapters.
 - `workflow/utils.ts`: source fetching, extraction, and audio utilities.
 - `wrangler.jsonc`: tracked Web Worker bindings.
 - `worker/wrangler.example.jsonc`: safe backend configuration template.

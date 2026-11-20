@@ -5,6 +5,7 @@ import { Podcast } from 'podcast'
 import { podcastCoverImage, podcastDescription, podcastOwner, podcastTitle, rssDays } from '@/config'
 import { buildRssCacheKey, getArticleByDate, getEpisodeDates } from '@/lib/content'
 import { getBaseUrl } from '@/lib/discovery'
+import { checkRssPostsAudio, RSS_CACHE_TTL_PENDING_SECONDS, RSS_CACHE_TTL_READY_SECONDS } from '@/lib/rss'
 import { getArticleTimestamp } from '@/lib/utils'
 import { EDGE_CACHE_CONTROL } from '@/lib/web-cache-policy'
 
@@ -61,22 +62,17 @@ export async function OPTIONS() {
   })
 }
 
-export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const force = url.searchParams.get('force') === 'true'
-
+export async function GET() {
   const { env } = await getCloudflareContext({ async: true })
   const runEnv = env.NEXTJS_ENV || 'production'
   const variant = 'hacker-news'
   const rssCacheKey = buildRssCacheKey(runEnv, variant)
 
-  if (!force) {
-    const cachedXml = await env.HACKER_NEWS_KV.get(rssCacheKey, 'text')
-    if (cachedXml) {
-      return new NextResponse(cachedXml, {
-        headers: rssHeaders,
-      })
-    }
+  const cachedXml = await env.HACKER_NEWS_KV.get(rssCacheKey, 'text')
+  if (cachedXml) {
+    return new NextResponse(cachedXml, {
+      headers: rssHeaders,
+    })
   }
 
   const baseUrl = getBaseUrl()
@@ -88,7 +84,7 @@ export async function GET(request: Request) {
     feedUrl: `${baseUrl}/rss.xml`,
     siteUrl: baseUrl,
     imageUrl: `${baseUrl}${podcastCoverImage}`,
-    language: 'zh-CN',
+    language: 'zh-TW',
     pubDate: new Date(),
     ttl: 60,
     generator: podcastTitle,
@@ -113,15 +109,9 @@ export async function GET(request: Request) {
     targetDates.map(day => getArticleByDate(env, day, variant)),
   )).filter(Boolean) as Article[]
 
-  for (const post of posts) {
-    const audioInfo = await env.HACKER_NEWS_R2.head(post.audio)
+  const { verifiedPosts, hasRecentPendingAudio } = await checkRssPostsAudio(posts, env.HACKER_NEWS_R2)
 
-    // 如果音檔還沒上傳完成，暫時不顯示在 RSS 中，避免 YouTube 抓取失敗
-    if (!audioInfo) {
-      console.warn(`Audio not ready for ${post.title}, skipping`)
-      continue
-    }
-
+  for (const { post, audioSize, contentType } of verifiedPosts) {
     const postUrl = `${baseUrl}/post/${post.date}`
     const webLinkText = `詳細網頁版與參考連結：${postUrl}`
     const webLinkHtml = `<p><b>詳細網頁版與參考連結：</b><a href="${postUrl}">${postUrl}</a></p>`
@@ -151,8 +141,8 @@ export async function GET(request: Request) {
       date: new Date(updatedAt),
       enclosure: {
         url: `${env.NEXT_STATIC_HOST}/${post.audio}?t=${updatedAt}`,
-        type: audioInfo?.httpMetadata?.contentType || (post.audio.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
-        size: audioInfo?.size,
+        type: contentType || (post.audio.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
+        size: audioSize,
       },
       customElements: [
         {
@@ -172,7 +162,7 @@ export async function GET(request: Request) {
 
   try {
     await env.HACKER_NEWS_KV.put(rssCacheKey, xml, {
-      expirationTtl: 60 * 60 * 24 * 7,
+      expirationTtl: hasRecentPendingAudio ? RSS_CACHE_TTL_PENDING_SECONDS : RSS_CACHE_TTL_READY_SECONDS,
     })
   }
   catch (error) {

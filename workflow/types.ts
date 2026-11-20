@@ -15,6 +15,8 @@ export interface PodcastDialogueLine {
 export interface PodcastScriptResponse {
   title?: string
   dialogue: PodcastDialogueLine[]
+  dialogueTimings?: [number, number][]
+  audioDurationSec?: number
   llmProvider?: string
   llmModel?: string
 }
@@ -42,6 +44,8 @@ export interface Story {
 export interface GeneratedScriptData {
   title?: string
   dialogue: PodcastDialogueLine[]
+  dialogueTimings?: [number, number][]
+  audioDurationSec?: number
   blogContent: string
   introContent: string
   stories: Story[]

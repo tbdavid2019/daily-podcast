@@ -149,7 +149,8 @@ export async function getHomepageArticles(env: ContentEnv, currentPage = 1, page
   }
 }
 
-export function buildHomepageMarkdown(baseUrl: string, posts: Article[], currentPage: number, totalPages: number) {
+export function buildHomepageMarkdown(baseUrl: string, posts: Article[], currentPage: number, totalPages: number, staticHost?: string) {
+  const audioHost = (staticHost || baseUrl).replace(/\/+$/, '')
   const lines = [
     '# DAVID888 Daily 每日放送',
     '',
@@ -173,7 +174,7 @@ export function buildHomepageMarkdown(baseUrl: string, posts: Article[], current
       lines.push(`- Summary: ${summary}`)
     }
     if (post.audio) {
-      lines.push(`- Audio: ${baseUrl}/${post.audio}`)
+      lines.push(`- Audio: ${audioHost}/${post.audio}`)
     }
     lines.push('')
   }
@@ -181,12 +182,12 @@ export function buildHomepageMarkdown(baseUrl: string, posts: Article[], current
   return lines.join('\n')
 }
 
-export function buildArticleMarkdown(baseUrl: string, article: Article) {
+export function buildArticleMarkdown(baseUrl: string, article: Article, staticHost?: string) {
   const lines = [
     `# ${article.title}`,
     '',
     `- Date: ${article.date}`,
-    `- Audio: ${baseUrl}/${article.audio}`,
+    ...(article.audio ? [`- Audio: ${(staticHost || baseUrl).replace(/\/+$/, '')}/${article.audio}`] : []),
     '',
   ]
 

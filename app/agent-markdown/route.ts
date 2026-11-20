@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const currentPage = Number(url.searchParams.get('page')) || 1
   const { posts, totalPages } = await getHomepageArticles(env, currentPage)
-  const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages)
+  const markdown = buildHomepageMarkdown(getBaseUrl(), posts, currentPage, totalPages, env.NEXT_STATIC_HOST)
 
   return withMarkdownHeaders(markdown, {
     headers: {

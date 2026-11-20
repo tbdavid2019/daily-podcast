@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { ArticleCard } from '@/components/article-card'
 import { podcastTitle } from '@/config'
 import { getRequestArticleByDate } from '@/lib/content'
+import { getBaseUrl } from '@/lib/discovery'
 import { isValidArticleTab } from '@/lib/playback-share'
 
 export const revalidate = 3600
@@ -14,7 +15,6 @@ interface PostVariantTabPageProps {
 }
 
 export async function generateMetadata({ params }: PostVariantTabPageProps): Promise<Metadata> {
-  const { env } = await getCloudflareContext({ async: true })
   const { date, variant, tab } = await params
 
   if (!isValidArticleTab(tab)) {
@@ -37,11 +37,14 @@ export async function generateMetadata({ params }: PostVariantTabPageProps): Pro
 
   const title = `${post.title}${tabSuffix}`
   const description = post.introContent || post.podcastContent?.slice(0, 200) || post.title
-  const url = `${env.NEXT_STATIC_HOST}/post/${post.date}/${episodeVariant}/${tab}`
+  const url = `${getBaseUrl()}/post/${post.date}/${episodeVariant}/${tab}`
 
   return {
     title,
     description,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
       title,
       description,

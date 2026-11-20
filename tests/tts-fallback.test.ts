@@ -3,8 +3,10 @@ import { Buffer } from 'node:buffer'
 import { describe, it } from 'node:test'
 import synthesizeAudio, {
   createGeminiTtsConfigs,
+  DEFAULT_GEMINI_TTS_MAX_RETRIES,
   DEFAULT_GEMINI_TTS_MODEL,
   geminiTTS,
+  resolveTtsProvider,
 } from '../workflow/tts'
 
 function makeMockPcmResponse() {
@@ -251,5 +253,16 @@ describe('Gemini TTS retry and fallback behavior', () => {
     finally {
       globalThis.fetch = originalFetch
     }
+  })
+
+  it('disables inner TTS retry loops by default and resolves provider consistently with Workflow audio', () => {
+    assert.equal(DEFAULT_GEMINI_TTS_MAX_RETRIES, 0)
+    assert.equal(resolveTtsProvider(undefined), 'gemini')
+    assert.equal(resolveTtsProvider(''), 'gemini')
+    assert.equal(resolveTtsProvider('GEMINI'), 'gemini')
+    assert.equal(resolveTtsProvider('openai'), 'openai')
+    assert.equal(resolveTtsProvider('minimax'), 'minimax')
+    assert.equal(resolveTtsProvider('edge'), 'edge')
+    assert.equal(resolveTtsProvider('unknown'), 'gemini')
   })
 })

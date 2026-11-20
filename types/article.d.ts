@@ -9,4 +9,6 @@ interface Article {
   updatedAt: number
   variant?: string
   dialogue?: { speaker: string, text: string }[]
+  dialogueTimings?: [number, number][]
+  audioDurationSec?: number
 }

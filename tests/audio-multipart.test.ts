@@ -2,11 +2,15 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { describe, it } from 'node:test'
 import {
+  buildDialogueTimings,
+  computeWavSegmentDurationMs,
+  createPcmWavHeader,
+  GEMINI_PCM_BYTES_PER_MS,
+  planAudioMultipartUpload,
   R2_MULTIPART_MAX_PARTS,
   R2_MULTIPART_PART_SIZE,
-  createPcmWavHeader,
-  planAudioMultipartUpload,
   uploadAudioMultipartPart,
+  WAV_HEADER_BYTES,
 } from '../workflow/audio-multipart'
 
 const MIB = 1024 * 1024
@@ -187,5 +191,26 @@ describe('audio multipart streaming', () => {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('stream did not stop')), 100))
 
     await assert.rejects(Promise.race([upload, timeout]), /upload unavailable/)
+  })
+
+  it('reconstructs millisecond-accurate dialogue timings from WAV PCM segment lengths', () => {
+    const oneSecWavBytes = WAV_HEADER_BYTES + 1000 * GEMINI_PCM_BYTES_PER_MS
+    assert.equal(computeWavSegmentDurationMs(oneSecWavBytes), 1000)
+
+    const result = buildDialogueTimings(
+      3,
+      [0, 0, 1, 2],
+      [1200, 800, 2500.4, 999.6],
+    )
+    assert.deepEqual(result, {
+      dialogueTimings: [
+        [0, 2],
+        [2, 4.5],
+        [4.5, 5.5],
+      ],
+      audioDurationSec: 5.5,
+    })
+
+    assert.equal(buildDialogueTimings(2, [0], [100, 200]), null)
   })
 })
