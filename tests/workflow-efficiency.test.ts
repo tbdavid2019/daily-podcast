@@ -19,6 +19,7 @@ import {
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
   buildStoryDedupeKey,
+  buildStoryDossierCheckpointKey,
   buildTopicArchiveKey,
   findRelevantHistoricalTopics,
   formatHistoricalCallbacksContext,
@@ -434,7 +435,20 @@ describe('topic archive and historical callbacks', () => {
       indexSource.indexOf("step.do('force clear script cache'") + 450,
     )
     assert.doesNotMatch(forceClearBlock, /kvDelete\(scriptKey\)/)
-    assert.match(indexSource, /parseStorySummaries/)
+    assert.match(indexSource, /parseStoryDossiers/)
+    assert.match(indexSource, /buildStoryDossierCheckpointKey/)
+    assert.doesNotMatch(indexSource, /65 seconds/)
+
+    const zhDossierKey = buildStoryDossierCheckpointKey(
+      'content:production:hacker-news:2026-11-20:story-contents:hacker-news:0123456789abcdef01234567',
+      'production',
+    )
+    const enDossierKey = buildStoryDossierCheckpointKey(
+      'content:production:en:2026-11-20:story-contents:hacker-news:0123456789abcdef01234567',
+      'production',
+    )
+    assert.equal(zhDossierKey, enDossierKey)
+    assert.equal(zhDossierKey, 'workflow-state/story-content/2026/11/20/dossier/production/0123456789abcdef01234567.md')
 
     const utilsSource = await readFile(new URL('../workflow/utils.ts', import.meta.url), 'utf8')
     assert.match(utilsSource, /MAX_STORY_CONTENT_CHARS\s*=\s*32_000/)

@@ -42,6 +42,7 @@ export interface ParsePodcastScriptOptions<TSpeaker extends string = PodcastDial
 
 export interface ParsedPodcastScript<TSpeaker extends string = PodcastDialogueLine['speaker']> {
   title?: string
+  intro?: string
   dialogue: { speaker: TSpeaker, text: string }[]
   format: ScriptParseFormat
   speakers: TSpeaker[]
@@ -54,6 +55,7 @@ const rawDialogueItemSchema = z.object({
 
 const rawPodcastScriptSchema = z.object({
   title: z.string().nullable().optional(),
+  intro: z.string().nullable().optional(),
   dialogue: z.array(rawDialogueItemSchema).min(1),
 })
 
@@ -155,7 +157,7 @@ function stripOuterMarkdownFence(input: string): string {
  *
  * Quotes, colons, code snippets, and newlines inside <turn> bodies do not break parsing.
  */
-export function parseXmlPodcastScript(rawText: string): { title?: string, dialogue: { speaker: string, text: string }[] } | null {
+export function parseXmlPodcastScript(rawText: string): { title?: string, intro?: string, dialogue: { speaker: string, text: string }[] } | null {
   const cleaned = stripOuterMarkdownFence(rawText)
   if (!/<turn\b/i.test(cleaned)) {
     return null
@@ -167,6 +169,15 @@ export function parseXmlPodcastScript(rawText: string): { title?: string, dialog
     const candidate = decodeBasicXmlEntities(titleMatch[1]).replace(/\s+/g, ' ').trim()
     if (candidate) {
       title = candidate
+    }
+  }
+
+  let intro: string | undefined
+  const introMatch = cleaned.match(/<intro\b[^>]*>([\s\S]*?)<\/intro>/i)
+  if (introMatch) {
+    const candidate = decodeBasicXmlEntities(introMatch[1]).replace(/\s+/g, ' ').trim()
+    if (candidate) {
+      intro = candidate
     }
   }
 
@@ -187,7 +198,7 @@ export function parseXmlPodcastScript(rawText: string): { title?: string, dialog
     }
   }
 
-  return dialogue.length > 0 ? { title, dialogue } : null
+  return dialogue.length > 0 ? { title, intro, dialogue } : null
 }
 
 /**
@@ -495,9 +506,13 @@ export async function parsePodcastScriptResponse<TSpeaker extends string = Podca
   const normalizedTitle = typeof validated.title === 'string' && validated.title.trim()
     ? validated.title.trim()
     : undefined
+  const normalizedIntro = typeof validated.intro === 'string' && validated.intro.trim()
+    ? validated.intro.trim()
+    : undefined
 
   return {
     title: normalizedTitle,
+    ...(normalizedIntro ? { intro: normalizedIntro } : {}),
     dialogue: sanitizedDialogue,
     format,
     speakers: [...distinctSpeakers],
@@ -506,44 +521,42 @@ export async function parsePodcastScriptResponse<TSpeaker extends string = Podca
 
 export type CanonicalPodcastScript = PodcastScriptResponse
 
-/**
- * Extracts individual story summary blocks from the batch summarization response.
- * Supports canonical `<story-summary>` XML tags (including a truncated trailing tag),
- * markdown heading/separator fallbacks, title-anchor splitting, or paragraph chunks.
- * Throws if the LLM output is completely empty so fallback providers can retry.
- */
-export function parseStorySummaries(text: string, expectedTitles: readonly string[]): string[] {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function parseTaggedStoryBlocks(text: string, tagName: string, expectedTitles: readonly string[]): string[] {
   const trimmed = text.trim()
   if (!trimmed) {
-    throw new Error('summarize all stories returned empty summaries')
+    throw new Error(`extract ${tagName} returned empty output`)
   }
 
-  // 1. Primary XML <story-summary ...>...</story-summary> blocks (tolerant of attributes and trailing unclosed tag)
-  const summaries: string[] = []
-  const closedRegex = /<story-summary(?:\s[^>]*)?>([\s\S]*?)<\/story-summary>/gi
+  const escapedTag = escapeRegExp(tagName)
+  const blocks: string[] = []
+  const closedRegex = new RegExp(`<${escapedTag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapedTag}>`, 'gi')
   let lastMatchedEnd = 0
   for (const match of trimmed.matchAll(closedRegex)) {
     const content = (match[1] ?? '').trim()
     if (content) {
-      summaries.push(content)
+      blocks.push(content)
     }
     lastMatchedEnd = (match.index ?? 0) + match[0].length
   }
 
   const trailingRemainder = trimmed.slice(lastMatchedEnd)
-  const unclosedMatch = trailingRemainder.match(/<story-summary(?:\s[^>]*)?>([\s\S]+)$/i)
+  const unclosedMatch = trailingRemainder.match(new RegExp(`<${escapedTag}(?:\\s[^>]*)?>([\\s\\S]+)$`, 'i'))
   if (unclosedMatch) {
-    const trailingContent = (unclosedMatch[1] ?? '').replace(/<\/story-summary>[\s\S]*$/i, '').trim()
+    const trailingContent = (unclosedMatch[1] ?? '').replace(new RegExp(`<\\/${escapedTag}>[\\s\\S]*$`, 'i'), '').trim()
     if (trailingContent) {
-      summaries.push(trailingContent)
+      blocks.push(trailingContent)
     }
   }
 
-  if (summaries.length > 0) {
-    return summaries
+  if (blocks.length > 0) {
+    return blocks
   }
 
-  // 2. Fallback: split around occurrences of expected story titles in document order
+  // Fallback: split around occurrences of expected story titles in document order
   if (expectedTitles.length > 0) {
     const positions = expectedTitles
       .map(title => title.trim())
@@ -566,7 +579,6 @@ export function parseStorySummaries(text: string, expectedTitles: readonly strin
     }
   }
 
-  // 3. Fallback: markdown separators / level 2-3 headings
   const headingSections = trimmed
     .split(/\n(?=#{1,4}\s)/)
     .map(section => section.trim())
@@ -584,4 +596,18 @@ export function parseStorySummaries(text: string, expectedTitles: readonly strin
   }
 
   return [trimmed]
+}
+
+/**
+ * Extracts individual story summary blocks from batch summarization output.
+ */
+export function parseStorySummaries(text: string, expectedTitles: readonly string[]): string[] {
+  return parseTaggedStoryBlocks(text, 'story-summary', expectedTitles)
+}
+
+/**
+ * Extracts language-neutral Evidence Dossier blocks from batch extraction output.
+ */
+export function parseStoryDossiers(text: string, expectedTitles: readonly string[]): string[] {
+  return parseTaggedStoryBlocks(text, 'story-dossier', expectedTitles)
 }

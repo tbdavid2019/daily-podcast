@@ -5,6 +5,7 @@ import {
   DEFAULT_PODCAST_CAST,
   normalizePodcastSpeaker,
   parsePodcastScriptResponse,
+  parseStoryDossiers,
   parseStorySummaries,
   parseXmlPodcastScript,
   repairDialogueJson,
@@ -166,6 +167,30 @@ describe('podcast script XML harness & parser', () => {
       '## Summary 2\nBody 2',
     ])
 
-    assert.throws(() => parseStorySummaries('   \n  ', ['Title']), /empty summaries/)
+    assert.throws(() => parseStorySummaries('   \n  ', ['Title']), /empty/)
+  })
+
+  it('parses inline <intro> in XML podcast script and <story-dossier> blocks', async () => {
+    const xmlWithIntro = `
+<title>[2026-11-20] NGINX HTTP/2 與 SQLite</title>
+<intro>今日聚焦 NGINX HTTP/2 安全修補與 SQLite 效能基準測試的實務取捨。</intro>
+<turn speaker="女">歡迎收聽，今天聊 NGINX HTTP/2。</turn>
+<turn speaker="男">我是 David，一起看細節。</turn>
+`
+    const parsed = await parsePodcastScriptResponse(xmlWithIntro, {
+      minTurns: 2,
+      requireMultipleSpeakers: true,
+    })
+    assert.equal(parsed.intro, '今日聚焦 NGINX HTTP/2 安全修補與 SQLite 效能基準測試的實務取捨。')
+
+    const dossiers = parseStoryDossiers(
+      `<story-dossier id="101">### NGINX\n- Core Mechanism: KeepAlive UAF</story-dossier>
+       <story-dossier id="102">### SQLite\n- Core Mechanism: WAL lock</story-dossier>`,
+      ['NGINX', 'SQLite'],
+    )
+    assert.deepEqual(dossiers, [
+      '### NGINX\n- Core Mechanism: KeepAlive UAF',
+      '### SQLite\n- Core Mechanism: WAL lock',
+    ])
   })
 })

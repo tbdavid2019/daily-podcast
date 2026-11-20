@@ -729,6 +729,14 @@ export function buildStoryArticleCheckpointKey(cacheKey: string, instanceId: str
   return buildStoryContentCheckpointKey(cacheKey, instanceId).replace(/\.json$/, '.primary.md')
 }
 
+export function buildStoryDossierCheckpointKey(cacheKey: string, runEnv: string): string {
+  const match = cacheKey.match(/:(\d{4}-\d{2}-\d{2}):story-contents:[^:]+:([a-f0-9]{24})$/)
+  if (!match) {
+    throw new Error('Invalid story content cache key')
+  }
+  return `${buildStoryContentCheckpointPrefix(match[1])}dossier/${safePathPart(runEnv)}/${match[2]}.md`
+}
+
 export function buildStoryContentCheckpointPrefix(date: string): string {
   return `${STORY_CONTENT_CHECKPOINT_ROOT}${date.replaceAll('-', '/')}/`
 }

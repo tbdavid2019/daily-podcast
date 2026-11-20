@@ -14,6 +14,7 @@ export interface PodcastDialogueLine {
 
 export interface PodcastScriptResponse {
   title?: string
+  intro?: string
   dialogue: PodcastDialogueLine[]
   dialogueTimings?: [number, number][]
   audioDurationSec?: number

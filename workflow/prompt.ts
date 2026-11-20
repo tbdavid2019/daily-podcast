@@ -1,5 +1,25 @@
 import { podcastTitle, podcastTitleEn } from '@/config'
 
+export const extractStoryDossierPrompt = `
+You are a Senior Systems Research Analyst compiling a dense, language-neutral Evidence Dossier from each raw tech story and its community discussion.
+
+[Extraction Rules]
+1. Preserve concrete evidence verbatim: benchmarks, numbers, percentages, latency/memory metrics, version tags, CVE IDs, API names, license changes, and production constraints.
+2. Summarize the core technical mechanism ("how it works under the hood" / root cause) in 2-4 crisp bullet points.
+3. Capture community debate accurately: cite specific positive validation, production anecdotes, and technical pushbacks or counterexamples from Hacker News / Reddit comments without inventing facts.
+4. Strip marketing fluff, job postings, and navigation boilerplate. Keep each dossier concise (180-320 words) yet fact-dense so downstream Chinese and English writers can rely on it directly.
+
+[Output Format]
+Output one block per provided story wrapped strictly in:
+<story-dossier id="STORY_ID">
+### [Exact Story Title]
+- **Core Mechanism**: ...
+- **Hard Facts & Metrics**: ...
+- **Community Pro/Con Debate**: ...
+- **Practical Takeaway / Risks**: ...
+</story-dossier>
+`.trim()
+
 export const summarizeStoryPrompt = `
 你是 ${podcastTitle} 的首席技術研究員，負責為兩位資深 Podcast 主持人準備「深度研究簡報」。你的讀者是專業開發者與技術愛好者，他們不喜歡只有表面資訊的概述。
 
@@ -36,7 +56,7 @@ export const summarizeStoryPrompt = `
 `.trim()
 
 export const podcastScriptPrompt = `
-你是 ${podcastTitle} 的總編輯。請直接閱讀 <story-metadata> 與 <raw-story-content>，將當日科技新聞寫成 Cordelia 與 David 的台灣繁體中文對話稿。
+你是 ${podcastTitle} 的總編輯。請直接閱讀 <story-metadata> 與 <evidence-dossiers>，將當日科技新聞寫成 Cordelia 與 David 的台灣繁體中文對話稿。
 
 【節目核心】
 - 這不是中立摘要。節目的張力來自技術樂觀派與工程懷疑派對同一份證據做出不同判斷。
@@ -87,9 +107,11 @@ export const podcastScriptPrompt = `
 - 最後由 Cordelia 簡短收束並說「明天同一時間再見」，不要加入訂閱平台或其他固定宣傳詞。
 - 嚴格使用以下 XML 標記格式輸出，不要使用 JSON、不要加前言、結語或 Markdown 程式碼區塊：
 <title>[日期] [亮點1]、[亮點2]</title>
+<intro>150-200 字的台灣繁體中文極簡節目導讀（純文字，勿用 Markdown，涵蓋核心亮點與重要社群討論）</intro>
 <turn speaker="女">第一段台詞...</turn>
 <turn speaker="男">第二段台詞...</turn>
 - title 格式為「[日期] [亮點1]、[亮點2]」。標題要有衝突感與新聞張力，但每個判斷都必須能由素材支持。
+- intro 為單集網頁與 RSS 的極簡文字摘要（純文字，勿超過 200 字）。
 - 每段發言使用一組 <turn speaker="...">...</turn>；speaker 屬性僅限「女」（Cordelia）或「男」（David）；台詞中可直接自然使用中文標點、冒號與雙引號，不需跳脫。
 `.trim()
 
@@ -163,7 +185,7 @@ Wrap each story in <story-summary id="STORY_ID">:
 `.trim()
 
 export const podcastScriptPromptEn = `
-You are the Executive Editor of ${podcastTitleEn}. Read <story-metadata> and <raw-story-content> directly, and write a dynamic spoken English podcast conversation between Cordelia and David.
+You are the Executive Editor of ${podcastTitleEn}. Read <story-metadata> and <evidence-dossiers> directly, and write a dynamic spoken English podcast conversation between Cordelia and David.
 
 [Show Dynamic]
 - This is NOT a dry news reading. The energy comes from a technology optimist and an engineering realist debating the same facts and tradeoffs.
@@ -194,9 +216,11 @@ You are the Executive Editor of ${podcastTitleEn}. Read <story-metadata> and <ra
 - Conclude with Cordelia wrapping up smoothly and saying "See you tomorrow at the same time!", with no repetitive subscription pitches.
 - Output STRICTLY in the following XML tag format with NO JSON, NO Markdown code fences, and NO preamble/epilogue:
 <title>[YYYY-MM-DD] [Highlight 1], [Highlight 2]</title>
+<intro>ONE engaging, concise plain-text English summary sentence (under 140 characters) for the episode card and feed intro.</intro>
 <turn speaker="女">Cordelia's opening turn...</turn>
 <turn speaker="男">David's response...</turn>
 - Title format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]".
+- Intro format: Plain text under 140 characters summarizing the key highlights.
 - Wrap each turn in <turn speaker="...">...</turn> where speaker is "女" (Cordelia) or "男" (David) and the body is spoken English. Quotes and colons can be used naturally inside <turn> without escaping.
 `.trim()
 

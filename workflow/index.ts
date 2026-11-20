@@ -1,6 +1,6 @@
 import type { LanguageModel } from 'ai'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
-import type { StoryContentCheckpoint, TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
+import type { TopicArchiveEntry, TopicArchiveTopic } from './efficiency'
 import type { LlmClient } from './llm'
 import type { GeneratedScriptData, PodcastScriptResponse, Story, WorkflowParams } from './types'
 import { generateText, streamText } from 'ai'
@@ -24,6 +24,7 @@ import {
   buildStoryContentCheckpointKey,
   buildStoryContentCheckpointPrefix,
   buildStoryDedupeKey,
+  buildStoryDossierCheckpointKey,
   buildTopicArchiveKey,
   CONTENT_FETCH_STEP_CONFIG,
   DECISION_STEP_CONFIG,
@@ -55,17 +56,16 @@ import {
 } from './efficiency'
 import { createLlmClients, getLlmModel, runWithLlmFallback } from './llm'
 import {
+  extractStoryDossierPrompt,
   introPrompt,
   introPromptEn,
   podcastScriptPrompt,
   podcastScriptPromptEn,
   summarizeBlogPrompt,
   summarizeBlogPromptEn,
-  summarizeStoryPrompt,
-  summarizeStoryPromptEn,
 } from './prompt'
 import { REDDIT_RSS_RATE_LIMIT_DELAY } from './reddit'
-import { parsePodcastScriptResponse, parseStorySummaries } from './script-parser'
+import { parsePodcastScriptResponse, parseStoryDossiers } from './script-parser'
 import { getAllStories, getContentFromReaderBatch, getHackerNewsStory } from './utils'
 
 interface Env extends CloudflareEnv {
@@ -448,6 +448,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         fallbackCacheKey,
         contentCheckpointKey: buildStoryContentCheckpointKey(cacheKey, event.instanceId),
         articleCheckpointKey: buildStoryArticleCheckpointKey(cacheKey, event.instanceId),
+        dossierKey: buildStoryDossierCheckpointKey(cacheKey, runEnv),
         story,
       }
     }))
@@ -501,7 +502,15 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
       })
     }
 
-    const allStoryContents: StoryContentCheckpoint[] = []
+    interface PreparedStoryRef {
+      id: string
+      title: string
+      source?: Story['source']
+      contentCheckpointKey: string
+      dossierKey: string
+    }
+
+    const preparedStories: PreparedStoryRef[] = []
     let redditStoryIndex = 0
 
     for (const [storyIndex, story] of stories.entries()) {
@@ -510,16 +519,26 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
         await step.sleep(`wait for reddit rss ${redditStoryIndex}`, REDDIT_RSS_RATE_LIMIT_DELAY)
       }
       const stepName = `get story content ${storyIndex + 1}`
-      const { cacheKey, fallbackCacheKey, contentCheckpointKey, articleCheckpointKey } = storyContentPlan[storyIndex]
+      const { cacheKey, fallbackCacheKey, contentCheckpointKey, articleCheckpointKey, dossierKey } = storyContentPlan[storyIndex]
 
       kvRequestLogger.checkpoint(`before ${stepName}`)
-      const checkpointKey = await step.do(stepName, CONTENT_FETCH_STEP_CONFIG, async () => {
-        if (await this.env.HACKER_NEWS_R2.head(contentCheckpointKey)) {
-          console.info('use R2 story checkpoint', { contentCheckpointKey })
-          return contentCheckpointKey
+      const storyRef = await step.do(stepName, CONTENT_FETCH_STEP_CONFIG, async () => {
+        const existingCheckpoint = await this.env.HACKER_NEWS_R2.get(contentCheckpointKey)
+        if (existingCheckpoint) {
+          const parsedExisting = parseStoryContentCheckpoint(await existingCheckpoint.json<unknown>())
+          if (parsedExisting) {
+            console.info('use R2 story checkpoint', { contentCheckpointKey })
+            return {
+              id: parsedExisting.id,
+              title: parsedExisting.title,
+              source: parsedExisting.source,
+              contentCheckpointKey,
+              dossierKey,
+            } satisfies PreparedStoryRef
+          }
         }
 
-        let storyRecord: StoryContentCheckpoint | null = null
+        let storyRecord: { id: string, title: string, content: string, source?: Story['source'] } | null = null
         let cached = await kvGet(cacheKey)
         if (!cached && fallbackCacheKey) {
           cached = await kvGet(fallbackCacheKey)
@@ -562,97 +581,123 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
           kvPut(cacheKey, serialized, { expirationTtl: 60 * 60 * 24 }),
           this.env.HACKER_NEWS_R2.put(contentCheckpointKey, serialized),
         ])
-        return contentCheckpointKey
+        return {
+          id: storyRecord.id,
+          title: storyRecord.title,
+          source: storyRecord.source,
+          contentCheckpointKey,
+          dossierKey,
+        } satisfies PreparedStoryRef
       })
 
       kvRequestLogger.checkpoint(`after ${stepName}`)
-      if (!checkpointKey) {
+      if (!storyRef) {
         continue
       }
 
-      const checkpoint = await this.env.HACKER_NEWS_R2.get(checkpointKey)
-      if (!checkpoint) {
-        throw new Error(`Missing story content checkpoint: ${checkpointKey}`)
-      }
-      const storyRecord = parseStoryContentCheckpoint(await checkpoint.json<unknown>())
-      if (!storyRecord) {
-        throw new Error(`Invalid story content checkpoint: ${checkpointKey}`)
-      }
-      allStoryContents.push(storyRecord)
+      preparedStories.push(storyRef)
     }
 
-    // 一次性處理所有文章摘要
-    const summarizationMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
-
-    const storySummaries = await step.do('summarize all stories', AI_STEP_CONFIG, async () => {
-      const summaries: string[] = []
-      const expectedCount = allStoryContents.length
-
-      console.info('Starting batch summarization', {
-        storyCount: expectedCount,
-        maxTokens: summarizationMaxTokens,
-      })
-
-      const combinedContent = allStoryContents.map((story, index) =>
-        `<story id="${story.id}" title="${story.title}" number="${index + 1}">\n${story.content}\n</story>`,
-      ).join('\n\n---\n\n')
-
-      const { text, usage, finishReason } = await runLlm('summarize all stories', 'standard', model => generateText({
-        model,
-        system: isEnglish
-          ? `${summarizeStoryPromptEn}\n\nPlease generate a summary for each story. **Important: You must generate a summary for all ${expectedCount} stories**. Wrap each summary with <story-summary id="STORY_ID">...</story-summary>.`
-          : `${summarizeStoryPrompt}\n\n請為每篇文章產生摘要。**重要：你必須為所有 ${expectedCount} 篇文章都產生摘要**。請用 <story-summary id="文章ID"> 標籤包住每個摘要，確保數量正確。`,
-        prompt: combinedContent,
-        maxOutputTokens: summarizationMaxTokens,
-        maxRetries: AI_SDK_MAX_RETRIES,
+    const loadDossiersFromR2 = async (refs: readonly PreparedStoryRef[]): Promise<string[]> => {
+      return Promise.all(refs.map(async (ref) => {
+        const obj = await this.env.HACKER_NEWS_R2.get(ref.dossierKey)
+        return obj ? (await obj.text()).trim() : `### ${ref.title}`
       }))
+    }
 
-      console.info('batch summarize all stories success', { usage, finishReason, responseLength: text.length })
+    // TRIZ #2: Batched single-extraction Evidence Dossiers cached in R2 and shared across zh/en,
+    // avoiding giant full-corpus TPM bursts and eliminating the 65s cooldown.
+    const DOSSIER_BATCH_SIZE = 4
+    const dossierMaxTokens = Math.min(maxTokens * 2, completionTokenLimit)
 
-      const parsedSummaries = parseStorySummaries(text, allStoryContents.map(story => story.title))
-      for (const content of parsedSummaries) {
-        summaries.push(`<story>${content}</story>`)
-      }
+    for (let offset = 0; offset < preparedStories.length; offset += DOSSIER_BATCH_SIZE) {
+      const batchNumber = Math.floor(offset / DOSSIER_BATCH_SIZE) + 1
+      const batchRefs = preparedStories.slice(offset, offset + DOSSIER_BATCH_SIZE)
 
-      return summaries
-    })
+      await step.do(`extract evidence dossier batch ${batchNumber}`, AI_STEP_CONFIG, async () => {
+        const missingItems: Array<{ ref: PreparedStoryRef, rawContent: string }> = []
 
-    kvRequestLogger.checkpoint('after summarize all stories')
+        for (const ref of batchRefs) {
+          if (!force && await this.env.HACKER_NEWS_R2.head(ref.dossierKey)) {
+            continue
+          }
+          const checkpoint = await this.env.HACKER_NEWS_R2.get(ref.contentCheckpointKey)
+          if (!checkpoint) {
+            throw new Error(`Missing story content checkpoint: ${ref.contentCheckpointKey}`)
+          }
+          const storyRecord = parseStoryContentCheckpoint(await checkpoint.json<unknown>())
+          if (!storyRecord) {
+            throw new Error(`Invalid story content checkpoint: ${ref.contentCheckpointKey}`)
+          }
+          missingItems.push({ ref, rawContent: storyRecord.content })
+        }
 
-    // Allow a full 60s+ rate-limit window reset between the two full-content LLM calls.
-    await step.sleep('pause before podcast script', isDev ? '2 seconds' : '65 seconds')
+        if (missingItems.length === 0) {
+          console.info(`Evidence dossier batch ${batchNumber} already cached in R2`, { count: batchRefs.length })
+          return { count: batchRefs.length, extracted: 0 }
+        }
+
+        const batchPrompt = missingItems.map(({ ref, rawContent }, index) =>
+          `<story id="${ref.id}" title="${ref.title}" number="${index + 1}">\n${rawContent}\n</story>`,
+        ).join('\n\n---\n\n')
+
+        const { text, usage, finishReason } = await runLlm(`extract evidence dossier batch ${batchNumber}`, 'standard', model => generateText({
+          model,
+          system: `${extractStoryDossierPrompt}\n\nImportant: Output <story-dossier id="STORY_ID">...</story-dossier> for all ${missingItems.length} stories in order.`,
+          prompt: batchPrompt,
+          maxOutputTokens: dossierMaxTokens,
+          maxRetries: AI_SDK_MAX_RETRIES,
+        }))
+
+        const parsedDossiers = parseStoryDossiers(text, missingItems.map(item => item.ref.title))
+        await Promise.all(missingItems.map(async ({ ref, rawContent }, index) => {
+          const dossier = parsedDossiers[index]?.trim() || `### ${ref.title}\n${rawContent.slice(0, 1200).trim()}`
+          await this.env.HACKER_NEWS_R2.put(ref.dossierKey, dossier)
+        }))
+
+        console.info(`extract evidence dossier batch ${batchNumber} success`, {
+          extracted: missingItems.length,
+          usage,
+          finishReason,
+          responseLength: text.length,
+        })
+        return { count: batchRefs.length, extracted: missingItems.length }
+      })
+    }
+
+    kvRequestLogger.checkpoint('after extract evidence dossiers')
 
     const podcastScript = await step.do('generate podcast script', AI_STEP_CONFIG, async () => {
       const scriptMaxTokens = Math.min(Math.min(maxTokens * 2, completionTokenLimit), 24576)
-      const dialoguePlan = getDialoguePlan(allStoryContents.length)
-      const targetMinChars = Math.min(6500, Math.max(4800, allStoryContents.length * 450))
-      const targetMaxChars = Math.min(7800, Math.max(5800, allStoryContents.length * 520))
+      const dialoguePlan = getDialoguePlan(preparedStories.length)
+      const targetMinChars = Math.min(6500, Math.max(4800, preparedStories.length * 450))
+      const targetMaxChars = Math.min(7800, Math.max(5800, preparedStories.length * 520))
 
       console.info('Dynamic dialogue lines calculation:', {
-        storyCount: allStoryContents.length,
+        storyCount: preparedStories.length,
         ...dialoguePlan,
         targetMinChars,
         targetMaxChars,
       })
 
-      const storyList = allStoryContents.map((story, index) =>
+      const storyList = preparedStories.map((story, index) =>
         `${index + 1}. [${story.source}] ${story.title}`,
       ).join('\n')
 
-      const storyMetadata = allStoryContents.map((storyContent) => {
+      const storyMetadata = preparedStories.map((storyRef) => {
         const story = stories.find(candidate =>
-          candidate.id === storyContent.id && candidate.source === storyContent.source,
+          candidate.id === storyRef.id && candidate.source === storyRef.source,
         )
         return story || {
-          id: storyContent.id,
-          title: storyContent.title,
-          source: storyContent.source,
+          id: storyRef.id,
+          title: storyRef.title,
+          source: storyRef.source,
         }
       })
 
-      // Re-use the combinedContent (raw stories) for script generation
-      const fullContentString = allStoryContents.map((story, index) =>
-        `<story id="${story.id}" title="${story.title}" source="${story.source}" number="${index + 1}">\n${story.content}\n</story>`,
+      const dossiers = await loadDossiersFromR2(preparedStories)
+      const dossiersString = preparedStories.map((story, index) =>
+        `<story id="${story.id}" title="${story.title}" source="${story.source}" number="${index + 1}">\n${dossiers[index] || ''}\n</story>`,
       ).join('\n\n---\n\n')
 
       const historicalCallbacks = findRelevantHistoricalTopics(topicArchiveIndex, stories, displayDate)
@@ -660,7 +705,7 @@ export class PodcastScriptWorkflow extends WorkflowEntrypoint<Env, WorkflowParam
 
       const enhancedPrompt = isEnglish
         ? `Date: ${displayDate}
-[MANDATORY STORY LIST] (Total ${allStoryContents.length} stories, each must be discussed)
+[MANDATORY STORY LIST] (Total ${preparedStories.length} stories, each must be discussed)
 ${storyList}
 ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 [DYNAMIC DIALOGUE REQUIREMENTS]
@@ -674,12 +719,12 @@ ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 
 <story-metadata>${JSON.stringify(storyMetadata)}</story-metadata>
 
-<raw-story-content>
-${fullContentString}
-</raw-story-content>
+<evidence-dossiers>
+${dossiersString}
+</evidence-dossiers>
 `
         : `日期: ${displayDate}
-【必須討論的故事清單】（共 ${allStoryContents.length} 個故事，每一個都必須完整討論）
+【必須討論的故事清單】（共 ${preparedStories.length} 個故事，每一個都必須完整討論）
 ${storyList}
 ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 【動態對話展開要求】
@@ -694,9 +739,9 @@ ${historicalCallbacksContext ? `\n${historicalCallbacksContext}\n` : ''}
 
 <story-metadata>${JSON.stringify(storyMetadata)}</story-metadata>
 
-<raw-story-content>
-${fullContentString}
-</raw-story-content>
+<evidence-dossiers>
+${dossiersString}
+</evidence-dossiers>
 `
 
       const { script, usage, finishReason, llmProvider, llmModel } = await runLlm('generate podcast script', 'thinking', async (model, client) => {
@@ -741,6 +786,7 @@ ${fullContentString}
         llmModel,
         parseFormat: script.format,
         speakers: script.speakers,
+        hasInlineIntro: Boolean(script.intro),
         usage,
         finishReason,
         title: script.title,
@@ -749,6 +795,7 @@ ${fullContentString}
 
       return {
         title: script.title,
+        intro: script.intro,
         dialogue: script.dialogue,
         llmProvider,
         llmModel,
@@ -760,14 +807,15 @@ ${fullContentString}
     if (!podcastScript.title || podcastScript.title.length < 5) {
       console.info('Title missing or too short, triggering dedicated beautification step')
       podcastScript.title = await step.do('beautify missing title', AI_STEP_CONFIG, async () => {
+        const dossiers = await loadDossiersFromR2(preparedStories)
         const { text } = await runLlm('beautify missing title', 'standard', model => generateText({
           model,
           system: isEnglish
-            ? `You are the Executive Editor of ${podcastTitleEn}. Based on the provided story summaries, generate an engaging, accurate English title. Format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]". Output ONLY the title.`
-            : `你是 ${podcastTitle} 的總編輯。請根據提供的故事摘要，產生一個具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或災難性結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
+            ? `You are the Executive Editor of ${podcastTitleEn}. Based on the provided story dossiers, produce an engaging, accurate English title. Format: "[YYYY-MM-DD] [Highlight 1], [Highlight 2]". Output ONLY the title.`
+            : `你是 ${podcastTitle} 的總編輯。請根據提供的故事重點，產出具體、有吸引力並忠於素材的台灣繁體中文標題。不得補造摘要未提供的數字、因果或結論。\n格式："[日期] [具體亮點1]、[具體亮點2]"。只輸出標題。`,
           prompt: isEnglish
-            ? `Date: ${displayDate}\nToday's story summaries:\n${storySummaries.join('\n')}`
-            : `日期: ${displayDate}\n今日故事內容摘要：\n${storySummaries.join('\n')}`,
+            ? `Date: ${displayDate}\nToday's story dossiers:\n${dossiers.join('\n')}`
+            : `日期: ${displayDate}\n今日故事重點：\n${dossiers.join('\n')}`,
           maxRetries: AI_SDK_MAX_RETRIES,
         }))
         return text.trim().replace(/^"|"$/g, '')
@@ -780,10 +828,11 @@ ${fullContentString}
 
     const blogContent = await step.do('create blog content', AI_STEP_CONFIG, async () => {
       const blogMaxTokens = Math.min(maxTokens, completionTokenLimit)
+      const dossiers = await loadDossiersFromR2(preparedStories)
       const { text, usage, finishReason } = await runLlm('create blog content', 'thinking', model => generateText({
         model,
         system: isEnglish ? summarizeBlogPromptEn : summarizeBlogPrompt,
-        prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${storySummaries.join('\n\n---\n\n')}`,
+        prompt: `<stories>${JSON.stringify(stories)}</stories>\n\n---\n\n${dossiers.map(d => `<story>${d}</story>`).join('\n\n---\n\n')}`,
         maxOutputTokens: blogMaxTokens,
         maxRetries: AI_SDK_MAX_RETRIES,
       }))
@@ -793,49 +842,36 @@ ${fullContentString}
 
     kvRequestLogger.checkpoint('after create blog content')
 
-    await step.sleep('pause before intro content', breakTime)
+    let introContent = (podcastScript.intro || '').trim()
+    if (introContent.length < 20) {
+      await step.sleep('pause before intro content', breakTime)
 
-    const introContent = await step.do('create intro content', AI_STEP_CONFIG, async () => {
-      const podcastDialogueLines = podcastScript.dialogue.map((line) => {
-        const speakerName = isEnglish ? (line.speaker === '女' ? 'Cordelia' : 'David') : line.speaker
-        const separator = isEnglish ? ': ' : '：'
-        return `${speakerName}${separator}${line.text}`
+      introContent = await step.do('create intro content', AI_STEP_CONFIG, async () => {
+        const podcastDialogueLines = podcastScript.dialogue.map((line) => {
+          const speakerName = isEnglish ? (line.speaker === '女' ? 'Cordelia' : 'David') : line.speaker
+          const separator = isEnglish ? ': ' : '：'
+          return `${speakerName}${separator}${line.text}`
+        })
+        const podcastContent = podcastDialogueLines.join('\n')
+
+        const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({
+          model,
+          system: isEnglish ? introPromptEn : introPrompt,
+          prompt: podcastContent,
+          maxRetries: AI_SDK_MAX_RETRIES,
+        }))
+        console.info(`create intro content fallback success`, { usage, finishReason })
+        return text
       })
-      const podcastContent = podcastDialogueLines.join('\n')
 
-      const { text, usage, finishReason } = await runLlm('create intro content', 'standard', model => generateText({
-        model,
-        system: isEnglish ? introPromptEn : introPrompt,
-        prompt: podcastContent,
-        maxRetries: AI_SDK_MAX_RETRIES,
-      }))
-      console.info(`create intro content success`, { usage, finishReason })
-      return text
-    })
-
-    kvRequestLogger.checkpoint('after create intro content')
+      kvRequestLogger.checkpoint('after create intro content')
+    }
 
     const isForced = Boolean(force)
     const basePodcastKey = `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}.mp3`
     const podcastAudioKey = isForced
       ? `${displayDate.replaceAll('-', '/')}/${runEnv}/${variant}-${displayDate}-${event.timestamp.getTime()}.mp3`
       : basePodcastKey
-
-    // Prepare complete data object:
-    // Notice: Do NOT immediately publish unuploaded `podcastAudioKey` to KV; doing so breaks the public
-    // player with a 404 during TTS synthesis (3-5 minutes) and causes RSS head() to fail and drop the episode.
-    // The child audio workflow updates KV with `podcastAudioKey` atomically after the R2 multipart upload succeeds.
-    const scriptData: GeneratedScriptData = {
-      title: podcastScript.title,
-      dialogue: podcastScript.dialogue,
-      blogContent,
-      introContent,
-      stories: stories as Story[],
-      storySummaries,
-      displayDate,
-      generatedAt: event.timestamp.getTime(),
-      audio: basePodcastKey,
-    }
 
     const nextRedditDedupeIndex = updateRedditDedupeIndex(
       redditDedupeIndex,
@@ -848,7 +884,7 @@ ${fullContentString}
       stories as Story[],
     )
 
-    // Build today's TopicArchiveEntry
+    // Build blog link title map once outside step
     const blogTitleMap = new Map<string, string>()
     if (blogContent) {
       for (const line of blogContent.split('\n')) {
@@ -859,36 +895,53 @@ ${fullContentString}
       }
     }
 
-    const todayTopics: TopicArchiveTopic[] = allStoryContents.map((storyContent, index) => {
-      const summaryBlock = storySummaries[index] || ''
-      const coreFocusMatch = isEnglish
-        ? summaryBlock.match(/\*\*Core Focus\*\*:\s*([^\n]+)/i)
-        : summaryBlock.match(/\*\*核心焦點\*\*：([^\n]+)/)
-      const coreFocus = coreFocusMatch ? coreFocusMatch[1].trim() : ''
-      const storyObj = stories.find(candidate => candidate.id === storyContent.id)
-      const storyTitle = (storyObj?.sourceUrl && blogTitleMap.get(storyObj.sourceUrl))
-        || (storyObj?.url && blogTitleMap.get(storyObj.url))
-        || storyContent.title
-
-      const keywords = extractKeywords(`${storyTitle} ${coreFocus}`)
-      return {
-        title: storyTitle,
-        keywords,
-        summary: coreFocus || storyTitle,
-        source: storyContent.source,
-        sourceUrl: storyObj?.url || storyObj?.sourceUrl,
-      }
-    })
-
-    const todayTopicEntry: TopicArchiveEntry = {
-      date: displayDate,
-      episodeTitle: podcastScript.title || (isEnglish ? `[${displayDate}] Tech News Summary` : `[${displayDate}] 科技新聞彙整`),
-      topics: todayTopics,
-    }
-    const nextTopicArchiveIndex = updateTopicArchiveIndex(topicArchiveIndex, todayTopicEntry)
-
     // Save the final script, the dedupe indexes, topic archive, and update the episode index.
     await step.do('save script to kv', IO_STEP_CONFIG, async () => {
+      const dossiers = await loadDossiersFromR2(preparedStories)
+      const storySummaries = dossiers.map(d => `<story>${d}</story>`)
+
+      // Notice: Do NOT immediately publish unuploaded `podcastAudioKey` to KV; doing so breaks the public
+      // player with a 404 during TTS synthesis (3-5 minutes) and causes RSS head() to fail and drop the episode.
+      // The child audio workflow updates KV with `podcastAudioKey` atomically after the R2 multipart upload succeeds.
+      const scriptData: GeneratedScriptData = {
+        title: podcastScript.title,
+        dialogue: podcastScript.dialogue,
+        blogContent,
+        introContent,
+        stories: stories as Story[],
+        storySummaries,
+        displayDate,
+        generatedAt: event.timestamp.getTime(),
+        audio: basePodcastKey,
+      }
+
+      const todayTopics: TopicArchiveTopic[] = preparedStories.map((storyRef, index) => {
+        const summaryBlock = storySummaries[index] || ''
+        const coreFocusMatch = summaryBlock.match(/\*\*Core Mechanism\*\*:\s*([^\n]+)/i)
+          || summaryBlock.match(/\*\*Core Focus\*\*:\s*([^\n]+)/i)
+          || summaryBlock.match(/\*\*核心焦點\*\*：([^\n]+)/)
+        const coreFocus = coreFocusMatch ? coreFocusMatch[1].trim() : ''
+        const storyObj = stories.find(candidate => candidate.id === storyRef.id)
+        const storyTitle = (storyObj?.sourceUrl && blogTitleMap.get(storyObj.sourceUrl))
+          || (storyObj?.url && blogTitleMap.get(storyObj.url))
+          || storyRef.title
+
+        const keywords = extractKeywords(`${storyTitle} ${coreFocus}`)
+        return {
+          title: storyTitle,
+          keywords,
+          summary: coreFocus || storyTitle,
+          source: storyRef.source,
+          sourceUrl: storyObj?.url || storyObj?.sourceUrl,
+        }
+      })
+
+      const todayTopicEntry: TopicArchiveEntry = {
+        date: displayDate,
+        episodeTitle: podcastScript.title || (isEnglish ? `[${displayDate}] Tech News Summary` : `[${displayDate}] 科技新聞彙整`),
+        topics: todayTopics,
+      }
+      const nextTopicArchiveIndex = updateTopicArchiveIndex(topicArchiveIndex, todayTopicEntry)
       const existingDates = await kvGet<string[]>(episodeIndexKey, 'json')
       const nextDates = updateEpisodeIndexDates(existingDates, displayDate)
 
@@ -974,7 +1027,7 @@ ${fullContentString}
       audioInstanceId,
       enScriptInstanceId,
       storyCount: stories.length,
-      dialogueLines: scriptData.dialogue.length,
+      dialogueLines: podcastScript.dialogue.length,
       llmProvider: podcastScript.llmProvider,
       llmModel: podcastScript.llmModel,
     }
