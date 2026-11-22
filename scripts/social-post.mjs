@@ -338,6 +338,20 @@ export async function verifyPost(page, post, url, platform, episodeUrl) {
     throw new Error(`${platform} 貼文內容核對失敗：${url}`)
   // Profile discovery establishes that this is a top-level post. Confirm that
   // the post links to the requested episode, including X's t.co redirects.
+  await page.waitForFunction((expectedUrl) => {
+    return Array.from(document.querySelectorAll('a[href]')).some((anchor) => {
+      if (anchor.href === expectedUrl)
+        return true
+      try {
+        const target = new URL(anchor.href)
+        return target.hostname === 't.co'
+          || (target.hostname === 'l.threads.com' && target.searchParams.get('u') === expectedUrl)
+      }
+      catch {
+        return false
+      }
+    })
+  }, episodeUrl, { timeout: 15000 })
   const links = await page.locator('a[href]').evaluateAll(anchors => anchors.map(a => a.href))
   let linkMatches = links.some((link) => {
     const target = new URL(link)
