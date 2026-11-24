@@ -1,5 +1,4 @@
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
-import type { ResolvedTtsProvider } from './tts'
 import type { GeneratedScriptData, PodcastSpeakerId, WorkflowParams } from './types'
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import { formatSpeakerDisplayName } from '@/lib/cast-registry'
@@ -27,12 +26,7 @@ import {
   splitDialogueText,
   upsertEpisodeCatalogEntry,
 } from './efficiency'
-import {
-  hasOpenAiTtsCredentials,
-  isGeminiLocationUnsupportedError,
-  resolveTtsProvider,
-  synthesizeWithProvider,
-} from './tts'
+import synthesize, { resolveTtsProvider } from './tts'
 
 interface Env extends CloudflareEnv {
   WORKER_ENV?: string
@@ -59,12 +53,6 @@ interface Env extends CloudflareEnv {
   GEMINI_TTS_FALLBACK_API_KEY?: string
   GEMINI_TTS_FALLBACK_API_SECRET?: string
   GEMINI_TTS_FALLBACK_BASE_URL?: string
-  // OpenAI TTS fallback
-  OPENAI_TTS_API_KEY?: string
-  OPENAI_TTS_API_SECRET?: string
-  OPENAI_TTS_BASE_URL?: string
-  OPENAI_TTS_MODEL?: string
-  OPENAI_TTS_INSTRUCTIONS?: string
 }
 
 const TTS_RATE_LIMIT_DELAY_MS = 400
@@ -153,10 +141,8 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
     const isEnglish = variant === 'en'
 
-    // Check configured TTS provider; Gemini outputs WAV while OpenAI/Minimax/Edge output MP3
-    const configuredProvider = resolveTtsProvider(this.env.TTS_PROVIDER)
-    let activeProvider: ResolvedTtsProvider = configuredProvider
-    let isWav = activeProvider === 'gemini'
+    // Check if using Gemini TTS (which outputs WAV); default resolves to Gemini when unset
+    const isGeminiTTS = resolveTtsProvider(this.env.TTS_PROVIDER) === 'gemini'
 
     // 時區處理邏輯
     const now = new Date(event.timestamp.getTime())
@@ -196,7 +182,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       displayDate,
       scriptKey,
       podcastKey,
-      configuredProvider,
+      isGeminiTTS,
       isForced,
     })
 
@@ -219,7 +205,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     const batchKeys: string[] = []
     const segmentCheckpointKeys: string[] = []
     const allSegmentDurationsMs: number[] = []
-    let hasAllSegmentDurations = isWav
+    let hasAllSegmentDurations = isGeminiTTS
 
     for (let i = 0; i < allSegments.length; i += BATCH_SIZE) {
       const batchIndex = Math.floor(i / BATCH_SIZE)
@@ -247,12 +233,9 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       const batchResult = await step.do(`create audio batch ${batchIndex + 1}`, AUDIO_BATCH_STEP_CONFIG, async () => {
         const existingBatch = await this.env.HACKER_NEWS_R2.head(deterministicBatchKey)
         if (existingBatch) {
-          const existingProvider = existingBatch.customMetadata?.ttsProvider
-            ? resolveTtsProvider(existingBatch.customMetadata.ttsProvider)
-            : activeProvider
           let existingDurations: number[] | null = null
           const rawDurations = existingBatch.customMetadata?.segmentDurationsMs
-          if (existingProvider === 'gemini' && rawDurations) {
+          if (rawDurations) {
             try {
               const parsed = JSON.parse(rawDurations) as unknown
               if (
@@ -270,14 +253,11 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
           return {
             key: deterministicBatchKey,
             segmentDurationsMs: existingDurations,
-            provider: existingProvider,
           }
         }
 
-        let batchProvider: ResolvedTtsProvider = activeProvider
-        let batchIsWav = batchProvider === 'gemini'
         const segmentBuffers: Uint8Array[] = []
-        let segmentDurationsMs: number[] | null = batchIsWav ? [] : null
+        const segmentDurationsMs: number[] | null = isGeminiTTS ? [] : null
 
         for (const [index, segment] of batchSegments.entries()) {
           const segmentKey = segmentKeys[index]
@@ -291,37 +271,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
             continue
           }
 
-          let audio: Blob
-          try {
-            audio = await synthesizeWithProvider(segment.text, segment.speaker, this.env, {
-              provider: batchProvider,
-              isEnglish,
-            })
-          }
-          catch (error) {
-            // If Gemini rejects the Cloudflare edge PoP location before any segments are stored,
-            // switch the entire episode to OpenAI MP3 so formats never mix mid-file.
-            if (
-              batchIndex === 0
-              && index === 0
-              && segmentBuffers.length === 0
-              && batchProvider === 'gemini'
-              && isGeminiLocationUnsupportedError(error)
-              && hasOpenAiTtsCredentials(this.env)
-            ) {
-              console.warn('Gemini TTS blocked by execution location; falling back to OpenAI TTS for this episode')
-              batchProvider = 'openai'
-              batchIsWav = false
-              segmentDurationsMs = null
-              audio = await synthesizeWithProvider(segment.text, segment.speaker, this.env, {
-                provider: batchProvider,
-                isEnglish,
-              })
-            }
-            else {
-              throw error
-            }
-          }
+          const audio = await synthesize(segment.text, segment.speaker, this.env, { isEnglish })
           const typedBuffer = new Uint8Array(await audio.arrayBuffer())
           if (!typedBuffer.byteLength) {
             throw new Error('podcast audio size is 0')
@@ -340,32 +290,20 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
         }
 
         // Combine batch
-        const combined = combineAudioBuffers(segmentBuffers, batchIsWav)
+        const combined = combineAudioBuffers(segmentBuffers, isGeminiTTS)
 
         await this.env.HACKER_NEWS_R2.put(
           deterministicBatchKey,
           combined,
-          {
-            customMetadata: {
-              ttsProvider: batchProvider,
-              ...(segmentDurationsMs ? { segmentDurationsMs: JSON.stringify(segmentDurationsMs) } : {}),
-            },
-          },
+          segmentDurationsMs
+            ? { customMetadata: { segmentDurationsMs: JSON.stringify(segmentDurationsMs) } }
+            : undefined,
         )
         return {
           key: deterministicBatchKey,
           segmentDurationsMs,
-          provider: batchProvider,
         }
       })
-
-      if (batchIndex === 0 && batchResult.provider) {
-        activeProvider = batchResult.provider
-        isWav = activeProvider === 'gemini'
-        if (!isWav) {
-          hasAllSegmentDurations = false
-        }
-      }
 
       batchKeys.push(batchResult.key)
       if (hasAllSegmentDurations && batchResult.segmentDurationsMs) {
@@ -411,7 +349,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
             throw new Error(`Missing batch file: ${key}`)
           batches.push({ key, size: object.size })
         }
-        return planAudioMultipartUpload(batches, isWav)
+        return planAudioMultipartUpload(batches, isGeminiTTS)
       })
 
       const uploadId = await step.do('create audio multipart upload', IO_STEP_CONFIG, async () => {
@@ -426,7 +364,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
 
         const multipart = await this.env.HACKER_NEWS_R2.createMultipartUpload(podcastKey, {
           httpMetadata: {
-            contentType: isWav ? 'audio/wav' : 'audio/mpeg',
+            contentType: isGeminiTTS ? 'audio/wav' : 'audio/mpeg',
             cacheControl: 'public, max-age=31536000, immutable',
           },
           customMetadata: { workflowInstanceId: event.instanceId },
@@ -441,7 +379,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
       })
 
       const uploadedParts: R2UploadedPart[] = []
-      const wavHeader = isWav
+      const wavHeader = isGeminiTTS
         ? createPcmWavHeader(multipartPlan.pcmLength)
         : new Uint8Array(0)
 
@@ -498,12 +436,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
     // Publish metadata & RSS cache invalidation in a durable step so partial failures
     // never leave a newly synthesized episode unpublished.
     await step.do('publish final audio metadata', IO_STEP_CONFIG, async () => {
-      const shouldClearStaleTimings = isForced && !timingSummary && (
-        Boolean(scriptData.dialogueTimings)
-        || scriptData.audioDurationSec !== undefined
-      )
       const shouldUpdateScript = scriptData.audio !== podcastKey
-        || shouldClearStaleTimings
         || Boolean(timingSummary && (
           !scriptData.dialogueTimings
           || scriptData.audioDurationSec !== timingSummary.audioDurationSec
@@ -515,17 +448,13 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
           scriptData.dialogueTimings = timingSummary.dialogueTimings
           scriptData.audioDurationSec = timingSummary.audioDurationSec
         }
-        else if (shouldClearStaleTimings) {
-          delete scriptData.dialogueTimings
-          delete scriptData.audioDurationSec
-        }
         await this.env.HACKER_NEWS_KV.put(scriptKey, JSON.stringify(scriptData))
       }
 
       if (podcastKey !== basePodcastKey) {
         const freshAudio = await this.env.HACKER_NEWS_R2.get(podcastKey)
         if (freshAudio) {
-          const freshContentType = freshAudio.httpMetadata?.contentType || (isWav ? 'audio/wav' : 'audio/mpeg')
+          const freshContentType = freshAudio.httpMetadata?.contentType || (isGeminiTTS ? 'audio/wav' : 'audio/mpeg')
           await this.env.HACKER_NEWS_R2.put(basePodcastKey, freshAudio.body, {
             httpMetadata: {
               contentType: freshContentType,
@@ -553,7 +482,7 @@ export class PodcastAudioWorkflow extends WorkflowEntrypoint<Env, WorkflowParams
           : ''
         const resolvedIntro = (scriptData.introContent || '').trim() || firstLine
         const resolvedUpdatedAt = getArticleTimestamp(displayDate, scriptData.generatedAt ?? event.timestamp.getTime())
-        const nextAudioDurationSec = timingSummary?.audioDurationSec ?? (isForced ? undefined : scriptData.audioDurationSec)
+        const nextAudioDurationSec = timingSummary?.audioDurationSec ?? scriptData.audioDurationSec
         const currentEntry = existingCatalog.entries.find(entry => entry.date === displayDate)
         const shouldUpdateCatalog = !currentEntry
           || currentEntry.audio !== podcastKey

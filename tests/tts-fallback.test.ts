@@ -6,10 +6,8 @@ import synthesizeAudio, {
   DEFAULT_GEMINI_TTS_MAX_RETRIES,
   DEFAULT_GEMINI_TTS_MODEL,
   geminiTTS,
-  hasOpenAiTtsCredentials,
   isGeminiLocationUnsupportedError,
   resolveTtsProvider,
-  synthesizeWithProvider,
 } from '../workflow/tts'
 
 function makeMockPcmResponse() {
@@ -339,7 +337,7 @@ describe('Gemini TTS retry and fallback behavior', () => {
     ])
   })
 
-  it('detects Gemini location errors distinctly from generic 400 errors and checks OpenAI TTS credentials', async () => {
+  it('detects Gemini location errors distinctly from generic 400 errors', () => {
     assert.equal(
       isGeminiLocationUnsupportedError(
         Object.assign(new Error('Gemini TTS API error (400 Bad Request): {"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported for the API use."}}'), { statusCode: 400 }),
@@ -352,32 +350,5 @@ describe('Gemini TTS retry and fallback behavior', () => {
       ),
       false,
     )
-    assert.equal(hasOpenAiTtsCredentials({}), false)
-    assert.equal(hasOpenAiTtsCredentials({ OPENAI_TTS_API_SECRET: 'sk-test' }), true)
-
-    let calledUrl = ''
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = (async (url: RequestInfo | URL) => {
-      calledUrl = String(url)
-      return {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        arrayBuffer: async () => new Uint8Array([0xFF, 0xFB]).buffer,
-      } as unknown as Response
-    }) as any
-
-    try {
-      const mp3 = await synthesizeWithProvider('Hello', '女', {
-        TTS_PROVIDER: 'gemini',
-        OPENAI_TTS_API_SECRET: 'sk-test',
-        OPENAI_TTS_BASE_URL: 'https://api.openai.com/v1/',
-      } as any, { provider: 'openai', isEnglish: true })
-      assert.equal(calledUrl, 'https://api.openai.com/v1/audio/speech')
-      assert.equal(mp3.type, 'audio/mpeg')
-    }
-    finally {
-      globalThis.fetch = originalFetch
-    }
   })
 })

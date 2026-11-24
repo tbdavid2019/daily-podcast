@@ -447,19 +447,9 @@ async function openaiTTS(text: string, gender: string, env: Env, isEnglish = fal
 
 export interface SynthesizeOptions {
   isEnglish?: boolean
-  provider?: ResolvedTtsProvider
 }
 
 export type ResolvedTtsProvider = 'gemini' | 'openai' | 'minimax' | 'edge'
-
-export function hasOpenAiTtsCredentials(env: object): boolean {
-  return Boolean(firstString(env, [
-    'OPENAI_TTS_API_SECRET',
-    'OPENAI_API_SECRET',
-    'OPENAI_TTS_API_KEY',
-    'OPENAI_API_KEY',
-  ]))
-}
 
 export function resolveTtsProvider(provider?: string): ResolvedTtsProvider {
   const normalized = provider?.trim().toLowerCase()
@@ -469,9 +459,9 @@ export function resolveTtsProvider(provider?: string): ResolvedTtsProvider {
   return 'gemini'
 }
 
-export async function synthesizeWithProvider(text: string, gender: string, env: Env, options?: SynthesizeOptions) {
+export default async function (text: string, gender: string, env: Env, options?: SynthesizeOptions) {
   const isEnglish = options?.isEnglish ?? (/[a-z]/i.test(text) && !/[\u4E00-\u9FFF]/.test(text))
-  const provider = options?.provider ?? resolveTtsProvider(env.TTS_PROVIDER)
+  const provider = resolveTtsProvider(env.TTS_PROVIDER)
   if (provider === 'openai') {
     return openaiTTS(text, gender, env, isEnglish)
   }
@@ -484,5 +474,3 @@ export async function synthesizeWithProvider(text: string, gender: string, env: 
   // Default: Gemini TTS with multi-key failover (no inner retry loop; Workflow handles retries)
   return geminiTTS(text, gender, env)
 }
-
-export default synthesizeWithProvider
