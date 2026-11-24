@@ -2,6 +2,19 @@
 
 本專案的所有更新歷史紀錄。最新的變更會排在最上方。
 
+## [2026-11-24] 鎖定 Workflow 執行區於美國 (`jurisdiction: "us"`)、支援 Gemini TTS 自訂端點並補產 2026-11-23 音訊
+
+- **排查 `2026-11-23` RSS 缺集原因**：
+  - 檢查 `daily-podcast-audio-workflow` 執行紀錄，確認 `2026-11-23` 中、英文版音訊任務皆因 Cloudflare 動態調度至 Google Gemini API 不支援之邊緣地區節點，於 `create audio batch 1-1` 收到 `400 FAILED_PRECONDITION: User location is not supported for the API use.` 而中止，導致 R2 缺檔並觸發 [lib/rss.ts](lib/rss.ts) 過濾機制。
+- **Workflow 執行區域鎖定美國 (`worker/wrangler.example.jsonc`、`worker/wrangler.jsonc`)**：
+  - 由於 Cloudflare Workflows 的 `jurisdiction` 僅能於建立時指定、無法原地修改既有 Workflow，將 `HACKER_NEWS_WORKFLOW` 與 `HACKER_NEWS_AUDIO_WORKFLOW` 改綁定至新建的 `daily-podcast-workflow-us` 與 `daily-podcast-audio-workflow-us`（設定 `"jurisdiction": "us"`），確保後續每日排程與觸發均在美國機房執行並維持單一 Gemini TTS 音色（不切換至 OpenAI TTS）。
+- **Gemini TTS 代理端點與地區錯誤偵測 (`workflow/tts.ts`、`workflow/audio.ts`)**：
+  - 新增 `GEMINI_TTS_BASE_URL`、`GEMINI_TTS_FALLBACK_BASE_URL` 與 `GEMINI_TTS_FALLBACK_{1..5}_BASE_URL` 支援（預設仍為 `https://generativelanguage.googleapis.com/v1beta`），並支援未另設槽位金鑰時繼承主金鑰搭配備援端點。
+  - 新增 `isGeminiLocationUnsupportedError` 偵測 `400` 地區封鎖錯誤；在多端點備援設定下會跳過同一個受限 `baseUrl` 的其餘金鑰並嘗試不同 `baseUrl` 槽位。
+- **測試與線上驗證**：
+  - 擴充 [tests/tts-fallback.test.ts](tests/tts-fallback.test.ts) 與 [tests/workflow-efficiency.test.ts](tests/workflow-efficiency.test.ts)，`pnpm check` 與 `pnpm build` 全數通過。
+  - 已部署 `daily-podcast-worker`（確認 `daily-podcast-workflow-us` 與 `daily-podcast-audio-workflow-us` 上線），並完成 `2026-11-23` 中／英文版音訊補跑、R2 檔案、`transcript.vtt` 毫秒時間軸及 `rss.xml`／`rss-en.xml` 收錄驗證。
+
 ## [2026-11-20] TRIZ #1–#4 全棧演進、原生 SSE 串流架構與線上端到端實測驗證
 
 - **原生 SSE 串流取代 AI SDK 串流（解決 HTTP 524 與 Free Plan 10ms CPU 上限，`workflow/llm.ts`、`workflow/index.ts`）**：
