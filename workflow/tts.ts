@@ -4,6 +4,7 @@ import { getSpeakerVoiceConfig } from '@/lib/cast-registry'
 import { createPcmWavHeader } from './audio-multipart'
 
 export const DEFAULT_GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts'
+export const DEFAULT_GEMINI_TTS_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 export const DEFAULT_GEMINI_TTS_TIMEOUT_MS = 45_000
 export const DEFAULT_GEMINI_TTS_MAX_RETRIES = 0
 export const MAX_GEMINI_TTS_FALLBACKS = 5
@@ -12,6 +13,7 @@ export interface GeminiTtsConfig {
   id: string
   apiKey: string
   model: string
+  baseUrl?: string
 }
 
 export interface Env extends CloudflareEnv {
@@ -34,9 +36,11 @@ export interface Env extends CloudflareEnv {
   OPENAI_API_SECRET?: string
   GEMINI_TTS_API_KEY?: string
   GEMINI_TTS_API_SECRET?: string
+  GEMINI_TTS_BASE_URL?: string
   GEMINI_TTS_MODEL?: string
   GEMINI_TTS_FALLBACK_API_KEY?: string
   GEMINI_TTS_FALLBACK_API_SECRET?: string
+  GEMINI_TTS_FALLBACK_BASE_URL?: string
   GEMINI_TTS_FALLBACK_MODEL?: string
   GEMINI_API_KEY?: string
 }
@@ -65,10 +69,16 @@ function firstString(env: object, keys: readonly string[]): string {
   return ''
 }
 
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '')
+}
+
 export function createGeminiTtsConfigs(env: object): GeminiTtsConfig[] {
   const defaultModel = firstString(env, ['GEMINI_TTS_MODEL']) || DEFAULT_GEMINI_TTS_MODEL
+  const rawPrimaryBaseUrl = firstString(env, ['GEMINI_TTS_BASE_URL'])
+  const primaryBaseUrl = rawPrimaryBaseUrl ? normalizeBaseUrl(rawPrimaryBaseUrl) : ''
   const configs: GeminiTtsConfig[] = []
-  const seenKeys = new Set<string>()
+  const seenConfigs = new Set<string>()
 
   // Primary key
   const primaryApiKey = firstString(env, [
@@ -81,42 +91,52 @@ export function createGeminiTtsConfigs(env: object): GeminiTtsConfig[] {
       id: 'primary',
       apiKey: primaryApiKey,
       model: defaultModel,
+      ...(primaryBaseUrl ? { baseUrl: primaryBaseUrl } : {}),
     })
-    seenKeys.add(primaryApiKey)
+    seenConfigs.add(`${primaryApiKey}::${primaryBaseUrl}`)
   }
 
   // Fallback single key
+  const rawFallbackSingleBaseUrl = firstString(env, ['GEMINI_TTS_FALLBACK_BASE_URL'])
+  const fallbackSingleBaseUrl = rawFallbackSingleBaseUrl
+    ? normalizeBaseUrl(rawFallbackSingleBaseUrl)
+    : primaryBaseUrl
   const fallbackSingleKey = firstString(env, [
     'GEMINI_TTS_FALLBACK_API_KEY',
     'GEMINI_TTS_FALLBACK_API_SECRET',
     'GEMINI_TTS_FALLBACK_KEY',
-  ])
-  if (fallbackSingleKey && !seenKeys.has(fallbackSingleKey)) {
+  ]) || (fallbackSingleBaseUrl && fallbackSingleBaseUrl !== primaryBaseUrl ? primaryApiKey : '')
+  if (fallbackSingleKey && !seenConfigs.has(`${fallbackSingleKey}::${fallbackSingleBaseUrl}`)) {
     configs.push({
       id: 'fallback-1',
       apiKey: fallbackSingleKey,
       model: firstString(env, ['GEMINI_TTS_FALLBACK_MODEL']) || defaultModel,
+      ...(fallbackSingleBaseUrl ? { baseUrl: fallbackSingleBaseUrl } : {}),
     })
-    seenKeys.add(fallbackSingleKey)
+    seenConfigs.add(`${fallbackSingleKey}::${fallbackSingleBaseUrl}`)
   }
 
   // Numbered slots: GEMINI_TTS_FALLBACK_1_API_KEY .. GEMINI_TTS_FALLBACK_5_API_KEY
   for (let index = 1; index <= MAX_GEMINI_TTS_FALLBACKS; index += 1) {
     const prefix = `GEMINI_TTS_FALLBACK_${index}`
+    const rawSlotBaseUrl = firstString(env, [`${prefix}_BASE_URL`])
+    const slotBaseUrl = rawSlotBaseUrl ? normalizeBaseUrl(rawSlotBaseUrl) : primaryBaseUrl
     const apiKey = firstString(env, [
       `${prefix}_API_KEY`,
       `${prefix}_API_SECRET`,
       `${prefix}_KEY`,
-    ])
-    if (!apiKey || seenKeys.has(apiKey)) {
+    ]) || (slotBaseUrl && slotBaseUrl !== primaryBaseUrl ? primaryApiKey : '')
+    const dedupeKey = `${apiKey}::${slotBaseUrl}`
+    if (!apiKey || seenConfigs.has(dedupeKey)) {
       continue
     }
     configs.push({
       id: `fallback-${index}`,
       apiKey,
       model: firstString(env, [`${prefix}_MODEL`]) || defaultModel,
+      ...(slotBaseUrl ? { baseUrl: slotBaseUrl } : {}),
     })
-    seenKeys.add(apiKey)
+    seenConfigs.add(dedupeKey)
   }
 
   return configs
@@ -137,7 +157,8 @@ export async function callSingleGeminiTts(
   const fetchFn = options.fetchFn || fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_GEMINI_TTS_TIMEOUT_MS
   const model = config.model || DEFAULT_GEMINI_TTS_MODEL
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+  const baseUrl = (config.baseUrl || DEFAULT_GEMINI_TTS_BASE_URL).replace(/\/+$/, '')
+  const url = `${baseUrl}/models/${model}:generateContent`
   const { geminiVoice: voiceName } = getSpeakerVoiceConfig(gender, env)
   const isGemini38Tts = model.startsWith('gemini-3.8-') && model.endsWith('-tts')
 
@@ -205,6 +226,25 @@ export interface GeminiTtsRunnerOptions extends GeminiTtsRequestOptions {
 
 const defaultSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
+export function isGeminiLocationUnsupportedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  const candidate = error as Record<string, unknown>
+  const statusCode = typeof candidate.statusCode === 'number'
+    ? candidate.statusCode
+    : typeof candidate.status === 'number'
+      ? candidate.status
+      : undefined
+  const message = error instanceof Error
+    ? error.message
+    : typeof candidate.message === 'string'
+      ? candidate.message
+      : ''
+  const isStatus400 = statusCode === 400 || /\(400\b/.test(message)
+  return isStatus400 && /user location is not supported|failed_precondition/i.test(message)
+}
+
 export async function geminiTTS(
   text: string,
   gender: string,
@@ -218,9 +258,15 @@ export async function geminiTTS(
 
   const maxRetries = options.maxRetriesPerKey ?? DEFAULT_GEMINI_TTS_MAX_RETRIES
   const sleepFn = options.sleepFn || defaultSleep
+  const blockedBaseUrls = new Set<string>()
   let lastError: unknown
 
   for (const config of configs) {
+    const configBaseUrl = (config.baseUrl || DEFAULT_GEMINI_TTS_BASE_URL).replace(/\/+$/, '')
+    if (blockedBaseUrls.has(configBaseUrl)) {
+      continue
+    }
+
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
         const result = await callSingleGeminiTts(text, gender, config, env, options)
@@ -243,6 +289,7 @@ export async function geminiTTS(
             : undefined
         const isAuthError = statusCode === 401 || statusCode === 403
         const isBadRequest = statusCode === 400
+        const isLocationBlocked = isGeminiLocationUnsupportedError(error)
 
         console.warn('Gemini TTS attempt failed', {
           provider: config.id,
@@ -251,6 +298,12 @@ export async function geminiTTS(
           statusCode,
           message: error instanceof Error ? error.message : String(error),
         })
+
+        // If location is unsupported on this endpoint, skip remaining keys sharing this baseUrl
+        if (isLocationBlocked) {
+          blockedBaseUrls.add(configBaseUrl)
+          break
+        }
 
         // If it's an auth error (401/403), failover to next key immediately
         if (isAuthError) {
@@ -394,9 +447,19 @@ async function openaiTTS(text: string, gender: string, env: Env, isEnglish = fal
 
 export interface SynthesizeOptions {
   isEnglish?: boolean
+  provider?: ResolvedTtsProvider
 }
 
 export type ResolvedTtsProvider = 'gemini' | 'openai' | 'minimax' | 'edge'
+
+export function hasOpenAiTtsCredentials(env: object): boolean {
+  return Boolean(firstString(env, [
+    'OPENAI_TTS_API_SECRET',
+    'OPENAI_API_SECRET',
+    'OPENAI_TTS_API_KEY',
+    'OPENAI_API_KEY',
+  ]))
+}
 
 export function resolveTtsProvider(provider?: string): ResolvedTtsProvider {
   const normalized = provider?.trim().toLowerCase()
@@ -406,9 +469,9 @@ export function resolveTtsProvider(provider?: string): ResolvedTtsProvider {
   return 'gemini'
 }
 
-export default async function (text: string, gender: string, env: Env, options?: SynthesizeOptions) {
+export async function synthesizeWithProvider(text: string, gender: string, env: Env, options?: SynthesizeOptions) {
   const isEnglish = options?.isEnglish ?? (/[a-z]/i.test(text) && !/[\u4E00-\u9FFF]/.test(text))
-  const provider = resolveTtsProvider(env.TTS_PROVIDER)
+  const provider = options?.provider ?? resolveTtsProvider(env.TTS_PROVIDER)
   if (provider === 'openai') {
     return openaiTTS(text, gender, env, isEnglish)
   }
@@ -421,3 +484,5 @@ export default async function (text: string, gender: string, env: Env, options?:
   // Default: Gemini TTS with multi-key failover (no inner retry loop; Workflow handles retries)
   return geminiTTS(text, gender, env)
 }
+
+export default synthesizeWithProvider

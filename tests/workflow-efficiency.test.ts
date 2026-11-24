@@ -431,6 +431,8 @@ describe('topic archive and historical callbacks', () => {
     assert.doesNotMatch(audioSource, /Date\.now\(\)/)
     assert.match(audioSource, /resolveTtsProvider\(this\.env\.TTS_PROVIDER\)/)
     assert.match(audioSource, /step\.do\('publish final audio metadata'/)
+    assert.match(audioSource, /isGeminiLocationUnsupportedError/)
+    assert.match(audioSource, /hasOpenAiTtsCredentials/)
 
     const indexSource = await readFile(new URL('../workflow/index.ts', import.meta.url), 'utf8')
     const forceClearBlock = indexSource.slice(

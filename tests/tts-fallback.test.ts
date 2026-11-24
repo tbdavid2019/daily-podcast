@@ -6,7 +6,10 @@ import synthesizeAudio, {
   DEFAULT_GEMINI_TTS_MAX_RETRIES,
   DEFAULT_GEMINI_TTS_MODEL,
   geminiTTS,
+  hasOpenAiTtsCredentials,
+  isGeminiLocationUnsupportedError,
   resolveTtsProvider,
+  synthesizeWithProvider,
 } from '../workflow/tts'
 
 function makeMockPcmResponse() {
@@ -284,5 +287,97 @@ describe('Gemini TTS retry and fallback behavior', () => {
       openaiVoice: 'alloy',
       role: 'custom',
     })
+  })
+
+  it('supports GEMINI_TTS_BASE_URL and falls back to alternate baseUrl on 400 location errors', async () => {
+    const configs = createGeminiTtsConfigs({
+      GEMINI_TTS_API_SECRET: 'key-1',
+      GEMINI_TTS_FALLBACK_API_KEY: 'key-2',
+      GEMINI_TTS_FALLBACK_1_BASE_URL: 'https://gemini-proxy.example.com/v1beta/',
+    })
+
+    assert.equal(configs.length, 3)
+    assert.equal(configs[0].baseUrl, undefined)
+    assert.equal(configs[1].baseUrl, undefined)
+    assert.equal(configs[2].apiKey, 'key-1')
+    assert.equal(configs[2].baseUrl, 'https://gemini-proxy.example.com/v1beta')
+
+    const requestedUrls: string[] = []
+    const mockFetch = async (url: RequestInfo | URL) => {
+      const target = String(url)
+      requestedUrls.push(target)
+      if (target.startsWith('https://generativelanguage.googleapis.com/')) {
+        return makeErrorResponse(
+          400,
+          'Bad Request',
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: 'User location is not supported for the API use.',
+              status: 'FAILED_PRECONDITION',
+            },
+          }),
+        )
+      }
+      return makeMockPcmResponse()
+    }
+
+    const result = await geminiTTS('測試地區封鎖備援', '女', {
+      GEMINI_TTS_API_SECRET: 'key-1',
+      GEMINI_TTS_FALLBACK_API_KEY: 'key-2',
+      GEMINI_TTS_FALLBACK_1_BASE_URL: 'https://gemini-proxy.example.com/v1beta/',
+    } as any, {
+      fetchFn: mockFetch as any,
+      timeoutMs: 1000,
+    })
+
+    assert(result instanceof Blob)
+    // Should try primary Google URL once, skip fallback-1 on the same blocked baseUrl, and succeed on proxy baseUrl
+    assert.deepEqual(requestedUrls, [
+      `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_TTS_MODEL}:generateContent`,
+      `https://gemini-proxy.example.com/v1beta/models/${DEFAULT_GEMINI_TTS_MODEL}:generateContent`,
+    ])
+  })
+
+  it('detects Gemini location errors distinctly from generic 400 errors and checks OpenAI TTS credentials', async () => {
+    assert.equal(
+      isGeminiLocationUnsupportedError(
+        Object.assign(new Error('Gemini TTS API error (400 Bad Request): {"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported for the API use."}}'), { statusCode: 400 }),
+      ),
+      true,
+    )
+    assert.equal(
+      isGeminiLocationUnsupportedError(
+        Object.assign(new Error('Gemini TTS API error (400 Bad Request): Invalid voice name'), { statusCode: 400 }),
+      ),
+      false,
+    )
+    assert.equal(hasOpenAiTtsCredentials({}), false)
+    assert.equal(hasOpenAiTtsCredentials({ OPENAI_TTS_API_SECRET: 'sk-test' }), true)
+
+    let calledUrl = ''
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (url: RequestInfo | URL) => {
+      calledUrl = String(url)
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        arrayBuffer: async () => new Uint8Array([0xFF, 0xFB]).buffer,
+      } as unknown as Response
+    }) as any
+
+    try {
+      const mp3 = await synthesizeWithProvider('Hello', '女', {
+        TTS_PROVIDER: 'gemini',
+        OPENAI_TTS_API_SECRET: 'sk-test',
+        OPENAI_TTS_BASE_URL: 'https://api.openai.com/v1/',
+      } as any, { provider: 'openai', isEnglish: true })
+      assert.equal(calledUrl, 'https://api.openai.com/v1/audio/speech')
+      assert.equal(mp3.type, 'audio/mpeg')
+    }
+    finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
